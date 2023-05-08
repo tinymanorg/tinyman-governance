@@ -1,0 +1,3 @@
+py-algorand-sdk==1.20
+git+https://github.com/tinymanorg/tealish.git@483cb7a30912747814c5ee0ee0dd7a7b1684c5f5
+git+https://github.com/Hipo/algojig.git@26ac4305d44f7612eecd67b7a6501a4686c0f42d
