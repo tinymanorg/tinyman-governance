@@ -1,8 +1,8 @@
 
 
-def itob(value):
+def itob(value, length=8):
     """ The same as teal itob - int to 8 bytes """
-    return value.to_bytes(8, 'big')
+    return value.to_bytes(length, 'big')
 
 
 def btoi(value):

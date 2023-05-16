@@ -24,11 +24,16 @@ struct TotalPower:
 end
 
 struct SlopeChange:
-    d_slope: bytes[16]
+    slope_delta: bytes[16]
 end
 
+# 2^64 - 1
 const int MAX_UINT64 = 18446744073709551615
+# 24 * 60 * 60
+const int DAY = 86400
+# 7 * DAY
 const int WEEK = 604800
+# 4 * 365 * DAY
 const int MAX_LOCK_TIME = 126144000
 const int MIN_LOCK_AMOUNT = 10000000
 const int MIN_LOCK_INCREMENT = 10000000
@@ -37,16 +42,16 @@ const bytes BYTE_ZERO_128 = "\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x0
 const bytes TOTAL_POWERS = "total_powers"
 const bytes SLOPE_CHANGES = "slope_changes"
 
-if Txn.ApplicationID:
-    switch Txn.OnCompletion:
-        NoOp: main
-        OptIn: fail
-        CloseOut: fail
-        UpdateApplication: fail
-        DeleteApplication: fail
-    end
-else:
+if !Txn.ApplicationID:
     jump create_app
+end
+
+switch Txn.OnCompletion:
+    NoOp: main
+    OptIn: fail
+    CloseOut: fail
+    UpdateApplication: fail
+    DeleteApplication: fail
 end
 
 block fail:
@@ -61,13 +66,18 @@ block create_app:
     exit(1)
 end
 
+
+# TODO: Try adding support increase & extend lock with single app call.
+# TODO: Try creating checkpoint at the beginning of other methods.
+# TODO: Add delegatee support.
+# TODO: Allow deleting old boxes (Account Power).
+
 block main:
     switch Txn.ApplicationArgs[0]:
         "create_lock": create_lock
         "create_checkpoint": create_checkpoint
         "increase_lock_amount": increase_lock_amount
         "extend_lock_end_time": extend_lock_end_time
-        "get_tiny_power_of": get_tiny_power_of
         "get_tiny_power_of_at": get_tiny_power_of_at
         "get_total_tiny_power": get_total_tiny_power
         "get_total_tiny_power_at": get_total_tiny_power_at
@@ -84,7 +94,7 @@ block main:
     block init_checkpoint:
         assert(!app_global_get("last_index"))
 
-        int start_time = get_start_time_of_next_week(Global.LatestTimestamp)
+        int start_time = get_start_time_of_next_day(Global.LatestTimestamp)
         box<TotalPower> total_power = CreateBox(concat(TOTAL_POWERS, itob(start_time)))
         total_power.bias = 0
         total_power.slope = BYTE_ZERO_128
@@ -119,9 +129,9 @@ block main:
 
         lock_start_time = btoi(Txn.ApplicationArgs[1])
         lock_end_time = btoi(Txn.ApplicationArgs[2])
-        assert(!(lock_start_time % WEEK))
+        assert(!(lock_start_time % DAY))
         assert(!(lock_end_time % WEEK))
-        assert(lock_start_time == get_start_time_of_next_week(Global.LatestTimestamp))
+        assert(lock_start_time == get_start_time_of_next_day(Global.LatestTimestamp))
         assert(lock_end_time >= (lock_start_time + WEEK))
         assert(lock_end_time <= (lock_start_time + MAX_LOCK_TIME))
 
@@ -139,7 +149,7 @@ block main:
         account_power.start_time = lock_start_time
         account_power.end_time = lock_end_time
         account_power.valid_until = 0
-        account_power.delegatee = bzero(32)
+        account_power.delegatee = Global.ZeroAddress
 
         bytes slope = get_slope(amount)
         int bias = get_bias(slope, (lock_end_time - lock_start_time))
@@ -162,7 +172,7 @@ block main:
 
         int global_last_index = app_global_get("last_index")
         assert(global_last_index <= Global.LatestTimestamp)
-        int next_global_last_index = global_last_index + WEEK
+        int next_global_last_index = global_last_index + DAY
 
         box<TotalPower> last_total_power = OpenBox(concat(TOTAL_POWERS, itob(global_last_index)))
         int bias = last_total_power.bias
@@ -170,8 +180,8 @@ block main:
         bytes cumulative_power = last_total_power.cumulative_power
 
         # power
-        bias = bias - get_bias(slope, WEEK)
-        cumulative_power = cumulative_power b+ (((itob(last_total_power.bias) b+ itob(bias)) b* itob(WEEK)) b/ itob(2))
+        bias = bias - get_bias(slope, DAY)
+        cumulative_power = cumulative_power b+ (((itob(last_total_power.bias) b+ itob(bias)) b* itob(DAY)) b/ itob(2))
 
         # slope
         bytes slope_box_name = concat(SLOPE_CHANGES, itob(next_global_last_index))
@@ -179,7 +189,7 @@ block main:
         exists, _ = box_len(slope_box_name)
         if exists:
             box<SlopeChange> slope_change = Box(slope_box_name)
-            slope = slope b- slope_change.d_slope
+            slope = slope b- slope_change.slope_delta
         end
 
         # create new power
@@ -221,14 +231,23 @@ block main:
         account_state.locked_amount = new_locked_amount
         account_state.last_index = new_last_index
 
+        int lock_start_time = get_start_time_of_next_day(Global.LatestTimestamp)
+        int lock_end_time = account_state.lock_end_time
+        assert(lock_start_time == app_global_get("last_index"))
+
+        bytes old_slope = get_slope(old_locked_amount)
+        bytes new_slope = get_slope(new_locked_amount)
+        bytes slope_delta = new_slope b- old_slope
+
+        int old_bias = get_bias(old_slope, (lock_end_time - lock_start_time))
+        int new_bias = get_bias(new_slope, (lock_end_time - lock_start_time))
+        int bias_delta = new_bias - old_bias
+
         # Update the last AccountPower
         box<AccountPower> last_account_power = OpenBox(concat(user_address, itob(new_last_index - 1)))
-        # last_account_power.end_round = Global.Round
-        last_account_power.valid_until = Global.LatestTimestamp
+        last_account_power.valid_until = lock_start_time
 
         # Create AccountPower
-        int lock_start_time = get_start_time_of_next_week(Global.LatestTimestamp)
-        int lock_end_time = last_account_power.end_time
         box<AccountPower> new_account_power = CreateBox(concat(user_address, itob(new_last_index)))
         new_account_power.locked_amount = new_locked_amount
         new_account_power.locked_round = Global.Round
@@ -237,19 +256,14 @@ block main:
         new_account_power.valid_until = 0
         new_account_power.delegatee = last_account_power.delegatee
 
-        bytes old_slope = get_slope(old_locked_amount)
-        bytes new_slope = get_slope(new_locked_amount)
-        int old_bias = get_bias(old_slope, (lock_end_time - lock_start_time))
-        int new_bias = get_bias(new_slope, (lock_end_time - lock_start_time))
-
         # Update TotalPower
         box<TotalPower> total_power = OpenBox(concat(TOTAL_POWERS, itob(lock_start_time)))
-        total_power.bias = total_power.bias + (new_bias - old_bias)
-        total_power.slope = BYTE_ZERO_128 b| (total_power.slope b+ (new_slope b- old_slope))
+        total_power.bias = total_power.bias + bias_delta
+        total_power.slope = BYTE_ZERO_128 b| (total_power.slope b+ slope_delta)
 
         # Update SlopeChange
         box<SlopeChange> slope_change = OpenBox(concat(SLOPE_CHANGES, itob(lock_end_time)))
-        slope_change.d_slope = BYTE_ZERO_128 b| (slope_change.d_slope b+ (new_slope b- old_slope))
+        slope_change.slope_delta = BYTE_ZERO_128 b| (slope_change.slope_delta b+ slope_delta)
 
         app_global_put("total_locked_amount", app_global_get("total_locked_amount") + amount)
         exit(1)
@@ -264,6 +278,9 @@ block main:
         assert(!(new_lock_end_time % WEEK))
         assert(new_lock_end_time > Global.LatestTimestamp)
         assert(new_lock_end_time <= (Global.LatestTimestamp + MAX_LOCK_TIME))
+
+        int new_lock_start_time = get_start_time_of_next_day(Global.LatestTimestamp)
+        assert(new_lock_start_time == app_global_get("last_index"))
 
         # Get AccountState
         box<AccountState> account_state = OpenBox(user_address)
@@ -282,7 +299,6 @@ block main:
         last_account_power.valid_until = Global.LatestTimestamp
 
         # Create AccountPower
-        int new_lock_start_time = get_start_time_of_next_week(Global.LatestTimestamp)
         box<AccountPower> new_account_power = CreateBox(concat(user_address, itob(new_last_index)))
         new_account_power.locked_amount = last_account_power.locked_amount
         new_account_power.locked_round = Global.Round
@@ -305,52 +321,64 @@ block main:
         exit(1)
     end
 
-    block get_tiny_power_of:
-        # TODO: Handle no account
-        bytes user_address = Txn.Accounts[1]
-        int tiny_power = 0
+    # block get_tiny_power_of:
+    #     # TODO: Handle no account
+    #     bytes user_address = Txn.Accounts[1]
+    #     int tiny_power = 0
+    #     bytes delegatee = Global.ZeroAddress
 
-        # Get AccountState
-        if box_len(user_address):
-            box<AccountState> account_state = OpenBox(user_address)
+    #     int exists
+    #     exists, _ = box_len(user_address)
 
-            # Get AccountPower
-            box<AccountPower> account_power = OpenBox(concat(user_address, itob(account_state.last_index)))
+    #     # Get AccountState
+    #     if exists:
+    #         box<AccountState> account_state = OpenBox(user_address)
 
-            if (account_power.end_time > Global.LatestTimestamp) && !account_power.valid_until:
-                int remaining_time = account_power.end_time - Global.LatestTimestamp
-                # tiny_power = btoi((itob(account_power.locked_amount) b* itob(remaining_time)) b/ itob(MAX_LOCK_TIME))
-                tiny_power = get_power_at(account_power.locked_amount, remaining_time)
-            end
-        end
+    #         # Get AccountPower
+    #         box<AccountPower> account_power = OpenBox(concat(user_address, itob(account_state.last_index)))
 
-        log(itob(tiny_power))
-        log(account_power.delegatee)
-        exit(1)
-    end
+    #         if (account_power.end_time > Global.LatestTimestamp) && !account_power.valid_until:
+    #             int remaining_time = account_power.end_time - Global.LatestTimestamp
+    #             # tiny_power = btoi((itob(account_power.locked_amount) b* itob(remaining_time)) b/ itob(MAX_LOCK_TIME))
+    #             tiny_power = get_power(account_power.locked_amount, remaining_time)
+    #             delegatee = account_power.delegatee
+    #         end
+    #     end
+
+    #     log(itob(tiny_power))
+    #     log(delegatee)
+    #     exit(1)
+    # end
 
     block get_tiny_power_of_at:
         # TODO: Handle no account
         bytes user_address = Txn.Accounts[1]
         int time = btoi(Txn.ApplicationArgs[1])
         int index = btoi(Txn.ApplicationArgs[2])
+        int tiny_power = 0
+        bytes delegatee = Global.ZeroAddress
+        int exists
+        exists, _ = box_len(user_address)
 
-        # Get AccountState
-        box<AccountState> account_state = OpenBox(user_address)
-        assert(index >= account_state.first_index)
-        assert(index <= account_state.last_index)
+        if exists:
+            # Get AccountState
+            box<AccountState> account_state = OpenBox(user_address)
+            assert(index >= account_state.first_index)
+            assert(index <= account_state.last_index)
 
-        # Get AccountPower
-        box<AccountPower> account_power = OpenBox(concat(user_address, itob(index)))
-        assert(time >= account_power.start_time)
-        assert(account_power.end_time >= time)
-        assert((account_power.valid_until >= time) || !account_power.valid_until)
+            # Get AccountPower
+            box<AccountPower> account_power = OpenBox(concat(user_address, itob(index)))
+            assert(time >= account_power.start_time)
+            assert(account_power.end_time >= time)
+            assert((account_power.valid_until > time) || !account_power.valid_until)
 
-        int remaining_time = account_power.end_time - time
-        int tiny_power = get_power_at(account_power.locked_amount, remaining_time)
+            int remaining_time = account_power.end_time - time
+            tiny_power = get_power(account_power.locked_amount, remaining_time)
+            delegatee = account_power.delegatee
+        end
 
         log(itob(tiny_power))
-        log(account_power.delegatee)
+        log(delegatee)
         exit(1)
     end
 
@@ -390,25 +418,34 @@ func get_bias(slope: bytes, time: int) int:
 end
 
 func get_total_power_at(time: int) int:
-    int week_start_time = get_start_time_of_week(time)
-    bytes box_name = concat(TOTAL_POWERS, itob(week_start_time))
+    int start_time = get_start_time_of_day(time)
+    bytes box_name = concat(TOTAL_POWERS, itob(start_time))
     int exists
     exists, _ = box_len(box_name)
     assert(exists)
 
     box<TotalPower> total_power = OpenBox(box_name)
-    int time_delta = time - week_start_time
+    int time_delta = time - start_time
     int power_delta = get_power_delta(total_power.slope, time_delta)
     int tiny_power = total_power.bias - power_delta
     return tiny_power
 end
 
-func get_power_at(locked_amount: int, remaining_time: int) int:
+func get_power(locked_amount: int, remaining_time: int) int:
+    # TODO: Is this correct?
     return btoi((get_slope(locked_amount) b* itob(remaining_time)) b/ TWO_TO_THE_64)
 end
 
 func get_power_delta(slope: bytes, time: int) int:
     return btoi((slope b* itob(time)) b/ TWO_TO_THE_64)
+end
+
+func get_start_time_of_day(time: int) int:
+    return ((time / DAY) * DAY)
+end
+
+func get_start_time_of_next_day(time: int) int:
+    return (((time / DAY) * DAY) + DAY)
 end
 
 func get_start_time_of_week(time: int) int:
@@ -425,7 +462,7 @@ end
 
 func revert_slope_change(box_name: bytes, slope: bytes):
     box<SlopeChange> slope_change = OpenBox(box_name)
-    slope_change.d_slope = BYTE_ZERO_128 b| (slope_change.d_slope b- slope)
+    slope_change.slope_delta = BYTE_ZERO_128 b| (slope_change.slope_delta b- slope)
     return
 end
 
@@ -434,10 +471,10 @@ func update_or_create_slope_change(box_name: bytes, slope: bytes):
     exists, _ = box_len(box_name)
     if exists:
         box<SlopeChange> slope_change = OpenBox(box_name)
-        slope_change.d_slope = BYTE_ZERO_128 b| (slope_change.d_slope b+ slope)
+        slope_change.slope_delta = BYTE_ZERO_128 b| (slope_change.slope_delta b+ slope)
     else:
         box<SlopeChange> new_slope_change = CreateBox(box_name)
-        new_slope_change.d_slope = BYTE_ZERO_128 b| slope
+        new_slope_change.slope_delta = BYTE_ZERO_128 b| slope
     end
     return
 end
