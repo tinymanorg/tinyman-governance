@@ -66,7 +66,7 @@ block create_app:
     exit(1)
 end
 
-
+# TODO: Asset opt-in TINY
 # TODO: Try adding support increase & extend lock with single app call.
 # TODO: Try creating checkpoint at the beginning of other methods.
 # TODO: Add delegatee support.
@@ -377,8 +377,7 @@ block main:
             delegatee = account_power.delegatee
         end
 
-        log(itob(tiny_power))
-        log(delegatee)
+        log(concat(itob(tiny_power), delegatee))
         exit(1)
     end
 

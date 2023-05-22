@@ -1,3 +1,8 @@
+from datetime import datetime
+
+from algosdk.encoding import encode_address
+
+from tests.constants import TOTAL_POWERS, SLOPE_CHANGES, MAX_LOCK_TIME, DAY, WEEK, PROPOSALS, MAX_OPTION_COUNT
 
 
 def itob(value, length=8):
@@ -11,3 +16,105 @@ def btoi(value):
 
 def sign_txns(txns, secret_key):
     return [txn.sign(secret_key) for txn in txns]
+
+
+def parse_box_account_state(raw_box):
+    data = dict(
+        locked_amount=btoi(raw_box[:8]),
+        lock_end_time=btoi(raw_box[8:16]),
+        first_index=btoi(raw_box[16:24]),
+        last_index=btoi(raw_box[24:32]),
+    )
+    data["lock_end_datetime"] = datetime.utcfromtimestamp(data["lock_end_time"])
+    return data
+
+
+def parse_box_account_power(raw_box):
+    data = dict(
+        locked_amount=btoi(raw_box[:8]),
+        locked_round=btoi(raw_box[8:16]),
+        start_time=btoi(raw_box[16:24]),
+        end_time=btoi(raw_box[24:32]),
+        valid_until=btoi(raw_box[32:40]),
+        delegatee=encode_address(raw_box[40:72]),
+    )
+    data["start_datetime"] = datetime.utcfromtimestamp(data["start_time"])
+    data["end_datetime"] = datetime.utcfromtimestamp(data["end_time"])
+    data["valid_until_datetime"] = datetime.utcfromtimestamp(data["valid_until"])
+    return data
+
+
+def parse_box_total_power(raw_box):
+    return dict(
+        bias=btoi(raw_box[:8]),
+        slope=btoi(raw_box[8:24]),
+        cumulative_power=btoi(raw_box[24:40]),
+    )
+
+
+def parse_box_slope_change(raw_box):
+    return dict(
+        d_slope=btoi(raw_box[:16]),
+    )
+
+
+def parse_box_proposal(raw_box):
+    data = dict(
+        creation_time=btoi(raw_box[:8]),
+        voting_start_time=btoi(raw_box[8:16]),
+        voting_end_time=btoi(raw_box[16:24]),
+        option_count=btoi(raw_box[24:32]),
+        vote_count=btoi(raw_box[32:40]),
+        is_cancelled=btoi(raw_box[40:48]),
+        is_executed=btoi(raw_box[48:56]),
+        proposer=encode_address(raw_box[56:88]),
+        votes=raw_box[88:216]
+    )
+    data["creation_date"] = datetime.utcfromtimestamp(data["creation_time"]).date().isoformat()
+    data["voting_start_date"] = datetime.utcfromtimestamp(data["voting_start_time"]).date().isoformat()
+    data["voting_end_date"] = datetime.utcfromtimestamp(data["voting_end_time"]).date().isoformat()
+    data[f"vote_counts"] = [btoi(data["votes"][i * 8: (i + 1) * 8]) for i in range(MAX_OPTION_COUNT)]
+    return data
+
+
+def print_boxes(boxes):
+    for key, value in sorted(list(boxes.items()), key=lambda box: box[0]):
+        if TOTAL_POWERS in key:
+            timestamp = btoi(key[len(TOTAL_POWERS):])
+            dt = datetime.utcfromtimestamp(timestamp)
+            print("TotalPower" + f"_{btoi(key[len(TOTAL_POWERS):])}", dt, parse_box_total_power(value))
+        elif SLOPE_CHANGES in key:
+            timestamp = btoi(key[len(SLOPE_CHANGES):])
+            dt = datetime.utcfromtimestamp(timestamp)
+            print("SlopeChange" + f"_{btoi(key[len(SLOPE_CHANGES):])}", dt, parse_box_slope_change(value))
+        elif len(value) == 72:
+            print(encode_address(key[:32]) + f"_{btoi(key[32:])}", parse_box_account_power(value))
+        elif len(value) == 32:
+            print(encode_address(key), parse_box_account_state(value))
+        elif PROPOSALS in key:
+            proposal_id = btoi(key[len(PROPOSALS):])
+            print(f"PROPOSALS {proposal_id}", parse_box_proposal(value))
+
+
+def get_slope(locked_amount):
+    return locked_amount * 2**64 // MAX_LOCK_TIME
+
+
+def get_voting_power(slope, remaining_time):
+    return slope * remaining_time // 2**64
+
+
+def get_start_time_of_day(value):
+    return (value // DAY) * DAY
+
+
+def get_start_time_of_next_day(value):
+    return ((value // DAY) * DAY) + DAY
+
+
+def get_start_time_of_week(value):
+    return (value // WEEK) * WEEK
+
+
+def get_start_time_of_next_week(value):
+    return ((value // WEEK) * WEEK) + WEEK

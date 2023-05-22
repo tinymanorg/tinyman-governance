@@ -1,194 +1,34 @@
-import unittest
-from datetime import datetime, timedelta
+from datetime import timedelta, datetime
 from unittest.mock import ANY
 from zoneinfo import ZoneInfo
 
-from algojig import get_suggested_params, JigLedger, TealishProgram, LogicEvalError
-from algosdk.account import generate_account
-from algosdk.constants import ZERO_ADDRESS
-from algosdk.encoding import decode_address, encode_address
+from algojig import LogicEvalError
 from algosdk import transaction
+from algosdk.account import generate_account
+from algosdk.encoding import decode_address, encode_address
 from algosdk.logic import get_application_address
 
-from tests.utils import itob, btoi, sign_txns
-
-DAY = 24 * 60 * 60
-WEEK = 7 * DAY
-MAX_LOCK_TIME = 4 * 365 * DAY
-TOTAL_POWERS = b"total_powers"
-SLOPE_CHANGES = b"slope_changes"
-
-locking_approval_program = TealishProgram('contracts/locking/locking_approval.tl')
-locking_clear_state_program = TealishProgram('contracts/locking/locking_clear_state.tl')
+from tests.common import BaseTestCase
+from tests.constants import TOTAL_POWERS, DAY, SLOPE_CHANGES, locking_approval_program, locking_clear_state_program, WEEK
+from tests.utils import get_start_time_of_next_day, itob, sign_txns, parse_box_total_power, get_start_time_of_week, parse_box_account_power, parse_box_account_state, parse_box_slope_change, get_slope, get_voting_power, print_boxes, btoi, get_start_time_of_day
 
 
-def parse_box_account_state(raw_box):
-    data = dict(
-        locked_amount=btoi(raw_box[:8]),
-        lock_end_time=btoi(raw_box[8:16]),
-        first_index=btoi(raw_box[16:24]),
-        last_index=btoi(raw_box[24:32]),
-    )
-    data["lock_end_datetime"] = datetime.utcfromtimestamp(data["lock_end_time"])
-    return data
-
-
-def parse_box_account_power(raw_box):
-    data = dict(
-        locked_amount=btoi(raw_box[:8]),
-        locked_round=btoi(raw_box[8:16]),
-        start_time=btoi(raw_box[16:24]),
-        end_time=btoi(raw_box[24:32]),
-        valid_until=btoi(raw_box[32:40]),
-        delegatee=encode_address(raw_box[40:72]),
-    )
-    data["start_datetime"] = datetime.utcfromtimestamp(data["start_time"])
-    data["end_datetime"] = datetime.utcfromtimestamp(data["end_time"])
-    data["valid_until_datetime"] = datetime.utcfromtimestamp(data["valid_until"])
-    return data
-
-
-def parse_box_total_power(raw_box):
-    return dict(
-        bias=btoi(raw_box[:8]),
-        slope=btoi(raw_box[8:24]),
-        cumulative_power=btoi(raw_box[24:40]),
-    )
-
-
-def parse_box_slope_change(raw_box):
-    return dict(
-        d_slope=btoi(raw_box[:16]),
-    )
-
-
-def print_boxes(boxes):
-    for key, value in sorted(list(boxes.items()), key=lambda box: box[0]):
-        if TOTAL_POWERS in key:
-            timestamp = btoi(key[len(TOTAL_POWERS):])
-            dt = datetime.utcfromtimestamp(timestamp)
-            print("TotalPower" + f"_{btoi(key[len(TOTAL_POWERS):])}", dt, parse_box_total_power(value))
-        elif SLOPE_CHANGES in key:
-            timestamp = btoi(key[len(SLOPE_CHANGES):])
-            dt = datetime.utcfromtimestamp(timestamp)
-            print("SlopeChange" + f"_{btoi(key[len(SLOPE_CHANGES):])}", dt, parse_box_slope_change(value))
-        elif len(value) == 72:
-            print(encode_address(key[:32]) + f"_{btoi(key[32:])}", parse_box_account_power(value))
-        elif len(value) == 32:
-            print(encode_address(key), parse_box_account_state(value))
-
-
-def get_slope(locked_amount):
-    return locked_amount * 2**64 // MAX_LOCK_TIME
-
-
-def get_voting_power(slope, remaining_time):
-    return slope * remaining_time // 2**64
-
-
-def get_start_time_of_day(value):
-    return (value // DAY) * DAY
-
-
-def get_start_time_of_next_day(value):
-    return ((value // DAY) * DAY) + DAY
-
-
-def get_start_time_of_week(value):
-    return (value // WEEK) * WEEK
-
-
-def get_start_time_of_next_week(value):
-    return ((value // WEEK) * WEEK) + WEEK
-
-
-class DummyAlgod:
-    def suggested_params(self):
-        return get_suggested_params()
-
-
-class BaseTestCase(unittest.TestCase):
-    maxDiff = None
+class LockingTestCase(BaseTestCase):
 
     @classmethod
     def setUpClass(cls) -> None:
-        cls.sp = get_suggested_params()
-        cls.tiny_asset_id = 12345
-        cls.tiny_params = dict(
-            total=100_000_000_000_000_000_000_000_000_000,
-            decimals=6,
-            name="Tinyman",
-            unit_name="TINY",
-        )
+        super().setUpClass()
         cls.app_id = 9000
         cls.app_creator_sk, cls.app_creator_address = generate_account()
         cls.user_sk, cls.user_address = generate_account()
         cls.user_2_sk, cls.user_2_address = generate_account()
 
     def setUp(self):
-        self.ledger = JigLedger()
+        super().setUp()
         self.ledger.set_account_balance(self.app_creator_address, 1_000_000)
         self.ledger.set_account_balance(self.user_address, 10_000_000)
         self.ledger.set_account_balance(self.user_2_address, 10_000_000)
-        self.ledger.create_asset(self.tiny_asset_id, params=dict())
-        self.create_app()
-
-    def create_app(self):
-        if self.app_creator_address not in self.ledger.accounts:
-            self.ledger.set_account_balance(self.app_creator_address, 1_000_000)
-
-        self.ledger.create_app(
-            app_id=self.app_id,
-            approval_program=locking_approval_program,
-            creator=self.app_creator_address,
-            local_ints=0,
-            local_bytes=0,
-            global_ints=4,
-            global_bytes=0
-        )
-
-        # 100_000 for basic min balance requirement
-        self.ledger.set_account_balance(get_application_address(self.app_id), 1_000_000)
-        # Opt-in
-        self.ledger.set_account_balance(get_application_address(self.app_id), 0, asset_id=self.tiny_asset_id)
-        self.ledger.set_global_state(
-            self.app_id,
-            {
-                b'tiny_asset_id': self.tiny_asset_id,
-                b'total_locked_amount': 0,
-                b'first_index': 0,
-                b'last_index': 0,
-            }
-        )
-
-    def init_app_boxes(self):
-        if self.app_id not in self.ledger.boxes:
-            self.ledger.boxes[self.app_id] = {}
-
-    def set_box_account_state(self, address, locked_amount, lock_end_time, first_index, last_index):
-        assert (lock_end_time % WEEK) == 0
-        self.init_app_boxes()
-        self.ledger.boxes[self.app_id][decode_address(address)] = itob(locked_amount) + itob(lock_end_time) + itob(first_index) + itob(last_index)
-
-    def set_box_account_power(self, address, index, locked_amount, locked_round, start_time, end_time, valid_until=0, delegatee=ZERO_ADDRESS):
-        assert (start_time % DAY) == 0
-        assert (end_time % WEEK) == 0
-        self.init_app_boxes()
-        self.ledger.boxes[self.app_id][decode_address(address) + itob(index)] = itob(locked_amount) + itob(locked_round) + itob(start_time) + itob(end_time) + itob(valid_until) + decode_address(delegatee)
-
-    def set_box_total_power(self, timestamp, bias, slope, cumulative_power):
-        assert (timestamp % DAY) == 0
-        self.init_app_boxes()
-        self.ledger.boxes[self.app_id][TOTAL_POWERS + itob(timestamp)] = itob(bias) + itob(slope, 16) + itob(cumulative_power, 16)
-
-    def set_box_slope_change(self, timestamp, d_slope):
-        assert (timestamp % WEEK) == 0
-        self.init_app_boxes()
-        self.ledger.boxes[self.app_id][SLOPE_CHANGES + itob(timestamp)] = itob(d_slope, 16)
-
-    def init_global_indexes(self, index):
-        self.ledger.global_states[self.app_id][b'first_index'] = index
-        self.ledger.global_states[self.app_id][b'last_index'] = index
+        self.create_locking_app(self.app_id, self.app_creator_address)
 
     def create_checkpoint(self, block_datetime):
         block_timestamp = int(block_datetime.timestamp())
@@ -396,11 +236,11 @@ class BaseTestCase(unittest.TestCase):
         remaining_time = lock_end_time - lock_start_time
         voting_power = get_voting_power(slope, remaining_time)
 
-        self.set_box_account_state(self.user_address, locked_amount, lock_end_time, account_first_index, account_last_index)
-        self.set_box_account_power(self.user_address, index=0, locked_amount=locked_amount, locked_round=2, start_time=lock_start_time, end_time=lock_end_time)
-        self.set_box_total_power(next_day_timestamp, bias=voting_power, slope=slope, cumulative_power=0)
-        self.init_global_indexes(index=next_day_timestamp)
-        self.set_box_slope_change(lock_end_time, slope)
+        self.set_box_account_state(self.app_id, self.user_address, locked_amount, lock_end_time, account_first_index, account_last_index)
+        self.set_box_account_power(self.app_id, self.user_address, index=0, locked_amount=locked_amount, locked_round=2, start_time=lock_start_time, end_time=lock_end_time)
+        self.set_box_total_power(self.app_id, next_day_timestamp, bias=voting_power, slope=slope, cumulative_power=0)
+        self.init_global_indexes(self.app_id, index=next_day_timestamp)
+        self.set_box_slope_change(self.app_id, lock_end_time, slope)
         print_boxes(self.ledger.boxes[self.app_id])
 
         txn_group = [
@@ -459,11 +299,11 @@ class BaseTestCase(unittest.TestCase):
         remaining_time = lock_end_time - lock_start_time
         voting_power = get_voting_power(slope, remaining_time)
 
-        self.set_box_account_state(self.user_address, locked_amount, lock_end_time, account_first_index, account_last_index)
-        self.set_box_account_power(self.user_address, index=0, locked_amount=locked_amount, locked_round=2, start_time=lock_start_time, end_time=lock_end_time)
-        self.set_box_total_power(next_day_timestamp, bias=voting_power, slope=slope, cumulative_power=0)
-        self.init_global_indexes(index=next_day_timestamp)
-        self.set_box_slope_change(lock_end_time, slope)
+        self.set_box_account_state(self.app_id, self.user_address, locked_amount, lock_end_time, account_first_index, account_last_index)
+        self.set_box_account_power(self.app_id, self.user_address, index=0, locked_amount=locked_amount, locked_round=2, start_time=lock_start_time, end_time=lock_end_time)
+        self.set_box_total_power(self.app_id, next_day_timestamp, bias=voting_power, slope=slope, cumulative_power=0)
+        self.init_global_indexes(self.app_id, index=next_day_timestamp)
+        self.set_box_slope_change(self.app_id, lock_end_time, slope)
         print_boxes(self.ledger.boxes[self.app_id])
 
         # Extend
