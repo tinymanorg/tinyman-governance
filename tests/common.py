@@ -55,12 +55,12 @@ class BaseTestCase(unittest.TestCase):
             creator=app_creator_address,
             local_ints=0,
             local_bytes=0,
-            global_ints=4,
+            global_ints=16,
             global_bytes=0
         )
 
         # 100_000 for basic min balance requirement
-        self.ledger.set_account_balance(get_application_address(app_id), 1_000_000)
+        self.ledger.set_account_balance(get_application_address(app_id), 0)
         # Opt-in
         self.ledger.set_account_balance(get_application_address(app_id), 0, asset_id=self.tiny_asset_id)
         self.ledger.set_global_state(
@@ -68,8 +68,7 @@ class BaseTestCase(unittest.TestCase):
             {
                 b'tiny_asset_id': self.tiny_asset_id,
                 b'total_locked_amount': 0,
-                b'first_index': 0,
-                b'last_index': 0,
+                b'total_power_count': 0,
             }
         )
 

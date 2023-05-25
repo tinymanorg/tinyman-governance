@@ -1,4 +1,5 @@
 from datetime import datetime
+from zoneinfo import ZoneInfo
 
 from algosdk.encoding import encode_address
 
@@ -22,34 +23,40 @@ def parse_box_account_state(raw_box):
     data = dict(
         locked_amount=btoi(raw_box[:8]),
         lock_end_time=btoi(raw_box[8:16]),
-        first_index=btoi(raw_box[16:24]),
-        last_index=btoi(raw_box[24:32]),
+        index=btoi(raw_box[16:24]),
     )
-    data["lock_end_datetime"] = datetime.utcfromtimestamp(data["lock_end_time"])
+    data["lock_end_datetime"] = datetime.fromtimestamp(data["lock_end_time"], ZoneInfo("UTC"))
     return data
 
 
 def parse_box_account_power(raw_box):
     data = dict(
-        locked_amount=btoi(raw_box[:8]),
-        locked_round=btoi(raw_box[8:16]),
-        start_time=btoi(raw_box[16:24]),
-        end_time=btoi(raw_box[24:32]),
-        valid_until=btoi(raw_box[32:40]),
-        delegatee=encode_address(raw_box[40:72]),
+        bias=btoi(raw_box[:8]),
+        timestamp=btoi(raw_box[8:16]),
+        slope=btoi(raw_box[16:32]),
+        delegatee=encode_address(raw_box[32:64]),
     )
-    data["start_datetime"] = datetime.utcfromtimestamp(data["start_time"])
-    data["end_datetime"] = datetime.utcfromtimestamp(data["end_time"])
-    data["valid_until_datetime"] = datetime.utcfromtimestamp(data["valid_until"])
+    data["datetime"] = datetime.fromtimestamp(data["timestamp"], ZoneInfo("UTC"))
     return data
 
 
 def parse_box_total_power(raw_box):
-    return dict(
-        bias=btoi(raw_box[:8]),
-        slope=btoi(raw_box[8:24]),
-        cumulative_power=btoi(raw_box[24:40]),
-    )
+    n = 48
+    rows = [raw_box[i:i+n] for i in range(0, len(raw_box), n)]
+    powers = []
+    for row in rows:
+        if row == (b'\x00' * n):
+            break
+
+        powers.append(
+            dict(
+                bias=btoi(row[:8]),
+                timestamp=btoi(row[8:16]),
+                slope=btoi(row[16:32]),
+                cumulative_power=btoi(row[32:48]),
+            )
+        )
+    return powers
 
 
 def parse_box_slope_change(raw_box):
@@ -70,9 +77,9 @@ def parse_box_proposal(raw_box):
         proposer=encode_address(raw_box[56:88]),
         votes=raw_box[88:216]
     )
-    data["creation_date"] = datetime.utcfromtimestamp(data["creation_time"]).date().isoformat()
-    data["voting_start_date"] = datetime.utcfromtimestamp(data["voting_start_time"]).date().isoformat()
-    data["voting_end_date"] = datetime.utcfromtimestamp(data["voting_end_time"]).date().isoformat()
+    data["creation_date"] = datetime.fromtimestamp(data["creation_time"], ZoneInfo("UTC")).date().isoformat()
+    data["voting_start_date"] = datetime.fromtimestamp(data["voting_start_time"], ZoneInfo("UTC")).date().isoformat()
+    data["voting_end_date"] = datetime.fromtimestamp(data["voting_end_time"], ZoneInfo("UTC")).date().isoformat()
     data[f"vote_counts"] = [btoi(data["votes"][i * 8: (i + 1) * 8]) for i in range(MAX_OPTION_COUNT)]
     return data
 
@@ -80,16 +87,20 @@ def parse_box_proposal(raw_box):
 def print_boxes(boxes):
     for key, value in sorted(list(boxes.items()), key=lambda box: box[0]):
         if TOTAL_POWERS in key:
-            timestamp = btoi(key[len(TOTAL_POWERS):])
-            dt = datetime.utcfromtimestamp(timestamp)
-            print("TotalPower" + f"_{btoi(key[len(TOTAL_POWERS):])}", dt, parse_box_total_power(value))
+            index = btoi(key[len(TOTAL_POWERS):])
+            print("TotalPower" + f"_{index}")
+            powers = parse_box_total_power(value)
+            for i, power in enumerate(powers):
+                print("-", i, power)
         elif SLOPE_CHANGES in key:
             timestamp = btoi(key[len(SLOPE_CHANGES):])
-            dt = datetime.utcfromtimestamp(timestamp)
-            print("SlopeChange" + f"_{btoi(key[len(SLOPE_CHANGES):])}", dt, parse_box_slope_change(value))
-        elif len(value) == 72:
+            dt = datetime.fromtimestamp(timestamp, ZoneInfo("UTC"))
+            print("SlopeChange" + f"_{btoi(key[len(SLOPE_CHANGES):])}")
+            print("-", dt, parse_box_slope_change(value))
+
+        elif len(value) == 64:
             print(encode_address(key[:32]) + f"_{btoi(key[32:])}", parse_box_account_power(value))
-        elif len(value) == 32:
+        elif len(value) == 24:
             print(encode_address(key), parse_box_account_state(value))
         elif PROPOSALS in key:
             proposal_id = btoi(key[len(PROPOSALS):])
