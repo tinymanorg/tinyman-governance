@@ -111,11 +111,11 @@ class BaseTestCase(unittest.TestCase):
         self.init_app_boxes(app_id)
         self.ledger.boxes[app_id][decode_address(address)] = itob(locked_amount) + itob(lock_end_time) + itob(first_index) + itob(last_index)
 
-    def set_box_account_power(self, app_id, address, index, locked_amount, locked_round, start_time, end_time, valid_until=0, delegatee=ZERO_ADDRESS):
+    def set_box_account_power(self, app_id, address, index, locked_amount, locked_round, start_time, end_time, valid_until=0):
         assert (start_time % DAY) == 0
         assert (end_time % WEEK) == 0
         self.init_app_boxes(app_id)
-        self.ledger.boxes[app_id][decode_address(address) + itob(index)] = itob(locked_amount) + itob(locked_round) + itob(start_time) + itob(end_time) + itob(valid_until) + decode_address(delegatee)
+        self.ledger.boxes[app_id][decode_address(address) + itob(index)] = itob(locked_amount) + itob(locked_round) + itob(start_time) + itob(end_time) + itob(valid_until)
 
     def set_box_total_power(self, app_id, timestamp, bias, slope, cumulative_power):
         assert (timestamp % DAY) == 0

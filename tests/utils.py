@@ -23,21 +23,36 @@ def parse_box_account_state(raw_box):
     data = dict(
         locked_amount=btoi(raw_box[:8]),
         lock_end_time=btoi(raw_box[8:16]),
-        index=btoi(raw_box[16:24]),
+        power_count=btoi(raw_box[16:24]),
     )
     data["lock_end_datetime"] = datetime.fromtimestamp(data["lock_end_time"], ZoneInfo("UTC"))
     return data
 
 
 def parse_box_account_power(raw_box):
-    data = dict(
-        bias=btoi(raw_box[:8]),
-        timestamp=btoi(raw_box[8:16]),
-        slope=btoi(raw_box[16:32]),
-        delegatee=encode_address(raw_box[32:64]),
-    )
-    data["datetime"] = datetime.fromtimestamp(data["timestamp"], ZoneInfo("UTC"))
-    return data
+    n = 32
+    rows = [raw_box[i:i+n] for i in range(0, len(raw_box), n)]
+    powers = []
+    for row in rows:
+        if row == (b'\x00' * n):
+            break
+
+        powers.append(
+            dict(
+                bias=btoi(row[:8]),
+                timestamp=btoi(row[8:16]),
+                slope=btoi(row[16:32]),
+                datetime=datetime.fromtimestamp(btoi(row[8:16]), ZoneInfo("UTC"))
+            )
+        )
+    return powers
+    # data = dict(
+    #     bias=btoi(raw_box[:8]),
+    #     timestamp=btoi(raw_box[8:16]),
+    #     slope=btoi(raw_box[16:32]),
+    # )
+    # data["datetime"] = datetime.fromtimestamp(data["timestamp"], ZoneInfo("UTC"))
+    # return data
 
 
 def parse_box_total_power(raw_box):
@@ -97,14 +112,43 @@ def print_boxes(boxes):
             dt = datetime.fromtimestamp(timestamp, ZoneInfo("UTC"))
             print("SlopeChange" + f"_{btoi(key[len(SLOPE_CHANGES):])}")
             print("-", dt, parse_box_slope_change(value))
-
-        elif len(value) == 64:
-            print(encode_address(key[:32]) + f"_{btoi(key[32:])}", parse_box_account_power(value))
+        elif len(value) == 1024:
+            powers = parse_box_account_power(value)
+            print(encode_address(key[:32]) + f"_{btoi(key[32:])}")
+            for i, power in enumerate(powers):
+                print("-", i, power)
         elif len(value) == 24:
             print(encode_address(key), parse_box_account_state(value))
         elif PROPOSALS in key:
             proposal_id = btoi(key[len(PROPOSALS):])
             print(f"PROPOSALS {proposal_id}", parse_box_proposal(value))
+
+# def parse_global_state():
+#     {
+#         b'total_power_count': 4,
+#         b'tiny_asset_id': self.tiny_asset_id,
+#         b'total_locked_amount': amount
+#     }
+
+
+def get_latest_checkpoint_indexes(ledger, app_id):
+    total_power_count = ledger.global_states[app_id][b'total_power_count']
+
+    # TOTAL_POWER_SIZE = 1008
+    TOTAL_POWER_BOX_ARRAY_LEN = 21
+
+    latest_index = total_power_count - 1
+    box_index = latest_index // TOTAL_POWER_BOX_ARRAY_LEN
+    array_index = latest_index % TOTAL_POWER_BOX_ARRAY_LEN
+
+    return box_index, array_index
+
+
+def get_latest_checkpoint_timestamp(ledger, app_id):
+    box_index, array_index = get_latest_checkpoint_indexes(ledger, app_id)
+    boxes = ledger.boxes[app_id]
+    timestamp = parse_box_total_power(boxes[TOTAL_POWERS + itob(box_index)])[array_index]["timestamp"]
+    return timestamp
 
 
 def get_slope(locked_amount):

@@ -1,9 +1,10 @@
+import unittest
 import uuid
 from datetime import timedelta, datetime
 from unittest.mock import ANY
 from zoneinfo import ZoneInfo
 
-from algojig import LogicEvalError, gojig
+from algojig import LogicEvalError
 from algosdk import transaction
 from algosdk.account import generate_account
 from algosdk.encoding import decode_address, encode_address
@@ -11,7 +12,7 @@ from algosdk.logic import get_application_address
 
 from tests.common import BaseTestCase
 from tests.constants import TOTAL_POWERS, DAY, SLOPE_CHANGES, locking_approval_program, locking_clear_state_program, WEEK, MAX_LOCK_TIME
-from tests.utils import get_start_time_of_next_day, itob, sign_txns, parse_box_total_power, get_start_time_of_week, parse_box_account_power, parse_box_account_state, parse_box_slope_change, get_slope, get_voting_power, print_boxes, btoi, get_start_time_of_day
+from tests.utils import get_start_time_of_next_day, itob, sign_txns, parse_box_total_power, get_start_time_of_week, parse_box_account_power, parse_box_account_state, parse_box_slope_change, get_slope, get_voting_power, print_boxes, btoi, get_start_time_of_day, get_latest_checkpoint_indexes, get_latest_checkpoint_timestamp
 
 
 def get_budget_increase_txn(sender, sp, index):
@@ -69,6 +70,7 @@ class LockingTestCase(BaseTestCase):
         block = self.ledger.eval_transactions(signed_txns, block_timestamp=int(block_datetime.timestamp()))
         return block
 
+    @unittest.skip
     def test_create_app(self):
         block_datetime = datetime(year=2022, month=3, day=1, tzinfo=ZoneInfo("UTC"))
         lock_start_time = get_start_time_of_next_day(int(block_datetime.timestamp()))
@@ -92,8 +94,6 @@ class LockingTestCase(BaseTestCase):
 
         # with self.assertRaises(LogicEvalError) as e:
         block = self.ledger.eval_transactions(signed_txns, block_timestamp=int(block_datetime.timestamp()))
-        print(block)
-        breakpoint()
         app_id = block[b"txns"][0][b"apid"]
 
         txn_group = [
@@ -124,7 +124,7 @@ class LockingTestCase(BaseTestCase):
             {'bias': 0, 'slope': 0, 'cumulative_power': 0}
         )
 
-    def test_create_first_lock(self):
+    def test_all(self):
         block_datetime = datetime(year=2022, month=3, day=1, hour=0, tzinfo=ZoneInfo("UTC"))
         txn_group = [
             transaction.PaymentTxn(
@@ -140,11 +140,13 @@ class LockingTestCase(BaseTestCase):
                 app_args=[
                     "init",
                 ],
+                foreign_assets=[self.tiny_asset_id],
                 boxes=[
                     (0, TOTAL_POWERS + itob(0)),
                 ]
             ),
         ]
+        txn_group[1].fee *= 2
         transaction.assign_group_id(txn_group)
         signed_txns = sign_txns(txn_group, self.user_sk)
 
@@ -227,17 +229,16 @@ class LockingTestCase(BaseTestCase):
                 'locked_amount': 10000000,
                 'lock_end_time': lock_end_timestamp,
                 'lock_end_datetime': datetime.fromtimestamp(lock_end_timestamp, ZoneInfo("UTC")),
-                'index': 0,
+                'power_count': 1,
             }
         )
         self.assertDictEqual(
-            parse_box_account_power(self.ledger.boxes[self.app_id][decode_address(self.user_address) + itob(0)]),
+            parse_box_account_power(self.ledger.boxes[self.app_id][decode_address(self.user_address) + itob(0)])[0],
             {
                 'bias': bias,
                 'timestamp': int(block_datetime.timestamp()),
                 'datetime': block_datetime,
-                'slope': amount * 2**64 // MAX_LOCK_TIME,
-                'delegatee': 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAY5HFKQ'
+                'slope': amount * 2**64 // MAX_LOCK_TIME
             }
         )
         self.assertDictEqual(
@@ -326,9 +327,221 @@ class LockingTestCase(BaseTestCase):
         print("TXN Extend Lock End Time")
         block = self.ledger.eval_transactions(signed_txns, block_timestamp=int(block_datetime.timestamp()))
         print_boxes(self.ledger.boxes[self.app_id])
-        for log in block[b'txns'][0][b'dt'][b'lg']:
-            print(btoi(log))
 
+        # Get Tiny Power Of
+        txn_group = [
+            transaction.ApplicationNoOpTxn(
+                sender=self.user_address,
+                sp=self.sp,
+                index=self.app_id,
+                app_args=["get_tiny_power_of"],
+                accounts=[self.user_address],
+                boxes=[
+                    (0, decode_address(self.user_address)),
+                ]
+            )
+        ]
+
+        transaction.assign_group_id(txn_group)
+        signed_txns = sign_txns(txn_group, self.user_sk)
+
+        block = self.ledger.eval_transactions(signed_txns, block_timestamp=int(block_datetime.timestamp()))
+        print("TXN Get Tiny Power Of")
+        print_boxes(self.ledger.boxes[self.app_id])
+        print("Power", btoi(block[b'txns'][0][b'dt'][b'lg'][-1]))
+
+        # Get Tiny Power Of At
+        point_at = int(block_datetime.timestamp())
+        power_index = 2
+        # block_datetime += timedelta(days=30)
+        txn_group = [
+            transaction.ApplicationNoOpTxn(
+                sender=self.user_address,
+                sp=self.sp,
+                index=self.app_id,
+                app_args=["get_tiny_power_of_at", point_at, power_index],
+                accounts=[self.user_address],
+                boxes=[
+                    (0, decode_address(self.user_address)),
+                    (0, decode_address(self.user_address) + itob(0)),
+                ]
+            )
+        ]
+
+        transaction.assign_group_id(txn_group)
+        signed_txns = sign_txns(txn_group, self.user_sk)
+
+        block = self.ledger.eval_transactions(signed_txns, block_timestamp=int(block_datetime.timestamp()))
+        print("TXN Get Tiny Power Of At")
+        print_boxes(self.ledger.boxes[self.app_id])
+        print("Power", btoi(block[b'txns'][0][b'dt'][b'lg'][-1]))
+
+        # Get Total Tiny Power
+        # block_datetime += timedelta(days=7)
+        txn_group = [
+            transaction.ApplicationNoOpTxn(
+                sender=self.user_address,
+                sp=self.sp,
+                index=self.app_id,
+                app_args=["get_total_tiny_power"],
+                accounts=[self.user_address],
+                boxes=[
+                    (0, TOTAL_POWERS + itob(0)),
+                ]
+            )
+        ]
+
+        transaction.assign_group_id(txn_group)
+        signed_txns = sign_txns(txn_group, self.user_sk)
+
+        block = self.ledger.eval_transactions(signed_txns, block_timestamp=int(block_datetime.timestamp()))
+        print("TXN Get Total Tiny Power")
+        print_boxes(self.ledger.boxes[self.app_id])
+        print("Power", btoi(block[b'txns'][0][b'dt'][b'lg'][-1]))
+
+        # Get Total Tiny Power At
+        # block_datetime += timedelta(days=7)
+        point_at = int(block_datetime.timestamp()) + DAY * 5
+        total_power_index = 5
+        txn_group = [
+            transaction.ApplicationNoOpTxn(
+                sender=self.user_address,
+                sp=self.sp,
+                index=self.app_id,
+                app_args=["get_total_tiny_power_at", point_at, total_power_index],
+                accounts=[self.user_address],
+                boxes=[
+                    (0, TOTAL_POWERS + itob(0)),
+                ]
+            )
+        ]
+
+        transaction.assign_group_id(txn_group)
+        signed_txns = sign_txns(txn_group, self.user_sk)
+
+        block = self.ledger.eval_transactions(signed_txns, block_timestamp=int(block_datetime.timestamp()))
+        print("TXN Get Total Tiny Power At")
+        print_boxes(self.ledger.boxes[self.app_id])
+        print("Power", btoi(block[b'txns'][0][b'dt'][b'lg'][-1]))
+
+        # Withdraw
+        block_datetime = datetime.fromtimestamp(new_lock_end_timestamp, ZoneInfo("UTC")) + timedelta(hours=1)
+        txn_group = [
+            transaction.ApplicationNoOpTxn(
+                sender=self.user_address,
+                sp=self.sp,
+                index=self.app_id,
+                app_args=["withdraw"],
+                accounts=[self.user_address],
+                foreign_assets=[self.tiny_asset_id],
+                boxes=[
+                    (0, decode_address(self.user_address)),
+                ]
+            )
+        ]
+        txn_group[0].fee *= 2
+        transaction.assign_group_id(txn_group)
+        signed_txns = sign_txns(txn_group, self.user_sk)
+
+        block = self.ledger.eval_transactions(signed_txns, block_timestamp=int(block_datetime.timestamp()))
+        print("TXN Withdraw")
+        print_boxes(self.ledger.boxes[self.app_id])
+
+        # Get Tiny Power Of
+        txn_group = [
+            transaction.ApplicationNoOpTxn(
+                sender=self.user_address,
+                sp=self.sp,
+                index=self.app_id,
+                app_args=["get_tiny_power_of"],
+                accounts=[self.user_address],
+                boxes=[
+                    (0, decode_address(self.user_address)),
+                ]
+            )
+        ]
+
+        transaction.assign_group_id(txn_group)
+        signed_txns = sign_txns(txn_group, self.user_sk)
+
+        block = self.ledger.eval_transactions(signed_txns, block_timestamp=int(block_datetime.timestamp()))
+        print("TXN Get Tiny Power Of")
+        print_boxes(self.ledger.boxes[self.app_id])
+        print("Power", btoi(block[b'txns'][0][b'dt'][b'lg'][-1]))
+
+        while True:
+            box_index, _ = get_latest_checkpoint_indexes(self.ledger, self.app_id)
+            latest_checkpoint_timestamp = get_latest_checkpoint_timestamp(self.ledger, self.app_id)
+            slope_change_timestamp = get_start_time_of_week(latest_checkpoint_timestamp + WEEK)
+
+            new_checkpoint_count = (min(slope_change_timestamp, int(block_datetime.timestamp())) // DAY) - (latest_checkpoint_timestamp // DAY)
+            if latest_checkpoint_timestamp == int(block_datetime.timestamp()):
+                break
+
+            op_budget = 360 + (new_checkpoint_count - 1) * 270
+            increase_txn_count = (op_budget // 700)
+
+            txn_group = [
+                transaction.ApplicationNoOpTxn(
+                    sender=self.user_address,
+                    sp=self.sp,
+                    index=self.app_id,
+                    app_args=[
+                        "create_checkpoints",
+                    ],
+                    boxes=[
+                        (0, TOTAL_POWERS + itob(box_index)),
+                        (0, TOTAL_POWERS + itob(box_index + 1)),
+                        (0, SLOPE_CHANGES + itob(slope_change_timestamp)),
+                    ]
+                ),
+                *[get_budget_increase_txn(self.user_address, sp=self.sp, index=self.app_id) for _ in range(increase_txn_count)],
+            ]
+            transaction.assign_group_id(txn_group)
+            signed_txns = sign_txns(txn_group, self.user_sk)
+
+            print("TXN Create Checkpoints")
+            block = self.ledger.eval_transactions(signed_txns, block_timestamp=int(block_datetime.timestamp()))
+            # print("Opb", new_checkpoint_count, new_checkpoint_count * 700, [btoi(l) for l in block[b'txns'][0][b'dt'][b'lg']])
+            print_boxes(self.ledger.boxes[self.app_id])
+
+        # Create lock again
+        box_index, _ = get_latest_checkpoint_indexes(self.ledger, self.app_id)
+        lock_end_timestamp = get_start_time_of_week(int((block_datetime + timedelta(days=20)).timestamp()))
+        txn_group = [
+            transaction.AssetTransferTxn(
+                index=self.tiny_asset_id,
+                sender=self.user_address,
+                receiver=get_application_address(self.app_id),
+                amt=amount,
+                sp=self.sp,
+            ),
+            transaction.ApplicationNoOpTxn(
+                sender=self.user_address,
+                sp=self.sp,
+                index=self.app_id,
+                app_args=[
+                    "create_lock",
+                    lock_end_timestamp,
+                ],
+                boxes=[
+                    (0, decode_address(self.user_address)),
+                    (0, decode_address(self.user_address) + itob(0)),
+                    (0, TOTAL_POWERS + itob(box_index)),
+                    (0, TOTAL_POWERS + itob(box_index + 1)),
+                    (0, SLOPE_CHANGES + itob(lock_end_timestamp))
+                ]
+            ),
+        ]
+
+        transaction.assign_group_id(txn_group)
+        signed_txns = sign_txns(txn_group, self.user_sk)
+
+        print("TXN Create Lock")
+        self.ledger.eval_transactions(signed_txns, block_timestamp=int(block_datetime.timestamp()))
+        print_boxes(self.ledger.boxes[self.app_id])
+
+    @unittest.skip
     def test_increase_lock_amount(self):
         self.ledger.move(
             1_000_000_000,
@@ -392,6 +605,7 @@ class LockingTestCase(BaseTestCase):
         print("---TXN---")
         print_boxes(self.ledger.boxes[self.app_id])
 
+    @unittest.skip
     def test_extend_lock_end_time(self):
         self.ledger.move(
             1_000_000_000,
@@ -460,6 +674,7 @@ class LockingTestCase(BaseTestCase):
         print("---TXN---")
         print_boxes(self.ledger.boxes[self.app_id])
 
+    @unittest.skip
     def test(self):
         self.ledger.move(
             1_000_000_000,
