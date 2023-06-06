@@ -1,9 +1,9 @@
 from datetime import datetime
 from zoneinfo import ZoneInfo
 
-from algosdk.encoding import encode_address
+from algosdk.encoding import encode_address, decode_address
 
-from tests.constants import TOTAL_POWERS, SLOPE_CHANGES, MAX_LOCK_TIME, DAY, WEEK, PROPOSALS, MAX_OPTION_COUNT
+from tests.constants import TOTAL_POWERS, SLOPE_CHANGES, MAX_LOCK_TIME, DAY, WEEK, PROPOSALS, MAX_OPTION_COUNT, TOTAL_POWER_BOX_ARRAY_LEN, TWO_TO_THE_64, ACCOUNT_POWER_BOX_ARRAY_LEN
 
 
 def itob(value, length=8):
@@ -76,7 +76,7 @@ def parse_box_total_power(raw_box):
 
 def parse_box_slope_change(raw_box):
     return dict(
-        d_slope=btoi(raw_box[:16]),
+        slope_delta=btoi(raw_box[:16]),
     )
 
 
@@ -134,14 +134,62 @@ def print_boxes(boxes):
 def get_latest_checkpoint_indexes(ledger, app_id):
     total_power_count = ledger.global_states[app_id][b'total_power_count']
 
-    # TOTAL_POWER_SIZE = 1008
-    TOTAL_POWER_BOX_ARRAY_LEN = 21
-
     latest_index = total_power_count - 1
     box_index = latest_index // TOTAL_POWER_BOX_ARRAY_LEN
     array_index = latest_index % TOTAL_POWER_BOX_ARRAY_LEN
 
     return box_index, array_index
+
+def get_latest_account_power_indexes(ledger, app_id, user_address):
+    account_state = parse_box_account_state(ledger.boxes[app_id][decode_address(user_address)])
+    power_count = account_state["power_count"]
+    latest_index = power_count - 1
+
+    box_index = latest_index // ACCOUNT_POWER_BOX_ARRAY_LEN
+    array_index = latest_index % ACCOUNT_POWER_BOX_ARRAY_LEN
+
+    return box_index, array_index
+
+def get_account_power_index_at(ledger, app_id, user_address, timestamp):
+    account_power_index = None
+    if raw_account_state := ledger.boxes[app_id].get(decode_address(user_address)):
+        account_state = parse_box_account_state(raw_account_state)
+        power_count = account_state["power_count"]
+        box_count = power_count // ACCOUNT_POWER_BOX_ARRAY_LEN
+
+        account_powers = []
+        for box_index in range(box_count):
+            raw_box = ledger.boxes[app_id][decode_address(user_address) + itob(box_index)]
+            account_powers.extend(parse_box_account_power(raw_box))
+
+        for index, account_power in enumerate(account_powers):
+            if timestamp > account_power["timestamp"]:
+                account_power_index = index
+            else:
+                break
+
+    return account_power_index
+
+
+def get_total_power_index_at(ledger, app_id, timestamp):
+    total_power_index = None
+    total_power_count = ledger.global_states[app_id][b'total_power_count']
+
+    box_count = total_power_count // TOTAL_POWER_BOX_ARRAY_LEN
+    box_count += bool(total_power_count % TOTAL_POWER_BOX_ARRAY_LEN)
+
+    total_powers = []
+    for box_index in range(box_count):
+        raw_box = ledger.boxes[app_id][TOTAL_POWERS + itob(box_index)]
+        total_powers.extend(parse_box_total_power(raw_box))
+
+    for index, total_power in enumerate(total_powers):
+        if timestamp >= total_power["timestamp"]:
+            total_power_index = index
+        else:
+            break
+
+    return total_power_index
 
 
 def get_latest_checkpoint_timestamp(ledger, app_id):
@@ -152,8 +200,11 @@ def get_latest_checkpoint_timestamp(ledger, app_id):
 
 
 def get_slope(locked_amount):
-    return locked_amount * 2**64 // MAX_LOCK_TIME
+    return locked_amount * TWO_TO_THE_64 // MAX_LOCK_TIME
 
+def get_bias(slope, time_delta):
+    assert time_delta >= 0
+    return (slope * time_delta) // TWO_TO_THE_64
 
 def get_voting_power(slope, remaining_time):
     return slope * remaining_time // 2**64
@@ -162,14 +213,8 @@ def get_voting_power(slope, remaining_time):
 def get_start_time_of_day(value):
     return (value // DAY) * DAY
 
-
-def get_start_time_of_next_day(value):
-    return ((value // DAY) * DAY) + DAY
-
-
-def get_start_time_of_week(value):
+def get_start_timestamp_of_week(value):
     return (value // WEEK) * WEEK
 
-
-def get_start_time_of_next_week(value):
-    return ((value // WEEK) * WEEK) + WEEK
+def get_required_minimum_balance_of_box(box_name, box_size):
+    return 2500 + 400 * (len(box_name) + box_size)

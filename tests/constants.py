@@ -13,8 +13,31 @@ WEEK = 7 * DAY
 MAX_LOCK_TIME = 4 * 365 * DAY
 MAX_OPTION_COUNT = 16
 
+TWO_TO_THE_64 = 2 ** 64
+
 TOTAL_POWERS = b"total_powers"
 SLOPE_CHANGES = b"slope_changes"
 
 PROPOSALS = b"proposals"
 VOTES = b"votes"
+
+# 100_000 Default
+# 100_000 Opt-in
+# Box
+# https://developer.algorand.org/docs/get-details/dapps/smart-contracts/apps/?from_query=box#minimum-balance-requirement-for-boxes
+# 2500 + 400 * (len(n)+s)
+# 2_500 Box
+# 411_200 = 400 * (20 + 1008)
+INITIAL_MINIMUM_BALANCE_REQUIREMENT = 613_700
+
+
+ACCOUNT_STATE_SIZE = 24
+SLOPE_CHANGE_SIZE = 16
+
+ACCOUNT_POWER_SIZE = 32
+ACCOUNT_POWER_BOX_SIZE = 1024
+ACCOUNT_POWER_BOX_ARRAY_LEN = 32
+
+TOTAL_POWER_SIZE = 48
+TOTAL_POWER_BOX_SIZE = 1008
+TOTAL_POWER_BOX_ARRAY_LEN = 21

@@ -85,22 +85,17 @@ block create_app:
     exit(1)
 end
 
-# TODO: Asset opt-in TINY
 # TODO: Try adding support increase & extend lock with single app call.
-# TODO: Try creating checkpoint at the beginning of other methods.
-# TODO: Add delegatee support.
-# TODO: Allow deleting old boxes (Account Power).
-
 block main:
     switch Txn.ApplicationArgs[0]:
         "create_lock": create_lock
         "increase_lock_amount": increase_lock_amount
         "extend_lock_end_time": extend_lock_end_time
         "create_checkpoints": create_checkpoints
-        "get_tiny_power_of_at": get_tiny_power_of_at
-        "get_total_tiny_power_at": get_total_tiny_power_at
         "get_tiny_power_of": get_tiny_power_of
+        "get_tiny_power_of_at": get_tiny_power_of_at
         "get_total_tiny_power": get_total_tiny_power
+        "get_total_tiny_power_at": get_total_tiny_power_at
         "increase_budget": increase_budget
         "withdraw": withdraw
         "init": init
@@ -124,14 +119,10 @@ block main:
 
     block create_checkpoints:
         create_checkpoints(0, bzero(16))
-        # log(itob(Global.OpcodeBudget))
         exit(1)
     end
 
     block create_lock:
-        # test: Call create_lock multiple times
-        # TODO: improve withdraw & create lock, box del
-
         # inputs
         bytes user_address = Txn.Sender
         int amount = get_received_tiny_amount()
@@ -271,6 +262,7 @@ block main:
         int timestamp = btoi(Txn.ApplicationArgs[1])
         int index = btoi(Txn.ApplicationArgs[2])
         int tiny_power = 0
+        assert(timestamp <= Global.LatestTimestamp)
 
         int exists
         exists, _ = box_len(user_address)
@@ -309,19 +301,27 @@ block main:
     block get_total_tiny_power_at:
         int timestamp = btoi(Txn.ApplicationArgs[1])
         int index = btoi(Txn.ApplicationArgs[2])
+        int tiny_power = 0
         assert(index < app_global_get(TOTAL_POWER_COUNT_KEY))
+        assert(timestamp <= Global.LatestTimestamp)
 
         TotalPower total_power = get_total_power(index)
-        assert(total_power.timestamp <= timestamp)
-        # Ensure that the latest checkpoint belongs to the same week so the slope is not changed.
-        assert((total_power.timestamp / WEEK) == (timestamp / WEEK))
+        if total_power.timestamp <= timestamp:
+            # assert(total_power.timestamp <= timestamp)
+            # Ensure that the latest checkpoint belongs to the same week so the slope is not changed.
+            assert((total_power.timestamp / WEEK) == (timestamp / WEEK))
 
-        if (index + 1) < app_global_get(TOTAL_POWER_COUNT_KEY):
-            TotalPower next_total_power = get_total_power(index + 1)
-            assert(timestamp < next_total_power.timestamp)
+            if (index + 1) < app_global_get(TOTAL_POWER_COUNT_KEY):
+                TotalPower next_total_power = get_total_power(index + 1)
+                assert(timestamp < next_total_power.timestamp)
+            end
+
+            tiny_power = get_power(total_power.bias, total_power.slope, (timestamp - total_power.timestamp))
+        else:
+            # Index must be 0, it indicates that the given timestamp predates the first checkpoint.
+            assert(!index)
         end
 
-        int tiny_power = get_power(total_power.bias, total_power.slope, (timestamp - total_power.timestamp))
         log(itob(tiny_power))
         exit(1)
     end
@@ -448,7 +448,6 @@ func create_checkpoints(account_bias_delta: int, account_slope_delta: bytes):
             i = i + 1
             save_total_power(construct_total_power(bias, last_checkpoint, slope, cumulative_power))
         end
-        # log(itob(Global.OpcodeBudget))
     end
     assert(!(has_account_event && (t_i != Global.LatestTimestamp)))
     return

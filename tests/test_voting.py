@@ -7,8 +7,8 @@ from algosdk.encoding import decode_address
 from algosdk.logic import get_application_address
 
 from tests.common import BaseTestCase
-from tests.constants import TOTAL_POWERS, SLOPE_CHANGES, PROPOSALS, DAY, WEEK, HOUR
-from tests.utils import get_start_time_of_week, get_start_time_of_next_day, get_slope, get_voting_power, print_boxes, itob, sign_txns, get_start_time_of_day, btoi
+from tests.constants import TOTAL_POWERS, PROPOSALS, DAY, WEEK, HOUR
+from tests.utils import get_start_timestamp_of_week, get_slope, get_voting_power, print_boxes, itob, sign_txns, get_start_time_of_day
 
 
 class VotingTestCase(BaseTestCase):
@@ -35,7 +35,7 @@ class VotingTestCase(BaseTestCase):
         locked_amount = 100_000_000
         lock_start_datetime = datetime(year=2022, month=3, day=2, tzinfo=ZoneInfo("UTC"))
         lock_start_time = int(lock_start_datetime.timestamp())
-        lock_end_time = get_start_time_of_week(int((lock_start_datetime + timedelta(days=50)).timestamp()))
+        lock_end_time = get_start_timestamp_of_week(int((lock_start_datetime + timedelta(days=50)).timestamp()))
         slope = get_slope(locked_amount)
         remaining_time = lock_end_time - lock_start_time
         voting_power = get_voting_power(slope, remaining_time)
@@ -86,7 +86,7 @@ class VotingTestCase(BaseTestCase):
         locked_amount = 100_000_000
         lock_start_datetime = datetime(year=2022, month=3, day=2, tzinfo=ZoneInfo("UTC"))
         lock_start_time = int(lock_start_datetime.timestamp())
-        lock_end_time = get_start_time_of_week(int((lock_start_datetime + timedelta(days=50)).timestamp()))
+        lock_end_time = get_start_timestamp_of_week(int((lock_start_datetime + timedelta(days=50)).timestamp()))
         slope = get_slope(locked_amount)
         remaining_time = lock_end_time - lock_start_time
         voting_power = get_voting_power(slope, remaining_time)
