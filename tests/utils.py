@@ -3,7 +3,7 @@ from zoneinfo import ZoneInfo
 
 from algosdk.encoding import encode_address, decode_address
 
-from tests.constants import TOTAL_POWERS, SLOPE_CHANGES, MAX_LOCK_TIME, DAY, WEEK, PROPOSALS, MAX_OPTION_COUNT, TOTAL_POWER_BOX_ARRAY_LEN, TWO_TO_THE_64, ACCOUNT_POWER_BOX_ARRAY_LEN
+from tests.constants import TOTAL_POWERS, SLOPE_CHANGES, MAX_LOCK_TIME, DAY, WEEK, PROPOSALS, MAX_OPTION_COUNT, TOTAL_POWER_BOX_ARRAY_LEN, TWO_TO_THE_64, ACCOUNT_POWER_BOX_ARRAY_LEN, ACCOUNT_POWER_SIZE, TOTAL_POWER_SIZE
 
 
 def itob(value, length=8):
@@ -30,7 +30,7 @@ def parse_box_account_state(raw_box):
 
 
 def parse_box_account_power(raw_box):
-    n = 32
+    n = ACCOUNT_POWER_SIZE
     rows = [raw_box[i:i+n] for i in range(0, len(raw_box), n)]
     powers = []
     for row in rows:
@@ -42,6 +42,7 @@ def parse_box_account_power(raw_box):
                 bias=btoi(row[:8]),
                 timestamp=btoi(row[8:16]),
                 slope=btoi(row[16:32]),
+                cumulative_power=btoi(row[32:48]),
                 datetime=datetime.fromtimestamp(btoi(row[8:16]), ZoneInfo("UTC"))
             )
         )
@@ -56,7 +57,7 @@ def parse_box_account_power(raw_box):
 
 
 def parse_box_total_power(raw_box):
-    n = 48
+    n = TOTAL_POWER_SIZE
     rows = [raw_box[i:i+n] for i in range(0, len(raw_box), n)]
     powers = []
     for row in rows:
@@ -112,13 +113,14 @@ def print_boxes(boxes):
             dt = datetime.fromtimestamp(timestamp, ZoneInfo("UTC"))
             print("SlopeChange" + f"_{btoi(key[len(SLOPE_CHANGES):])}")
             print("-", dt, parse_box_slope_change(value))
-        elif len(value) == 1024:
+        elif len(value) == 1008:
             powers = parse_box_account_power(value)
             print(encode_address(key[:32]) + f"_{btoi(key[32:])}")
             for i, power in enumerate(powers):
                 print("-", i, power)
         elif len(value) == 24:
-            print(encode_address(key), parse_box_account_state(value))
+            print(encode_address(key))
+            print(parse_box_account_state(value))
         elif PROPOSALS in key:
             proposal_id = btoi(key[len(PROPOSALS):])
             print(f"PROPOSALS {proposal_id}", parse_box_proposal(value))
@@ -155,7 +157,9 @@ def get_account_power_index_at(ledger, app_id, user_address, timestamp):
     if raw_account_state := ledger.boxes[app_id].get(decode_address(user_address)):
         account_state = parse_box_account_state(raw_account_state)
         power_count = account_state["power_count"]
+
         box_count = power_count // ACCOUNT_POWER_BOX_ARRAY_LEN
+        box_count += bool(power_count % ACCOUNT_POWER_BOX_ARRAY_LEN)
 
         account_powers = []
         for box_index in range(box_count):
@@ -163,7 +167,7 @@ def get_account_power_index_at(ledger, app_id, user_address, timestamp):
             account_powers.extend(parse_box_account_power(raw_box))
 
         for index, account_power in enumerate(account_powers):
-            if timestamp > account_power["timestamp"]:
+            if timestamp >= account_power["timestamp"]:
                 account_power_index = index
             else:
                 break

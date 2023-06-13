@@ -7,6 +7,9 @@ locking_clear_state_program = TealishProgram('contracts/locking/locking_clear_st
 voting_approval_program = TealishProgram('contracts/voting/voting_approval.tl')
 voting_clear_state_program = TealishProgram('contracts/voting/voting_clear_state.tl')
 
+rewards_approval_program = TealishProgram('contracts/rewards/rewards_approval.tl')
+rewards_clear_state_program = TealishProgram('contracts/rewards/rewards_clear_state.tl')
+
 HOUR = 60 * 60
 DAY = 24 * HOUR
 WEEK = 7 * DAY
@@ -34,9 +37,9 @@ INITIAL_MINIMUM_BALANCE_REQUIREMENT = 613_700
 ACCOUNT_STATE_SIZE = 24
 SLOPE_CHANGE_SIZE = 16
 
-ACCOUNT_POWER_SIZE = 32
-ACCOUNT_POWER_BOX_SIZE = 1024
-ACCOUNT_POWER_BOX_ARRAY_LEN = 32
+ACCOUNT_POWER_SIZE = 48
+ACCOUNT_POWER_BOX_SIZE = 1008
+ACCOUNT_POWER_BOX_ARRAY_LEN = 21
 
 TOTAL_POWER_SIZE = 48
 TOTAL_POWER_BOX_SIZE = 1008

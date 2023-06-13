@@ -10,11 +10,12 @@ struct AccountState:
 end
 
 # Name: <address><box_index><array_index>
-# Size: 32 bytes (8+8+16). 1 Box(1024) = 32 AccountPower
+# Size: 48 bytes (8+8+16+16). 1 Box(1008) = 21 AccountPower
 struct AccountPower:
     bias: int
     timestamp: int
     slope: bytes[16]
+    cumulative_power: bytes[16]
 end
 
 # Name: TOTAL_POWERS<box_index><array_index>
@@ -49,9 +50,9 @@ const bytes SLOPE_CHANGES = "slope_changes"
 const int ACCOUNT_STATE_SIZE = 24
 const int SLOPE_CHANGE_SIZE = 16
 
-const int ACCOUNT_POWER_SIZE = 32
-const int ACCOUNT_POWER_BOX_SIZE = 1024
-const int ACCOUNT_POWER_BOX_ARRAY_LEN = 32
+const int ACCOUNT_POWER_SIZE = 48
+const int ACCOUNT_POWER_BOX_SIZE = 1008
+const int ACCOUNT_POWER_BOX_ARRAY_LEN = 21
 
 const int TOTAL_POWER_SIZE = 48
 const int TOTAL_POWER_BOX_SIZE = 1008
@@ -61,6 +62,7 @@ const int TOTAL_POWER_BOX_ARRAY_LEN = 21
 const bytes TINY_ASSET_ID_KEY = "tiny_asset_id"
 const bytes TOTAL_LOCKED_AMOUNT_KEY = "total_locked_amount"
 const bytes TOTAL_POWER_COUNT_KEY = "total_power_count"
+const bytes CREATION_TIMESTAMP_KEY = "creation_timestamp"
 
 if !Txn.ApplicationID:
     jump create_app
@@ -82,6 +84,7 @@ block create_app:
     app_global_put(TINY_ASSET_ID_KEY, Txn.Assets[0])
     app_global_put(TOTAL_LOCKED_AMOUNT_KEY, 0)
     app_global_put(TOTAL_POWER_COUNT_KEY, 0)
+    app_global_put(CREATION_TIMESTAMP_KEY, Global.LatestTimestamp)
     exit(1)
 end
 
@@ -94,8 +97,10 @@ block main:
         "create_checkpoints": create_checkpoints
         "get_tiny_power_of": get_tiny_power_of
         "get_tiny_power_of_at": get_tiny_power_of_at
+        "get_cumulative_power_of_at": get_cumulative_power_of_at
         "get_total_tiny_power": get_total_tiny_power
         "get_total_tiny_power_at": get_total_tiny_power_at
+        "get_total_cumulative_power_at": get_total_cumulative_power_at
         "increase_budget": increase_budget
         "withdraw": withdraw
         "init": init
@@ -148,7 +153,15 @@ block main:
         bytes slope = get_slope(amount)
         int bias = get_bias(slope, (lock_end_time - Global.LatestTimestamp))
 
-        bytes account_power = construct_account_power(bias, Global.LatestTimestamp, slope)
+        bytes cumulative_power
+        if account_power_index:
+            AccountPower latest_account_power = get_account_power(user_address, account_power_index - 1)
+            cumulative_power = latest_account_power.cumulative_power
+        else:
+            cumulative_power =  bzero(16)
+        end
+
+        bytes account_power = construct_account_power(bias, Global.LatestTimestamp, slope, cumulative_power)
         save_account_power(user_address, account_power_index, account_power)
 
         create_checkpoints(bias, slope)
@@ -186,8 +199,12 @@ block main:
         int new_bias = get_bias(new_slope, (lock_end_time - Global.LatestTimestamp))
         int bias_delta = new_bias - old_bias
 
+        AccountPower latest_account_power = get_account_power(user_address, account_power_index - 1)
+        int time_delta = Global.LatestTimestamp - latest_account_power.timestamp
+        bytes cumulative_power = latest_account_power.cumulative_power b+ get_cumulative_power_1(latest_account_power.bias, old_bias, time_delta)
+
         # Create AccountPower
-        bytes account_power = construct_account_power(new_bias, Global.LatestTimestamp, new_slope)
+        bytes account_power = construct_account_power(new_bias, Global.LatestTimestamp, new_slope, cumulative_power)
         save_account_power(user_address, account_power_index, account_power)
 
         create_checkpoints(bias_delta, slope_delta)
@@ -225,8 +242,12 @@ block main:
         int new_bias = get_bias(slope, (new_lock_end_time - Global.LatestTimestamp))
         int bias_delta = new_bias - old_bias
 
+        AccountPower latest_account_power = get_account_power(user_address, account_power_index - 1)
+        int time_delta = Global.LatestTimestamp - latest_account_power.timestamp
+        bytes cumulative_power = latest_account_power.cumulative_power b+ get_cumulative_power_1(latest_account_power.bias, old_bias, time_delta)
+
         # Create AccountPower
-        bytes account_power = construct_account_power(new_bias, Global.LatestTimestamp, slope)
+        bytes account_power = construct_account_power(new_bias, Global.LatestTimestamp, slope, cumulative_power)
         save_account_power(user_address, account_power_index, account_power)
 
         create_checkpoints(bias_delta, itob(0))
@@ -285,6 +306,48 @@ block main:
         exit(1)
     end
 
+    block get_cumulative_power_of_at:
+        bytes user_address = Txn.Accounts[1]
+        int timestamp = btoi(Txn.ApplicationArgs[1])
+        int index = btoi(Txn.ApplicationArgs[2])
+        bytes cumulative_power = bzero(16)
+        assert(timestamp <= Global.LatestTimestamp)
+        
+        bytes cumulative_power_delta
+        int exists
+        exists, _ = box_len(user_address)
+        if exists:
+            box<AccountState> account_state = Box(user_address)
+            assert(index < account_state.power_count)
+
+            # account_power.timestamp <= timestamp < next_account_power.timestamp
+            AccountPower account_power = get_account_power(user_address, index)
+            if timestamp >= account_power.timestamp:
+                # assert(timestamp > account_power.timestamp)
+                if (index + 1) < account_state.power_count:
+                    AccountPower next_account_power = get_account_power(user_address, index + 1)
+                    assert(timestamp < next_account_power.timestamp)
+                end
+
+                int time_delta = timestamp - account_power.timestamp
+                int bias_delta = get_bias(account_power.slope, time_delta)
+                if bias_delta < account_power.bias:
+                    cumulative_power_delta = get_cumulative_power_1(account_power.bias, (account_power.bias - bias_delta), time_delta)
+                else:
+                    cumulative_power_delta = get_cumulative_power_2(account_power.bias, account_power.slope)
+                end
+
+                cumulative_power = cumulative_power b| (account_power.cumulative_power b+ cumulative_power_delta)
+            else:
+                # Index must be 0, it indicates that the given timestamp predates the first checkpoint.
+                assert(!index)
+            end
+        end
+
+        log(cumulative_power)
+        exit(1)
+    end
+
     block get_total_tiny_power:
         int timestamp = Global.LatestTimestamp
         int index = app_global_get(TOTAL_POWER_COUNT_KEY) - 1
@@ -326,6 +389,44 @@ block main:
         exit(1)
     end
 
+    block get_total_cumulative_power_at:
+        int timestamp = btoi(Txn.ApplicationArgs[1])
+        int index = btoi(Txn.ApplicationArgs[2])
+        bytes cumulative_power
+        assert(index < app_global_get(TOTAL_POWER_COUNT_KEY))
+        assert(timestamp <= Global.LatestTimestamp)
+
+        bytes cumulative_power_delta
+        TotalPower total_power = get_total_power(index)
+        if total_power.timestamp <= timestamp:
+            # assert(total_power.timestamp <= timestamp)
+            # Ensure that the latest checkpoint belongs to the same week so the slope is not changed.
+            assert((total_power.timestamp / WEEK) == (timestamp / WEEK))
+
+            if (index + 1) < app_global_get(TOTAL_POWER_COUNT_KEY):
+                TotalPower next_total_power = get_total_power(index + 1)
+                assert(timestamp < next_total_power.timestamp)
+            end
+
+            int time_delta = timestamp - total_power.timestamp
+            int bias_delta = get_bias(total_power.slope, time_delta)
+            if bias_delta < total_power.bias:
+                cumulative_power_delta = get_cumulative_power_1(total_power.bias, (total_power.bias - bias_delta), time_delta)
+            else:
+                cumulative_power_delta = get_cumulative_power_2(total_power.bias, total_power.slope)
+            end
+
+            cumulative_power = bzero(16) b| (total_power.cumulative_power b+ cumulative_power_delta)
+        else:
+            # Index must be 0, it indicates that the given timestamp predates the first checkpoint.
+            assert(!index)
+            cumulative_power = bzero(16)
+        end
+
+        log(cumulative_power)
+        exit(1)
+    end
+
     block withdraw:
         bytes user_address = Txn.Sender
 
@@ -335,6 +436,15 @@ block main:
         assert(locked_amount)
         assert(account_state.lock_end_time < Global.LatestTimestamp)
 
+        int account_power_index = account_state.power_count
+        account_state.power_count = account_power_index + 1
+
+        AccountPower latest_account_power = get_account_power(user_address, account_power_index - 1)
+        bytes cumulative_power = latest_account_power.cumulative_power b+ get_cumulative_power_2(latest_account_power.bias, latest_account_power.slope)
+
+        # Create AccountPower
+        bytes account_power = construct_account_power(0, account_state.lock_end_time, bzero(16), cumulative_power)
+        save_account_power(user_address, account_power_index, account_power)
 
         transfer(app_global_get(TINY_ASSET_ID_KEY), locked_amount, Global.CurrentApplicationAddress, user_address)
         decrease_total_locked_amount(locked_amount)
@@ -345,8 +455,8 @@ block main:
     end
 end
 
-func construct_account_power(bias: int, timestamp: int, slope: bytes) bytes:
-    return concat(concat(itob(bias), itob(timestamp)), slope)
+func construct_account_power(bias: int, timestamp: int, slope: bytes, cumulative_power: bytes) bytes:
+    return concat(concat(concat(itob(bias), itob(timestamp)), (bzero(16) b| slope)), (bzero(16) b| cumulative_power))
 end
 
 func save_account_power(address: bytes, index: int, data: bytes):
@@ -392,6 +502,8 @@ func get_total_power(index: int) bytes:
 end
 
 func create_checkpoints(account_bias_delta: int, account_slope_delta: bytes):
+    # https://github.com/curvefi/curve-dao-contracts/blob/master/contracts/VotingEscrow.vy#L234
+
     int has_account_event = account_bias_delta || (account_slope_delta != bzero(16))
     TotalPower last_total_power = get_total_power(app_global_get(TOTAL_POWER_COUNT_KEY) - 1)
 
@@ -403,7 +515,7 @@ func create_checkpoints(account_bias_delta: int, account_slope_delta: bytes):
     int t_i = (last_checkpoint / DAY) * DAY
     bytes d_slope
     int d_bias
-    int d_time
+    int time_delta
 
     int i = 0
     int stop = 7
@@ -418,14 +530,14 @@ func create_checkpoints(account_bias_delta: int, account_slope_delta: bytes):
             _, d_slope = box_get(concat(SLOPE_CHANGES, itob(t_i)))
         end
 
-        d_time = t_i - last_checkpoint
-        d_bias = get_bias(slope, d_time)
+        time_delta = t_i - last_checkpoint
+        d_bias = get_bias(slope, time_delta)
         if d_bias > bias:
             cumulative_power = cumulative_power b+ get_cumulative_power_2(bias, slope)
             slope = bzero(16)
             bias = 0
         else:
-            cumulative_power = cumulative_power b+ get_cumulative_power_1(bias, (bias - d_bias), d_time)
+            cumulative_power = cumulative_power b+ get_cumulative_power_1(bias, (bias - d_bias), time_delta)
             bias = bias - d_bias
         end
 
@@ -453,16 +565,19 @@ func create_checkpoints(account_bias_delta: int, account_slope_delta: bytes):
     return
 end
 
-func get_cumulative_power_1(old_bias: int, new_bias: int, d_time: int) bytes:
-    # (old_bias + new_bias) * d_time / 2
-    return ((itob(old_bias) b+ itob(new_bias)) b* itob(d_time)) b/ itob(2)
+func get_cumulative_power_1(old_bias: int, new_bias: int, time_delta: int) bytes:
+    # (old_bias + new_bias) * time_delta / 2
+    return ((itob(old_bias) b+ itob(new_bias)) b* itob(time_delta)) b/ itob(2)
 end
 
 func get_cumulative_power_2(old_bias: int, slope: bytes) bytes:
-    # d_time = old_bias / slope
+    # time_delta = old_bias / slope
     # (old_bias + new_bias) * (old_bias / slope) / 2, new_bias = 0
     # (old_bias * old_bias) / (slope * 2)
-    return (itob(old_bias) b* itob(old_bias)) b/ (slope b* itob(2))
+    if slope != bzero(16):
+        return ((itob(old_bias) b* itob(old_bias)) b* TWO_TO_THE_64) b/ (slope b* itob(2))
+    end
+    return bzero(16)
 end
 
 func get_bias(slope: bytes, time: int) int:
@@ -470,7 +585,7 @@ func get_bias(slope: bytes, time: int) int:
 end
 
 func get_slope(locked_amount: int) bytes:
-    return bzero(16) b| ((itob(locked_amount) b* TWO_TO_THE_64) b/ itob(MAX_LOCK_TIME))
+    return (itob(locked_amount) b* TWO_TO_THE_64) b/ itob(MAX_LOCK_TIME)
 end
 
 func revert_slope_change(timestamp: int, slope: bytes):
