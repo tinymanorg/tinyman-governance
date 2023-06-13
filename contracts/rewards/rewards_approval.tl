@@ -64,10 +64,10 @@ block main:
         bytes user_address = Txn.Sender
 
         int timestamp = btoi(Txn.ApplicationArgs[1])
-        bytes account_power_box_index_1 = Txn.ApplicationArgs[2]
-        bytes account_power_box_index_2 = Txn.ApplicationArgs[3]
-        bytes total_power_box_index_1 = Txn.ApplicationArgs[4]
-        bytes total_power_box_index_2 = Txn.ApplicationArgs[5]
+        bytes account_power_index_1 = Txn.ApplicationArgs[2]
+        bytes account_power_index_2 = Txn.ApplicationArgs[3]
+        bytes total_power_index_1 = Txn.ApplicationArgs[4]
+        bytes total_power_index_2 = Txn.ApplicationArgs[5]
 
         assert(!(timestamp % DAY))
         int end_timestamp = timestamp + DAY
@@ -76,13 +76,24 @@ block main:
         int period_index = get_period_index(timestamp)
         check_and_save_claimed_reward(user_address, period_index)
 
-        # TODO: Make 1 inner app call instead of 4
-        bytes account_cumulative_1 = get_account_cumulative_power_at(user_address, timestamp, account_power_box_index_1)
-        bytes account_cumulative_2 = get_account_cumulative_power_at(user_address, end_timestamp, account_power_box_index_2)
-        bytes account_cumulative_power_delta = account_cumulative_2 b- account_cumulative_1
+        bytes account_cumulative_1
+        bytes account_cumulative_2
+        bytes total_cumulative_power_1
+        bytes total_cumulative_power_2
 
-        bytes total_cumulative_power_1 = get_total_cumulative_power_at(timestamp, total_power_box_index_1)
-        bytes total_cumulative_power_2 = get_total_cumulative_power_at(end_timestamp, total_power_box_index_2)
+        # Make 1 inner app call instead of 4
+        # account_cumulative_1 = get_account_cumulative_power_at(user_address, timestamp, account_power_index_1)
+        # account_cumulative_2 = get_account_cumulative_power_at(user_address, end_timestamp, account_power_index_2)
+        # total_cumulative_power_1 = get_total_cumulative_power_at(timestamp, total_power_index_1)
+        # total_cumulative_power_2 = get_total_cumulative_power_at(end_timestamp, total_power_index_2)
+        # OR
+        account_cumulative_1, account_cumulative_2, total_cumulative_power_1, total_cumulative_power_2 = get_cumulative_powers_for_rewards(user_address, timestamp, end_timestamp, account_power_index_1, account_power_index_2, total_power_index_1, total_power_index_2)
+        # log(account_cumulative_1)
+        # log(account_cumulative_2)
+        # log(total_cumulative_power_1)
+        # log(total_cumulative_power_2)
+
+        bytes account_cumulative_power_delta = account_cumulative_2 b- account_cumulative_1
         bytes total_cumulative_power_delta = total_cumulative_power_2 b- total_cumulative_power_1
 
         # TODO: Calculate real reward amount
@@ -101,13 +112,13 @@ block main:
     end
 end
 
-func get_account_cumulative_power_at(address: bytes, snapshot_time: int, account_power_box_index: bytes) bytes:
+func get_account_cumulative_power_at(address: bytes, snapshot_time: int, account_power_index: bytes) bytes:
     inner_txn:
         TypeEnum: Appl
         ApplicationID: app_global_get(LOCKING_APP_ID_KEY)
         ApplicationArgs[0]: "get_cumulative_power_of_at"
         ApplicationArgs[1]: itob(snapshot_time)
-        ApplicationArgs[2]: account_power_box_index
+        ApplicationArgs[2]: account_power_index
         Accounts[0]: address
         Fee: 0
     end
@@ -116,18 +127,36 @@ func get_account_cumulative_power_at(address: bytes, snapshot_time: int, account
     return cumulative_power
 end
 
-func get_total_cumulative_power_at(snapshot_time: int, total_power_box_index: bytes) bytes:
+func get_total_cumulative_power_at(snapshot_time: int, total_power_index: bytes) bytes:
     inner_txn:
         TypeEnum: Appl
         ApplicationID: app_global_get(LOCKING_APP_ID_KEY)
         ApplicationArgs[0]: "get_total_cumulative_power_at"
         ApplicationArgs[1]: itob(snapshot_time)
-        ApplicationArgs[2]: total_power_box_index
+        ApplicationArgs[2]: total_power_index
         Fee: 0
     end
 
     bytes cumulative_power = Itxn.LastLog
     return cumulative_power
+end
+
+func get_cumulative_powers_for_rewards(address: bytes, timestamp_1: int, timestamp_2: int, account_power_index_1: bytes, account_power_index_2: bytes, total_power_index_1: bytes, total_power_index_2: bytes) bytes, bytes, bytes, bytes:
+    inner_txn:
+        TypeEnum: Appl
+        ApplicationID: app_global_get(LOCKING_APP_ID_KEY)
+        ApplicationArgs[0]: "get_cumulative_powers_for_rewards"
+        ApplicationArgs[1]: itob(timestamp_1)
+        ApplicationArgs[2]: itob(timestamp_2)
+        ApplicationArgs[3]: account_power_index_1
+        ApplicationArgs[4]: account_power_index_2
+        ApplicationArgs[5]: total_power_index_1
+        ApplicationArgs[6]: total_power_index_2
+        Accounts[0]: address
+        Fee: 0
+    end
+
+    return extract(0, 16, Itxn.LastLog), extract(16, 16, Itxn.LastLog), extract(32, 16, Itxn.LastLog), extract(48, 16, Itxn.LastLog)
 end
 
 func get_total_reward_amount(timestamp: int) int:

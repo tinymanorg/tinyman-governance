@@ -1,6 +1,7 @@
 from datetime import datetime
 from zoneinfo import ZoneInfo
 
+from algojig import LogicEvalError
 from algosdk import transaction
 from algosdk.account import generate_account
 from algosdk.encoding import decode_address
@@ -114,7 +115,7 @@ class RewardsTestCase(LockingAppMixin, BaseTestCase):
         print("test_create_lock_after_withdraw")
         print_boxes(self.ledger.boxes[self.locking_app_id])
 
-        for t in [1646870401, 1646870400, 1646352000]:
+        for t in [1646870401, 1646870400, 1646352000, 1646092800, 1646179200]:
             txn_group = self.get_get_cumulative_power_of_at_txn_group(self.user_address, t, app_id=self.locking_app_id)
             transaction.assign_group_id(txn_group)
             signed_txns = sign_txns(txn_group, self.user_sk)
@@ -128,20 +129,15 @@ class RewardsTestCase(LockingAppMixin, BaseTestCase):
             print(btoi(block[b'txns'][0][b'dt'][b'lg'][-1]))
 
         timestamp = get_start_time_of_day(lock_start_timestamp)
-        print(timestamp, timestamp + DAY)
-
         txn_group = self.get_claim_rewards_txn_group(self.user_address, timestamp, self.rewards_app_id, self.locking_app_id)
         transaction.assign_group_id(txn_group)
         signed_txns = sign_txns(txn_group, self.user_sk)
         block = self.ledger.eval_transactions(signed_txns, block_timestamp=block_timestamp)
-        print(block[b'txns'][0])
-        print(btoi(block[b'txns'][0][b'dt'][b'lg'][-1]))
+        for i, l in enumerate(block[b'txns'][0][b'dt'][b'lg']):
+            print(i, btoi(l))
 
         txn_group = self.get_claim_rewards_txn_group(self.user_address, timestamp, self.rewards_app_id, self.locking_app_id)
         transaction.assign_group_id(txn_group)
         signed_txns = sign_txns(txn_group, self.user_sk)
-        block = self.ledger.eval_transactions(signed_txns, block_timestamp=block_timestamp)
-        print(block[b'txns'][0])
-        print('OK')
-
-
+        with self.assertRaises(LogicEvalError):
+            self.ledger.eval_transactions(signed_txns, block_timestamp=block_timestamp)

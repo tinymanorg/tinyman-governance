@@ -101,6 +101,7 @@ block main:
         "get_total_tiny_power": get_total_tiny_power
         "get_total_tiny_power_at": get_total_tiny_power_at
         "get_total_cumulative_power_at": get_total_cumulative_power_at
+        "get_cumulative_powers_for_rewards": get_cumulative_powers_for_rewards
         "increase_budget": increase_budget
         "withdraw": withdraw
         "init": init
@@ -309,45 +310,13 @@ block main:
     block get_cumulative_power_of_at:
         bytes user_address = Txn.Accounts[1]
         int timestamp = btoi(Txn.ApplicationArgs[1])
-        int index = btoi(Txn.ApplicationArgs[2])
-        bytes cumulative_power = bzero(16)
-        assert(timestamp <= Global.LatestTimestamp)
-        
-        bytes cumulative_power_delta
-        int exists
-        exists, _ = box_len(user_address)
-        if exists:
-            box<AccountState> account_state = Box(user_address)
-            assert(index < account_state.power_count)
+        int account_power_index = btoi(Txn.ApplicationArgs[2])
 
-            # account_power.timestamp <= timestamp < next_account_power.timestamp
-            AccountPower account_power = get_account_power(user_address, index)
-            if timestamp >= account_power.timestamp:
-                # assert(timestamp > account_power.timestamp)
-                if (index + 1) < account_state.power_count:
-                    AccountPower next_account_power = get_account_power(user_address, index + 1)
-                    assert(timestamp < next_account_power.timestamp)
-                end
-
-                int time_delta = timestamp - account_power.timestamp
-                int bias_delta = get_bias(account_power.slope, time_delta)
-                if bias_delta < account_power.bias:
-                    cumulative_power_delta = get_cumulative_power_1(account_power.bias, (account_power.bias - bias_delta), time_delta)
-                else:
-                    cumulative_power_delta = get_cumulative_power_2(account_power.bias, account_power.slope)
-                end
-
-                cumulative_power = cumulative_power b| (account_power.cumulative_power b+ cumulative_power_delta)
-            else:
-                # Index must be 0, it indicates that the given timestamp predates the first checkpoint.
-                assert(!index)
-            end
-        end
-
+        bytes cumulative_power =  get_cumulative_power_of_at(user_address, timestamp, account_power_index)
         log(cumulative_power)
         exit(1)
     end
-
+    
     block get_total_tiny_power:
         int timestamp = Global.LatestTimestamp
         int index = app_global_get(TOTAL_POWER_COUNT_KEY) - 1
@@ -391,39 +360,29 @@ block main:
 
     block get_total_cumulative_power_at:
         int timestamp = btoi(Txn.ApplicationArgs[1])
-        int index = btoi(Txn.ApplicationArgs[2])
-        bytes cumulative_power
-        assert(index < app_global_get(TOTAL_POWER_COUNT_KEY))
-        assert(timestamp <= Global.LatestTimestamp)
+        int total_power_index = btoi(Txn.ApplicationArgs[2])
+        bytes total_cumulative_power = get_total_cumulative_power_at(timestamp, total_power_index)
 
-        bytes cumulative_power_delta
-        TotalPower total_power = get_total_power(index)
-        if total_power.timestamp <= timestamp:
-            # assert(total_power.timestamp <= timestamp)
-            # Ensure that the latest checkpoint belongs to the same week so the slope is not changed.
-            assert((total_power.timestamp / WEEK) == (timestamp / WEEK))
+        log(total_cumulative_power)
+        exit(1)
+    end
 
-            if (index + 1) < app_global_get(TOTAL_POWER_COUNT_KEY):
-                TotalPower next_total_power = get_total_power(index + 1)
-                assert(timestamp < next_total_power.timestamp)
-            end
+    block get_cumulative_powers_for_rewards:
+        bytes user_address = Txn.Accounts[1]
+        int timestamp_1 = btoi(Txn.ApplicationArgs[1])
+        int timestamp_2 = btoi(Txn.ApplicationArgs[2])
+        int account_power_index_1 = btoi(Txn.ApplicationArgs[3])
+        int account_power_index_2 = btoi(Txn.ApplicationArgs[4])
+        int total_power_index_1 = btoi(Txn.ApplicationArgs[5])
+        int total_power_index_2 = btoi(Txn.ApplicationArgs[6])
 
-            int time_delta = timestamp - total_power.timestamp
-            int bias_delta = get_bias(total_power.slope, time_delta)
-            if bias_delta < total_power.bias:
-                cumulative_power_delta = get_cumulative_power_1(total_power.bias, (total_power.bias - bias_delta), time_delta)
-            else:
-                cumulative_power_delta = get_cumulative_power_2(total_power.bias, total_power.slope)
-            end
+        bytes cumulative_power_1 = get_cumulative_power_of_at(user_address, timestamp_1, account_power_index_1)
+        bytes cumulative_power_2 = get_cumulative_power_of_at(user_address, timestamp_2, account_power_index_2)
 
-            cumulative_power = bzero(16) b| (total_power.cumulative_power b+ cumulative_power_delta)
-        else:
-            # Index must be 0, it indicates that the given timestamp predates the first checkpoint.
-            assert(!index)
-            cumulative_power = bzero(16)
-        end
+        bytes total_cumulative_power_1 = get_total_cumulative_power_at(timestamp_1, total_power_index_1)
+        bytes total_cumulative_power_2 = get_total_cumulative_power_at(timestamp_2, total_power_index_2)
 
-        log(cumulative_power)
+        log(concat(concat(concat(cumulative_power_1, cumulative_power_2), total_cumulative_power_1), total_cumulative_power_2))
         exit(1)
     end
 
@@ -499,6 +458,79 @@ func get_total_power(index: int) bytes:
     int array_index = index % TOTAL_POWER_BOX_ARRAY_LEN
     bytes box_name = concat(TOTAL_POWERS, itob(box_index))
     return box_extract(box_name, (array_index * TOTAL_POWER_SIZE), TOTAL_POWER_SIZE)
+end
+
+func get_cumulative_power_of_at(user_address: bytes, timestamp: int, account_power_index: int) bytes:
+    bytes cumulative_power = bzero(16)
+    assert(timestamp <= Global.LatestTimestamp)
+    
+    bytes cumulative_power_delta
+    int exists
+    exists, _ = box_len(user_address)
+    if exists:
+        box<AccountState> account_state = Box(user_address)
+        assert(account_power_index < account_state.power_count)
+
+        # account_power.timestamp <= timestamp < next_account_power.timestamp
+        AccountPower account_power = get_account_power(user_address, account_power_index)
+        if account_power.timestamp <= timestamp:
+            # assert(timestamp > account_power.timestamp)
+            if (account_power_index + 1) < account_state.power_count:
+                AccountPower next_account_power = get_account_power(user_address, account_power_index + 1)
+                assert(timestamp < next_account_power.timestamp)
+            end
+
+            int time_delta = timestamp - account_power.timestamp
+            int bias_delta = get_bias(account_power.slope, time_delta)
+            if bias_delta < account_power.bias:
+                cumulative_power_delta = get_cumulative_power_1(account_power.bias, (account_power.bias - bias_delta), time_delta)
+            else:
+                cumulative_power_delta = get_cumulative_power_2(account_power.bias, account_power.slope)
+            end
+
+            cumulative_power = bzero(16) b| (account_power.cumulative_power b+ cumulative_power_delta)
+        else:
+            # Index must be 0, it indicates that the given timestamp predates the first checkpoint.
+            assert(!account_power_index)
+        end
+    end
+
+    return cumulative_power
+end
+
+func get_total_cumulative_power_at(timestamp: int, total_power_index: int) bytes:
+    bytes total_cumulative_power
+    assert(total_power_index < app_global_get(TOTAL_POWER_COUNT_KEY))
+    assert(timestamp <= Global.LatestTimestamp)
+
+    bytes cumulative_power_delta
+    TotalPower total_power = get_total_power(total_power_index)
+    if total_power.timestamp <= timestamp:
+        # assert(total_power.timestamp <= timestamp)
+        # Ensure that the latest checkpoint belongs to the same week so the slope is not changed.
+        assert((total_power.timestamp / WEEK) == (timestamp / WEEK))
+
+        if (total_power_index + 1) < app_global_get(TOTAL_POWER_COUNT_KEY):
+            TotalPower next_total_power = get_total_power(total_power_index + 1)
+            assert(timestamp < next_total_power.timestamp)
+        end
+
+        int time_delta = timestamp - total_power.timestamp
+        int bias_delta = get_bias(total_power.slope, time_delta)
+        if bias_delta < total_power.bias:
+            cumulative_power_delta = get_cumulative_power_1(total_power.bias, (total_power.bias - bias_delta), time_delta)
+        else:
+            cumulative_power_delta = get_cumulative_power_2(total_power.bias, total_power.slope)
+        end
+
+        total_cumulative_power = bzero(16) b| (total_power.cumulative_power b+ cumulative_power_delta)
+    else:
+        # Index must be 0, it indicates that the given timestamp predates the first checkpoint.
+        assert(!total_power_index)
+        total_cumulative_power = bzero(16)
+    end
+
+    return total_cumulative_power
 end
 
 func create_checkpoints(account_bias_delta: int, account_slope_delta: bytes):
