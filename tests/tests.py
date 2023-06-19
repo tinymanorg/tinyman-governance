@@ -162,11 +162,18 @@ class LockingTestCase(BaseTestCase):
         start_timestamp_of_week = get_start_timestamp_of_week(block_timestamp)
 
         payment_amount = 0
+        new_total_power_count = 1
+        latest_checkpoint_timestamp = get_latest_checkpoint_timestamp(self.ledger, app_id)
+        latest_checkpoint_week_timestamp = get_start_timestamp_of_week(latest_checkpoint_timestamp)
+        this_week_timestamp = get_start_timestamp_of_week(block_timestamp)
+        if latest_checkpoint_week_timestamp != this_week_timestamp:
+            new_total_power_count += 1
+
         if account_power_array_index == ACCOUNT_POWER_BOX_ARRAY_LEN - 1:
             new_account_power_box_name = decode_address(user_address) + itob(total_powers_box_index + 1)
             payment_amount += 2_500 + 400 * (len(new_account_power_box_name) + ACCOUNT_POWER_BOX_SIZE)
 
-        if total_powers_array_index == TOTAL_POWER_BOX_ARRAY_LEN - 1:
+        if total_powers_array_index + new_total_power_count >= TOTAL_POWER_BOX_ARRAY_LEN:
             new_total_powers_box_name = TOTAL_POWERS + itob(total_powers_box_index + 1)
             payment_amount += 2_500 + 400 * (len(new_total_powers_box_name) + TOTAL_POWER_BOX_SIZE)
 
@@ -217,6 +224,12 @@ class LockingTestCase(BaseTestCase):
         start_timestamp_of_week = get_start_timestamp_of_week(block_timestamp)
 
         payment_amount = 0
+        new_total_power_count = 1
+        latest_checkpoint_timestamp = get_latest_checkpoint_timestamp(self.ledger, app_id)
+        latest_checkpoint_week_timestamp = get_start_timestamp_of_week(latest_checkpoint_timestamp)
+        this_week_timestamp = get_start_timestamp_of_week(block_timestamp)
+        if latest_checkpoint_week_timestamp != this_week_timestamp:
+            new_total_power_count += 1
 
         new_slope_change_box_name = SLOPE_CHANGES + itob(new_lock_end_timestamp)
         if new_slope_change_box_name not in self.ledger.boxes[app_id]:
@@ -226,7 +239,7 @@ class LockingTestCase(BaseTestCase):
             new_account_power_box_name = decode_address(user_address) + itob(total_powers_box_index + 1)
             payment_amount += 2_500 + 400 * (len(new_account_power_box_name) + ACCOUNT_POWER_BOX_SIZE)
 
-        if total_powers_array_index == TOTAL_POWER_BOX_ARRAY_LEN - 1:
+        if total_powers_array_index + new_total_power_count >= TOTAL_POWER_BOX_ARRAY_LEN:
             new_total_powers_box_name = TOTAL_POWERS + itob(total_powers_box_index + 1)
             payment_amount += 2_500 + 400 * (len(new_total_powers_box_name) + TOTAL_POWER_BOX_SIZE)
 

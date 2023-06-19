@@ -10,7 +10,7 @@ from algosdk.encoding import decode_address
 from algosdk.logic import get_application_address
 
 from tests.common import BaseTestCase, LockingAppMixin, get_budget_increase_txn
-from tests.constants import TOTAL_POWERS, DAY, SLOPE_CHANGES, locking_approval_program, locking_clear_state_program, WEEK, MAX_LOCK_TIME, INITIAL_MINIMUM_BALANCE_REQUIREMENT, ACCOUNT_STATE_SIZE, ACCOUNT_POWER_BOX_SIZE, SLOPE_CHANGE_SIZE, TWO_TO_THE_64, ACCOUNT_POWER_BOX_ARRAY_LEN, TOTAL_POWER_BOX_ARRAY_LEN, TOTAL_POWER_BOX_SIZE
+from tests.constants import TOTAL_POWERS, DAY, SLOPE_CHANGES, locking_approval_program, locking_clear_state_program, WEEK, MAX_LOCK_TIME, LOCKING_APP_MINIMUM_BALANCE_REQUIREMENT, ACCOUNT_STATE_SIZE, ACCOUNT_POWER_BOX_SIZE, SLOPE_CHANGE_SIZE, TWO_TO_THE_64, ACCOUNT_POWER_BOX_ARRAY_LEN, TOTAL_POWER_BOX_ARRAY_LEN, TOTAL_POWER_BOX_SIZE
 from tests.utils import itob, sign_txns, parse_box_total_power, get_start_timestamp_of_week, parse_box_account_power, parse_box_account_state, parse_box_slope_change, get_slope, print_boxes, btoi, get_latest_checkpoint_indexes, get_latest_checkpoint_timestamp, get_required_minimum_balance_of_box, get_bias, get_latest_account_power_indexes, get_account_power_index_at, get_total_power_index_at
 
 
@@ -24,6 +24,8 @@ class LockingTestCase(LockingAppMixin, BaseTestCase):
         cls.user_sk, cls.user_address = generate_account()
         cls.user_2_sk, cls.user_2_address = generate_account()
         cls.user_3_sk, cls.user_3_address = generate_account()
+
+        cls.locking_app_creation_timestamp = int(datetime(year=2022, month=3, day=1, tzinfo=ZoneInfo("UTC")).timestamp())
 
     def setUp(self):
         super().setUp()
@@ -43,7 +45,7 @@ class LockingTestCase(LockingAppMixin, BaseTestCase):
                 on_complete=transaction.OnComplete.NoOpOC,
                 approval_program=locking_approval_program.bytecode,
                 clear_program=locking_clear_state_program.bytecode,
-                global_schema=transaction.StateSchema(num_uints=3, num_byte_slices=0),
+                global_schema=transaction.StateSchema(num_uints=4, num_byte_slices=0),
                 local_schema=transaction.StateSchema(num_uints=0, num_byte_slices=0),
                 extra_pages=1,
                 foreign_assets=[self.tiny_asset_id],
@@ -61,7 +63,8 @@ class LockingTestCase(LockingAppMixin, BaseTestCase):
             {
                 b'tiny_asset_id': self.tiny_asset_id,
                 b'total_locked_amount': 0,
-                b'total_power_count': 0
+                b'total_power_count': 0,
+                b'creation_timestamp': ANY
             }
         )
 
@@ -71,7 +74,7 @@ class LockingTestCase(LockingAppMixin, BaseTestCase):
                 sender=self.user_address,
                 sp=self.sp,
                 receiver=get_application_address(app_id),
-                amt=INITIAL_MINIMUM_BALANCE_REQUIREMENT,
+                amt=LOCKING_APP_MINIMUM_BALANCE_REQUIREMENT,
             ),
             transaction.ApplicationNoOpTxn(
                 sender=self.user_address,
@@ -126,7 +129,7 @@ class LockingTestCase(LockingAppMixin, BaseTestCase):
         block_timestamp = int(block_datetime.timestamp())
         last_checkpoint_timestamp = block_timestamp - 10
 
-        self.create_locking_app(self.app_id, self.app_creator_address)
+        self.create_locking_app(self.app_id, self.app_creator_address, self.locking_app_creation_timestamp)
         self.init_locking_app(self.app_id, timestamp=last_checkpoint_timestamp)
 
         amount = 20_000_000
@@ -191,11 +194,10 @@ class LockingTestCase(LockingAppMixin, BaseTestCase):
             {
                 b'total_power_count': 2,
                 b'tiny_asset_id': self.tiny_asset_id,
-                b'total_locked_amount': amount
+                b'total_locked_amount': amount,
+                b'creation_timestamp': ANY
             }
         )
-        print("test_create_lock")
-        print_boxes(self.ledger.boxes[self.app_id])
 
     def test_create_lock_multiple(self):
         # 1. User 1 create lock, end datetime A
@@ -206,7 +208,7 @@ class LockingTestCase(LockingAppMixin, BaseTestCase):
         block_timestamp = int(block_datetime.timestamp())
         last_checkpoint_timestamp = block_timestamp - 10
 
-        self.create_locking_app(self.app_id, self.app_creator_address)
+        self.create_locking_app(self.app_id, self.app_creator_address, self.locking_app_creation_timestamp)
         self.init_locking_app(self.app_id, timestamp=last_checkpoint_timestamp)
 
         # User 1
@@ -295,7 +297,8 @@ class LockingTestCase(LockingAppMixin, BaseTestCase):
             {
                 b'total_power_count': 4,
                 b'tiny_asset_id': self.tiny_asset_id,
-                b'total_locked_amount': amount_1 + amount_2 + amount_3
+                b'total_locked_amount': amount_1 + amount_2 + amount_3,
+                b'creation_timestamp': ANY
             }
         )
 
@@ -309,11 +312,11 @@ class LockingTestCase(LockingAppMixin, BaseTestCase):
         block_timestamp = int(block_datetime.timestamp())
         last_checkpoint_timestamp = block_timestamp - 10
 
-        self.create_locking_app(self.app_id, self.app_creator_address)
+        self.create_locking_app(self.app_id, self.app_creator_address, self.locking_app_creation_timestamp)
         self.init_locking_app(self.app_id, timestamp=last_checkpoint_timestamp)
 
         # Create lock
-        lock_end_timestamp = get_start_timestamp_of_week(block_timestamp) + 2 * WEEK
+        lock_end_timestamp = get_start_timestamp_of_week(block_timestamp) + 5 * WEEK
         amount = 20_000_000
         self.ledger.move(
             amount,
@@ -329,7 +332,7 @@ class LockingTestCase(LockingAppMixin, BaseTestCase):
 
         # Create checkpoints
         block_timestamp = lock_end_timestamp + 1
-        self.create_checkpoints(block_timestamp)
+        self.create_checkpoints(block_timestamp, self.app_id)
 
         # Withdraw
         txn_group = self.get_withdraw_txn_group(self.user_address, app_id=self.app_id)
@@ -339,30 +342,25 @@ class LockingTestCase(LockingAppMixin, BaseTestCase):
         self.assertEqual(self.ledger.global_states[self.app_id][b'total_locked_amount'], 0)
 
         # Create lock
-        lock_end_timestamp = lock_end_timestamp + 2 * WEEK
+        lock_end_timestamp = lock_end_timestamp + 5 * WEEK
         amount = 10_000_000
         txn_group = self.get_create_lock_txn_group(user_address=self.user_address, locked_amount=amount, lock_end_timestamp=lock_end_timestamp, app_id=self.app_id)
         transaction.assign_group_id(txn_group)
         signed_txns = sign_txns(txn_group, self.user_sk)
         self.ledger.eval_transactions(signed_txns, block_timestamp=block_timestamp)
         self.assertEqual(self.ledger.global_states[self.app_id][b'total_locked_amount'], amount)
-        print("test_create_lock_after_withdraw")
-        print_boxes(self.ledger.boxes[self.app_id])
+        # print_boxes(self.ledger.boxes[self.app_id])
 
-        for t in [1646870401, 1646870400, 1646352000]:
-            txn_group = self.get_get_cumulative_power_of_at_txn_group(self.user_address, t, app_id=self.app_id)
-            transaction.assign_group_id(txn_group)
-            signed_txns = sign_txns(txn_group, self.user_sk)
-            block = self.ledger.eval_transactions(signed_txns, block_timestamp=block_timestamp)
-            print(btoi(block[b'txns'][0][b'dt'][b'lg'][-1]))
-
-            txn_group = self.get_get_total_cumulative_power_at_txn_group(self.user_address, t, app_id=self.app_id)
-            transaction.assign_group_id(txn_group)
-            signed_txns = sign_txns(txn_group, self.user_sk)
-            block = self.ledger.eval_transactions(signed_txns, block_timestamp=block_timestamp)
-            print(btoi(block[b'txns'][0][b'dt'][b'lg'][-1]))
-
-        print('OK')
+        # for t in [1646870401, 1646870400, 1646352000]:
+        #     txn_group = self.get_get_cumulative_power_of_at_txn_group(self.user_address, t, app_id=self.app_id)
+        #     transaction.assign_group_id(txn_group)
+        #     signed_txns = sign_txns(txn_group, self.user_sk)
+        #     block = self.ledger.eval_transactions(signed_txns, block_timestamp=block_timestamp)
+        #
+        #     txn_group = self.get_get_total_cumulative_power_at_txn_group(self.user_address, t, app_id=self.app_id)
+        #     transaction.assign_group_id(txn_group)
+        #     signed_txns = sign_txns(txn_group, self.user_sk)
+        #     block = self.ledger.eval_transactions(signed_txns, block_timestamp=block_timestamp)
 
     def test_withdraw(self):
         # 1. Try to withdraw at lock end time
@@ -373,11 +371,11 @@ class LockingTestCase(LockingAppMixin, BaseTestCase):
         block_timestamp = int(block_datetime.timestamp())
         last_checkpoint_timestamp = block_timestamp - 10
 
-        self.create_locking_app(self.app_id, self.app_creator_address)
+        self.create_locking_app(self.app_id, self.app_creator_address, self.locking_app_creation_timestamp)
         self.init_locking_app(self.app_id, timestamp=last_checkpoint_timestamp)
-        print_boxes(self.ledger.boxes[self.app_id])
+        # print_boxes(self.ledger.boxes[self.app_id])
 
-        lock_end_timestamp = get_start_timestamp_of_week(int((block_datetime + timedelta(days=15)).timestamp()))
+        lock_end_timestamp = get_start_timestamp_of_week(int((block_datetime + timedelta(days=45)).timestamp()))
         amount = 20_000_000
         self.ledger.move(
             amount,
@@ -391,7 +389,7 @@ class LockingTestCase(LockingAppMixin, BaseTestCase):
         signed_txns = sign_txns(txn_group, self.user_sk)
         self.ledger.eval_transactions(signed_txns, block_timestamp=block_timestamp)
         self.assertEqual(self.ledger.global_states[self.app_id][b'total_locked_amount'], amount)
-        print_boxes(self.ledger.boxes[self.app_id])
+        # print_boxes(self.ledger.boxes[self.app_id])
 
         # Withdraw
         txn_group = self.get_withdraw_txn_group(self.user_address, app_id=self.app_id)
@@ -404,7 +402,7 @@ class LockingTestCase(LockingAppMixin, BaseTestCase):
 
         block_timestamp = lock_end_timestamp + 1
         block = self.ledger.eval_transactions(signed_txns, block_timestamp=block_timestamp)
-        print_boxes(self.ledger.boxes[self.app_id])
+        # print_boxes(self.ledger.boxes[self.app_id])
 
         # Inner Txn
         inner_txns = block[b'txns'][0][b'dt'][b'itx']
@@ -439,7 +437,7 @@ class LockingTestCase(LockingAppMixin, BaseTestCase):
         self.assertEqual(e.exception.source['line'], 'assert(locked_amount)')
 
         self.create_checkpoints(block_timestamp, self.app_id)
-        print_boxes(self.ledger.boxes[self.app_id])
+        # print_boxes(self.ledger.boxes[self.app_id])
 
     def test_increase_lock_amount(self):
         # 1. Create lock
@@ -451,11 +449,11 @@ class LockingTestCase(LockingAppMixin, BaseTestCase):
         block_timestamp = int(block_datetime.timestamp())
         last_checkpoint_timestamp = block_timestamp - 10
 
-        self.create_locking_app(self.app_id, self.app_creator_address)
+        self.create_locking_app(self.app_id, self.app_creator_address, self.locking_app_creation_timestamp)
         self.init_locking_app(self.app_id, timestamp=last_checkpoint_timestamp)
 
         # Create lock
-        lock_end_timestamp = get_start_timestamp_of_week(block_timestamp) + 2 * WEEK
+        lock_end_timestamp = get_start_timestamp_of_week(block_timestamp) + 5 * WEEK
         amount = 20_000_000
         self.ledger.move(
             amount,
@@ -485,7 +483,7 @@ class LockingTestCase(LockingAppMixin, BaseTestCase):
 
         # Create checkpoints
         block_timestamp = block_timestamp + 3 * DAY
-        self.create_checkpoints(block_timestamp)
+        self.create_checkpoints(block_timestamp, self.app_id)
 
         # Increase
         block_timestamp = block_timestamp + DAY // 2
@@ -511,11 +509,11 @@ class LockingTestCase(LockingAppMixin, BaseTestCase):
         block_timestamp = int(block_datetime.timestamp())
         last_checkpoint_timestamp = block_timestamp - 10
 
-        self.create_locking_app(self.app_id, self.app_creator_address)
+        self.create_locking_app(self.app_id, self.app_creator_address, self.locking_app_creation_timestamp)
         self.init_locking_app(self.app_id, timestamp=last_checkpoint_timestamp)
 
         # Create lock
-        lock_end_timestamp = get_start_timestamp_of_week(block_timestamp) + 2 * WEEK
+        lock_end_timestamp = get_start_timestamp_of_week(block_timestamp) + 5 * WEEK
         amount = 20_000_000
         slope = get_slope(amount)
         self.ledger.move(
@@ -539,7 +537,7 @@ class LockingTestCase(LockingAppMixin, BaseTestCase):
         # Extend 2 weeks
         block_timestamp = block_timestamp + DAY // 2
         old_lock_end_timestamp = lock_end_timestamp
-        new_lock_end_timestamp = lock_end_timestamp + 2 * WEEK
+        new_lock_end_timestamp = lock_end_timestamp + 5 * WEEK
         txn_group =  self.get_extend_lock_end_time_txn_group(self.user_address, old_lock_end_timestamp, new_lock_end_timestamp, block_timestamp, app_id=self.app_id)
         transaction.assign_group_id(txn_group)
         signed_txns = sign_txns(txn_group, self.user_sk)
@@ -562,7 +560,7 @@ class LockingTestCase(LockingAppMixin, BaseTestCase):
 
         # Create checkpoints
         block_timestamp = block_timestamp + 3 * DAY
-        self.create_checkpoints(block_timestamp)
+        self.create_checkpoints(block_timestamp, self.app_id)
 
         # Extend 4 weeks
         block_timestamp = block_timestamp + DAY // 2
@@ -599,7 +597,7 @@ class LockingTestCase(LockingAppMixin, BaseTestCase):
         block_timestamp = int(block_datetime.timestamp())
         last_checkpoint_timestamp = block_timestamp - 10
 
-        self.create_locking_app(self.app_id, self.app_creator_address)
+        self.create_locking_app(self.app_id, self.app_creator_address, self.locking_app_creation_timestamp)
         self.init_locking_app(self.app_id, timestamp=last_checkpoint_timestamp)
 
         txn_group = self.get_get_tiny_power_of_txn_group(self.user_address, app_id=self.app_id)
@@ -609,7 +607,7 @@ class LockingTestCase(LockingAppMixin, BaseTestCase):
         self.assertEqual(btoi(block[b'txns'][0][b'dt'][b'lg'][-1]), 0)
 
         lock_start_timestamp = block_timestamp
-        lock_end_timestamp = get_start_timestamp_of_week(block_timestamp) + 2 * WEEK
+        lock_end_timestamp = get_start_timestamp_of_week(block_timestamp) + 5 * WEEK
         amount = 20_000_000
         self.ledger.move(
             amount,
@@ -632,14 +630,16 @@ class LockingTestCase(LockingAppMixin, BaseTestCase):
         self.assertEqual(btoi(block[b'txns'][0][b'dt'][b'lg'][-1]), bias)
 
         block_timestamp += DAY
-        bias_delta = get_bias(slope, block_timestamp - lock_start_timestamp)
+        bias = get_bias(slope, (lock_end_timestamp - block_timestamp))
+
         block = self.ledger.eval_transactions(signed_txns, block_timestamp=block_timestamp)
-        self.assertEqual(btoi(block[b'txns'][0][b'dt'][b'lg'][-1]), bias - bias_delta)
+        self.assertEqual(btoi(block[b'txns'][0][b'dt'][b'lg'][-1]), bias)
 
         block_timestamp += WEEK
-        bias_delta = get_bias(slope, block_timestamp - lock_start_timestamp)
+        bias = get_bias(slope, (lock_end_timestamp - block_timestamp))
+
         block = self.ledger.eval_transactions(signed_txns, block_timestamp=block_timestamp)
-        self.assertEqual(btoi(block[b'txns'][0][b'dt'][b'lg'][-1]), bias - bias_delta)
+        self.assertEqual(btoi(block[b'txns'][0][b'dt'][b'lg'][-1]), bias)
 
         block_timestamp = lock_end_timestamp
         block = self.ledger.eval_transactions(signed_txns, block_timestamp=block_timestamp)
@@ -673,7 +673,7 @@ class LockingTestCase(LockingAppMixin, BaseTestCase):
         block_timestamp = int(block_datetime.timestamp())
         last_checkpoint_timestamp = block_timestamp - 10
 
-        self.create_locking_app(self.app_id, self.app_creator_address)
+        self.create_locking_app(self.app_id, self.app_creator_address, self.locking_app_creation_timestamp)
         self.init_locking_app(self.app_id, timestamp=last_checkpoint_timestamp)
 
         power_at_timestamp = block_timestamp - DAY
@@ -691,7 +691,7 @@ class LockingTestCase(LockingAppMixin, BaseTestCase):
         self.assertEqual(btoi(block[b'txns'][0][b'dt'][b'lg'][-1]), 0)
 
         lock_start_timestamp = block_timestamp
-        lock_end_timestamp = get_start_timestamp_of_week(block_timestamp) + 2 * WEEK
+        lock_end_timestamp = get_start_timestamp_of_week(block_timestamp) + 5 * WEEK
         amount = 20_000_000
         self.ledger.move(
             amount,
@@ -766,7 +766,7 @@ class LockingTestCase(LockingAppMixin, BaseTestCase):
         block_timestamp = int(block_datetime.timestamp())
         last_checkpoint_timestamp = block_timestamp - 10
 
-        self.create_locking_app(self.app_id, self.app_creator_address)
+        self.create_locking_app(self.app_id, self.app_creator_address, self.locking_app_creation_timestamp)
         self.init_locking_app(self.app_id, timestamp=last_checkpoint_timestamp)
 
         txn_group = self.get_get_total_tiny_power_txn_group(self.user_address, app_id=self.app_id)
@@ -776,7 +776,7 @@ class LockingTestCase(LockingAppMixin, BaseTestCase):
         self.assertEqual(btoi(block[b'txns'][0][b'dt'][b'lg'][-1]), 0)
 
         lock_start_timestamp = block_timestamp
-        lock_end_timestamp = get_start_timestamp_of_week(block_timestamp) + 2 * WEEK
+        lock_end_timestamp = get_start_timestamp_of_week(block_timestamp) + 5 * WEEK
         amount = 20_000_000
         self.ledger.move(
             amount,
@@ -804,13 +804,13 @@ class LockingTestCase(LockingAppMixin, BaseTestCase):
         self.assertAlmostEqual(btoi(block[b'txns'][0][b'dt'][b'lg'][-1]), bias - bias_delta, delta=(block_timestamp - lock_start_timestamp) // DAY)
 
         block_timestamp += WEEK
-        self.create_checkpoints(block_timestamp)
+        self.create_checkpoints(block_timestamp, self.app_id)
         bias_delta = get_bias(slope, block_timestamp - lock_start_timestamp)
         block = self.ledger.eval_transactions(signed_txns, block_timestamp=block_timestamp)
         self.assertAlmostEqual(btoi(block[b'txns'][0][b'dt'][b'lg'][-1]), bias - bias_delta, delta=(block_timestamp - lock_start_timestamp) // DAY)
 
         block_timestamp = lock_end_timestamp
-        self.create_checkpoints(block_timestamp)
+        self.create_checkpoints(block_timestamp, self.app_id)
         block = self.ledger.eval_transactions(signed_txns, block_timestamp=block_timestamp)
         self.assertEqual(btoi(block[b'txns'][0][b'dt'][b'lg'][-1]), 0)
 
@@ -839,7 +839,7 @@ class LockingTestCase(LockingAppMixin, BaseTestCase):
         block_timestamp = int(block_datetime.timestamp())
         last_checkpoint_timestamp = block_timestamp - 10
 
-        self.create_locking_app(self.app_id, self.app_creator_address)
+        self.create_locking_app(self.app_id, self.app_creator_address, self.locking_app_creation_timestamp)
         self.init_locking_app(self.app_id, timestamp=last_checkpoint_timestamp)
 
         txn_group = self.get_get_total_tiny_power_of_at_txn_group(self.user_address, block_timestamp - DAY, app_id=self.app_id)
@@ -894,7 +894,7 @@ class LockingTestCase(LockingAppMixin, BaseTestCase):
         self.ledger.eval_transactions(signed_txns, block_timestamp=block_timestamp)
 
         block_timestamp = lock_end_timestamp_2 + DAY
-        self.create_checkpoints(block_timestamp)
+        self.create_checkpoints(block_timestamp, self.app_id)
 
         power_at = lock_end_timestamp_1
 
@@ -902,14 +902,14 @@ class LockingTestCase(LockingAppMixin, BaseTestCase):
         transaction.assign_group_id(txn_group)
         signed_txns = sign_txns(txn_group, self.user_sk)
         block = self.ledger.eval_transactions(signed_txns, block_timestamp=block_timestamp)
-        self.assertEqual(btoi(block[b'txns'][0][b'dt'][b'lg'][-1]), 2397276)
+        self.assertEqual(btoi(block[b'txns'][0][b'dt'][b'lg'][-1]), 2397263)
 
         power_at += DAY
         txn_group = self.get_get_total_tiny_power_of_at_txn_group(self.user_address, power_at, app_id=self.app_id)
         transaction.assign_group_id(txn_group)
         signed_txns = sign_txns(txn_group, self.user_sk)
         block = self.ledger.eval_transactions(signed_txns, block_timestamp=block_timestamp)
-        self.assertEqual(btoi(block[b'txns'][0][b'dt'][b'lg'][-1]), 2054811)
+        self.assertEqual(btoi(block[b'txns'][0][b'dt'][b'lg'][-1]), 2054798)
 
         power_at = lock_end_timestamp_2
         txn_group = self.get_get_total_tiny_power_of_at_txn_group(self.user_address, power_at, app_id=self.app_id)
@@ -933,7 +933,7 @@ class LockingTestCase(LockingAppMixin, BaseTestCase):
         block_timestamp = int(block_datetime.timestamp())
         last_checkpoint_timestamp = block_timestamp - 10
 
-        self.create_locking_app(self.app_id, self.app_creator_address)
+        self.create_locking_app(self.app_id, self.app_creator_address, self.locking_app_creation_timestamp)
         self.init_locking_app(self.app_id, timestamp=last_checkpoint_timestamp)
 
         # Create lock
@@ -955,6 +955,7 @@ class LockingTestCase(LockingAppMixin, BaseTestCase):
 
         # Increase
         for i in range(increase_count):
+            # print_boxes(self.ledger.boxes[self.app_id])
             block_timestamp = block_timestamp + DAY // 2
             txn_group = self.get_increase_lock_amount_txn_group(self.user_address, amount, lock_end_timestamp, block_timestamp, app_id=self.app_id)
             transaction.assign_group_id(txn_group)
@@ -970,12 +971,12 @@ class LockingTestCase(LockingAppMixin, BaseTestCase):
         block_timestamp = int(block_datetime.timestamp())
         last_checkpoint_timestamp = block_timestamp - 10
 
-        self.create_locking_app(self.app_id, self.app_creator_address)
+        self.create_locking_app(self.app_id, self.app_creator_address, self.locking_app_creation_timestamp)
         self.init_locking_app(self.app_id, timestamp=last_checkpoint_timestamp)
 
         # Create lock
-        increase_count = 200
-        lock_end_timestamp = get_start_timestamp_of_week(block_timestamp) + 2 * WEEK
+        increase_count = 50
+        lock_end_timestamp = get_start_timestamp_of_week(block_timestamp) + 5 * WEEK
         amount = 10_000_000
         self.ledger.move(
             amount,
@@ -993,7 +994,7 @@ class LockingTestCase(LockingAppMixin, BaseTestCase):
         # Extend
         for i in range(increase_count):
             block_timestamp = block_timestamp + DAY // 2
-            new_lock_end_timestamp = lock_end_timestamp + WEEK
+            new_lock_end_timestamp = lock_end_timestamp + 4 * WEEK
             txn_group = self.get_extend_lock_end_time_txn_group(self.user_address, lock_end_timestamp, new_lock_end_timestamp, block_timestamp, app_id=self.app_id)
             lock_end_timestamp = new_lock_end_timestamp
 
@@ -1030,7 +1031,7 @@ class LockingTestCase(LockingAppMixin, BaseTestCase):
 
         print("TXN Init")
         self.ledger.eval_transactions(signed_txns, block_timestamp=int(block_datetime.timestamp()))
-        print_boxes(self.ledger.boxes[self.app_id])
+        # print_boxes(self.ledger.boxes[self.app_id])
 
         block_datetime += timedelta(days=2)
         txn_group = [
@@ -1053,7 +1054,7 @@ class LockingTestCase(LockingAppMixin, BaseTestCase):
 
         print("TXN Create Checkpoints")
         self.ledger.eval_transactions(signed_txns, block_timestamp=int(block_datetime.timestamp()))
-        print_boxes(self.ledger.boxes[self.app_id])
+        # print_boxes(self.ledger.boxes[self.app_id])
 
         amount = 10_000_000
         self.ledger.move(
@@ -1096,7 +1097,7 @@ class LockingTestCase(LockingAppMixin, BaseTestCase):
 
         print("TXN Create Lock")
         self.ledger.eval_transactions(signed_txns, block_timestamp=int(block_datetime.timestamp()))
-        print_boxes(self.ledger.boxes[self.app_id])
+        # print_boxes(self.ledger.boxes[self.app_id])
 
         slope = amount * 2**64 // MAX_LOCK_TIME
         bias = (slope * (lock_end_timestamp - int(block_datetime.timestamp()))) // 2**64
@@ -1139,7 +1140,8 @@ class LockingTestCase(LockingAppMixin, BaseTestCase):
             {
                 b'total_power_count': 4,
                 b'tiny_asset_id': self.tiny_asset_id,
-                b'total_locked_amount': amount
+                b'total_locked_amount': amount,
+                b'creation_timestamp': ANY
             }
         )
 
@@ -1174,7 +1176,7 @@ class LockingTestCase(LockingAppMixin, BaseTestCase):
 
         print("TXN Increase amount")
         self.ledger.eval_transactions(signed_txns, block_timestamp=int(block_datetime.timestamp()))
-        print_boxes(self.ledger.boxes[self.app_id])
+        # print_boxes(self.ledger.boxes[self.app_id])
 
         block_datetime += timedelta(hours=1)
         old_lock_end_timestamp = lock_end_timestamp
@@ -1204,7 +1206,7 @@ class LockingTestCase(LockingAppMixin, BaseTestCase):
 
         print("TXN Extend Lock End Time")
         self.ledger.eval_transactions(signed_txns, block_timestamp=int(block_datetime.timestamp()))
-        print_boxes(self.ledger.boxes[self.app_id])
+        # print_boxes(self.ledger.boxes[self.app_id])
 
         # Get Tiny Power Of
         txn_group = [
@@ -1225,7 +1227,7 @@ class LockingTestCase(LockingAppMixin, BaseTestCase):
 
         block = self.ledger.eval_transactions(signed_txns, block_timestamp=int(block_datetime.timestamp()))
         print("TXN Get Tiny Power Of")
-        print_boxes(self.ledger.boxes[self.app_id])
+        # print_boxes(self.ledger.boxes[self.app_id])
         print("Power", btoi(block[b'txns'][0][b'dt'][b'lg'][-1]))
 
         # Get Tiny Power Of At
@@ -1251,7 +1253,7 @@ class LockingTestCase(LockingAppMixin, BaseTestCase):
 
         block = self.ledger.eval_transactions(signed_txns, block_timestamp=int(block_datetime.timestamp()))
         print("TXN Get Tiny Power Of At")
-        print_boxes(self.ledger.boxes[self.app_id])
+        # print_boxes(self.ledger.boxes[self.app_id])
         print("Power", btoi(block[b'txns'][0][b'dt'][b'lg'][-1]))
 
         # Get Total Tiny Power
@@ -1273,7 +1275,7 @@ class LockingTestCase(LockingAppMixin, BaseTestCase):
 
         block = self.ledger.eval_transactions(signed_txns, block_timestamp=int(block_datetime.timestamp()))
         print("TXN Get Total Tiny Power")
-        print_boxes(self.ledger.boxes[self.app_id])
+        # print_boxes(self.ledger.boxes[self.app_id])
         print("Power", btoi(block[b'txns'][0][b'dt'][b'lg'][-1]))
 
         # Get Total Tiny Power At
@@ -1297,7 +1299,7 @@ class LockingTestCase(LockingAppMixin, BaseTestCase):
 
         block = self.ledger.eval_transactions(signed_txns, block_timestamp=int(block_datetime.timestamp()))
         print("TXN Get Total Tiny Power At")
-        print_boxes(self.ledger.boxes[self.app_id])
+        # print_boxes(self.ledger.boxes[self.app_id])
         print("Power", btoi(block[b'txns'][0][b'dt'][b'lg'][-1]))
 
         # Withdraw
@@ -1321,7 +1323,7 @@ class LockingTestCase(LockingAppMixin, BaseTestCase):
 
         self.ledger.eval_transactions(signed_txns, block_timestamp=int(block_datetime.timestamp()))
         print("TXN Withdraw")
-        print_boxes(self.ledger.boxes[self.app_id])
+        # print_boxes(self.ledger.boxes[self.app_id])
 
         # Get Tiny Power Of
         txn_group = [
@@ -1341,7 +1343,7 @@ class LockingTestCase(LockingAppMixin, BaseTestCase):
 
         block = self.ledger.eval_transactions(signed_txns, block_timestamp=int(block_datetime.timestamp()))
         print("TXN Get Tiny Power Of")
-        print_boxes(self.ledger.boxes[self.app_id])
+        # print_boxes(self.ledger.boxes[self.app_id])
         print("Power", btoi(block[b'txns'][0][b'dt'][b'lg'][-1]))
 
         while True:
@@ -1378,7 +1380,7 @@ class LockingTestCase(LockingAppMixin, BaseTestCase):
             print("TXN Create Checkpoints")
             self.ledger.eval_transactions(signed_txns, block_timestamp=int(block_datetime.timestamp()))
             # print("Opb", new_checkpoint_count, new_checkpoint_count * 700, [btoi(l) for l in block[b'txns'][0][b'dt'][b'lg']])
-            print_boxes(self.ledger.boxes[self.app_id])
+            # print_boxes(self.ledger.boxes[self.app_id])
 
         # Create lock again
         box_index, _ = get_latest_checkpoint_indexes(self.ledger, self.app_id)
@@ -1414,4 +1416,4 @@ class LockingTestCase(LockingAppMixin, BaseTestCase):
 
         print("TXN Create Lock")
         self.ledger.eval_transactions(signed_txns, block_timestamp=int(block_datetime.timestamp()))
-        print_boxes(self.ledger.boxes[self.app_id])
+        # print_boxes(self.ledger.boxes[self.app_id])

@@ -3,7 +3,7 @@ from zoneinfo import ZoneInfo
 
 from algosdk.encoding import encode_address, decode_address
 
-from tests.constants import TOTAL_POWERS, SLOPE_CHANGES, MAX_LOCK_TIME, DAY, WEEK, PROPOSALS, MAX_OPTION_COUNT, TOTAL_POWER_BOX_ARRAY_LEN, TWO_TO_THE_64, ACCOUNT_POWER_BOX_ARRAY_LEN, ACCOUNT_POWER_SIZE, TOTAL_POWER_SIZE
+from tests.constants import TOTAL_POWERS, SLOPE_CHANGES, MAX_LOCK_TIME, DAY, WEEK, PROPOSALS, MAX_OPTION_COUNT, TOTAL_POWER_BOX_ARRAY_LEN, TWO_TO_THE_64, ACCOUNT_POWER_BOX_ARRAY_LEN, ACCOUNT_POWER_SIZE, TOTAL_POWER_SIZE, REWARD_HISTORY_SIZE, REWARD_HISTORY_BOX_ARRAY_LEN, REWARD_HISTORY
 
 
 def itob(value, length=8):
@@ -99,6 +99,22 @@ def parse_box_proposal(raw_box):
     data[f"vote_counts"] = [btoi(data["votes"][i * 8: (i + 1) * 8]) for i in range(MAX_OPTION_COUNT)]
     return data
 
+def parse_box_reward_history(raw_box):
+    n = REWARD_HISTORY_SIZE
+    rows = [raw_box[i:i+n] for i in range(0, len(raw_box), n)]
+    reward_histories = []
+    for row in rows:
+        if row == (b'\x00' * n):
+            break
+
+        reward_histories.append(
+            dict(
+                timestamp=btoi(row[:8]),
+                reward_amount=btoi(row[8:16]),
+            )
+        )
+    return reward_histories
+
 
 def print_boxes(boxes):
     for key, value in sorted(list(boxes.items()), key=lambda box: box[0]):
@@ -174,7 +190,6 @@ def get_account_power_index_at(ledger, app_id, user_address, timestamp):
 
     return account_power_index
 
-
 def get_total_power_index_at(ledger, app_id, timestamp):
     total_power_index = None
     total_power_count = ledger.global_states[app_id][b'total_power_count']
@@ -194,6 +209,28 @@ def get_total_power_index_at(ledger, app_id, timestamp):
             break
 
     return total_power_index
+
+
+def get_reward_history_index_at(ledger, app_id, timestamp):
+    reward_history_index = None
+    reward_history_count = ledger.global_states[app_id][b'reward_history_count']
+
+    box_count = reward_history_count // REWARD_HISTORY_BOX_ARRAY_LEN
+    box_count += bool(reward_history_count % REWARD_HISTORY_BOX_ARRAY_LEN)
+
+    reward_histories = []
+    for box_index in range(box_count):
+        raw_box = ledger.boxes[app_id][REWARD_HISTORY + itob(box_index)]
+        reward_histories.extend(parse_box_reward_history(raw_box))
+
+    for index, reward_history in enumerate(reward_histories):
+        if timestamp >= reward_history["timestamp"]:
+            reward_history_index = index
+        else:
+            break
+
+    return reward_history_index
+
 
 
 def get_latest_checkpoint_timestamp(ledger, app_id):

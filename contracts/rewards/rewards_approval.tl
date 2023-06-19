@@ -9,11 +9,16 @@ struct AccountState:
     power_count: int
 end
 
+# Name: rh<box_index><array_index>
+# Size: 16 bytes
+struct RewardHistory:
+    timestamp: int
+    reward_amount: int
+end
+
 
 # 2^64 - 1
-const int MAX_UINT64 = 18446744073709551615
-# 24 * 60 * 60
-const int DAY = 86400
+# const int MAX_UINT64 = 18446744073709551615
 # 7 * DAY
 const int WEEK = 604800
 
@@ -22,12 +27,18 @@ const bytes BYTE_ZERO_128 = "\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x0
 const bytes TINY_ASSET_ID_KEY = "tiny_asset_id"
 const bytes LOCKING_APP_ID_KEY = "locking_app_id"
 const bytes CREATION_TIMESTAMP_KEY = "creation_timestamp"
+const bytes REWARD_HISTORY_COUNT_KEY = "reward_history_count"
+const bytes MANAGER_KEY = "manager"
+const bytes REWARD_HISTORY = "rh"
 
 const bytes BIT_ZERO = "\x00"
 const bytes BIT_ONE = "\x01"
 
 const int REWARD_SHEET_SIZE = 1024
 
+const int REWARD_HISTORY_SIZE = 16
+const int REWARD_HISTORY_BOX_SIZE = 1024
+const int REWARD_HISTORY_BOX_ARRAY_LEN = 16
 
 if !Txn.ApplicationID:
     jump create_app
@@ -48,9 +59,13 @@ end
 block create_app:
     app_global_put(TINY_ASSET_ID_KEY, Txn.Assets[0])
     app_global_put(LOCKING_APP_ID_KEY, Txn.Applications[1])
+    app_global_put(REWARD_HISTORY_COUNT_KEY, 0)
+
     int creation_timestamp
     _, creation_timestamp = app_global_get_ex(Txn.Applications[1], CREATION_TIMESTAMP_KEY)
     app_global_put(CREATION_TIMESTAMP_KEY, creation_timestamp)
+
+    app_global_put(MANAGER_KEY, Txn.Sender)
     exit(1)
 end
 
@@ -58,6 +73,8 @@ block main:
     switch Txn.ApplicationArgs[0]:
         "claim_rewards": claim_rewards
         "init": init
+        "set_reward_amount": set_reward_amount
+        "set_manager": set_manager
     end
 
     block claim_rewards:
@@ -68,9 +85,10 @@ block main:
         bytes account_power_index_2 = Txn.ApplicationArgs[3]
         bytes total_power_index_1 = Txn.ApplicationArgs[4]
         bytes total_power_index_2 = Txn.ApplicationArgs[5]
+        int reward_amount_index = btoi(Txn.ApplicationArgs[6])
 
-        assert(!(timestamp % DAY))
-        int end_timestamp = timestamp + DAY
+        assert(!(timestamp % WEEK))
+        int end_timestamp = timestamp + WEEK
 
         # TODO: Make sure the reward is not send previously
         int period_index = get_period_index(timestamp)
@@ -97,17 +115,49 @@ block main:
         bytes total_cumulative_power_delta = total_cumulative_power_2 b- total_cumulative_power_1
 
         # TODO: Calculate real reward amount
-        int total_reward_amount = get_total_reward_amount(timestamp)
+        int total_reward_amount = get_reward_amount(timestamp, reward_amount_index)
         int reward_amount = btoi((itob(total_reward_amount) b* account_cumulative_power_delta) b/ total_cumulative_power_delta)
-        transfer(app_global_get(TINY_ASSET_ID_KEY), reward_amount, Global.CurrentApplicationAddress, user_address)
 
         # TODO: Event Log
         log(itob(Global.OpcodeBudget))
+
+        transfer(app_global_get(TINY_ASSET_ID_KEY), reward_amount, Global.CurrentApplicationAddress, user_address)
         exit(1)
     end
 
     block init:
-        opt_in_to_asset_if_needed(app_global_get(TINY_ASSET_ID_KEY))
+        bytes user_address = Txn.Sender
+        assert(user_address == app_global_get(MANAGER_KEY))
+        assert(!app_global_get(REWARD_HISTORY_COUNT_KEY))
+
+        int reward_amount = btoi(Txn.ApplicationArgs[1])
+        bytes reward_history = construct_reward_history(app_global_get(CREATION_TIMESTAMP_KEY), reward_amount)
+        save_reward_history(reward_history)
+
+        # opt-in to TINY
+        transfer(app_global_get(TINY_ASSET_ID_KEY), 0, Global.CurrentApplicationAddress, Global.CurrentApplicationAddress)
+        exit(1)
+    end
+    
+    block set_reward_amount:
+        bytes user_address = Txn.Sender
+        assert(user_address == app_global_get(MANAGER_KEY))
+
+        # Ensure that the app is initialized.
+        assert(app_global_get(REWARD_HISTORY_COUNT_KEY))
+
+        int reward_amount = btoi(Txn.ApplicationArgs[1])
+        bytes reward_history = construct_reward_history(Global.LatestTimestamp, reward_amount)
+        save_reward_history(reward_history)
+
+        exit(1)
+    end
+
+    block set_manager:
+        bytes user_address = Txn.Sender
+        assert(user_address == app_global_get(MANAGER_KEY))
+
+        app_global_put(MANAGER_KEY, Txn.Accounts[1])
         exit(1)
     end
 end
@@ -159,16 +209,18 @@ func get_cumulative_powers_for_rewards(address: bytes, timestamp_1: int, timesta
     return extract(0, 16, Itxn.LastLog), extract(16, 16, Itxn.LastLog), extract(32, 16, Itxn.LastLog), extract(48, 16, Itxn.LastLog)
 end
 
-func get_total_reward_amount(timestamp: int) int:
-    # TODO: Fix dummy consts
-    # 2024/01/01
-    if timestamp < 1704067200:
-        return 100000000
-    else:
-        # TODO: Get from global state
-        return 1
+func get_reward_amount(timestamp: int, index: int) int:
+    assert(index < app_global_get(REWARD_HISTORY_COUNT_KEY))
+    assert(timestamp <= Global.LatestTimestamp)
+
+    RewardHistory reward_history = get_reward_history(index)
+    assert(reward_history.timestamp <= timestamp)
+
+    if (index + 1) < app_global_get(REWARD_HISTORY_COUNT_KEY):
+        TotalPower next_reward_history = get_reward_history(index + 1)
+        assert(timestamp < next_reward_history.timestamp)
     end
-    return 0
+    return reward_history.reward_amount
 end
 
 func check_and_save_claimed_reward(address: bytes, period_index: int):
@@ -182,7 +234,32 @@ func check_and_save_claimed_reward(address: bytes, period_index: int):
 end
 
 func get_period_index(timestamp: int) int:
-    return (timestamp / DAY) - (app_global_get(CREATION_TIMESTAMP_KEY) / DAY)
+    return (timestamp / WEEK) - (app_global_get(CREATION_TIMESTAMP_KEY) / WEEK)
+end
+
+func construct_reward_history(timestamp: int, reward_amount: int) bytes:
+    return concat(itob(timestamp), itob(reward_amount))
+end
+
+func save_reward_history(data: bytes):
+    int index = app_global_get(REWARD_HISTORY_COUNT_KEY)
+
+    assert(len(data) == REWARD_HISTORY_SIZE)
+    int box_index = index / REWARD_HISTORY_BOX_ARRAY_LEN
+    int array_index = index % REWARD_HISTORY_BOX_ARRAY_LEN
+    bytes box_name = concat(REWARD_HISTORY, itob(box_index))
+    _ = box_create(box_name, REWARD_HISTORY_BOX_SIZE)
+    box_replace(box_name, (array_index * REWARD_HISTORY_SIZE), data)
+
+    app_global_put(REWARD_HISTORY_COUNT_KEY, index + 1)
+    return
+end
+
+func get_reward_history(index: int) bytes:
+    int box_index = index / REWARD_HISTORY_BOX_ARRAY_LEN
+    int array_index = index % REWARD_HISTORY_BOX_ARRAY_LEN
+    bytes box_name = concat(REWARD_HISTORY, itob(box_index))
+    return box_extract(box_name, (array_index * REWARD_HISTORY_SIZE), REWARD_HISTORY_SIZE)
 end
 
 func transfer(asset_id: int, amount: int, sender: bytes, receiver: bytes):
@@ -206,19 +283,6 @@ func transfer(asset_id: int, amount: int, sender: bytes, receiver: bytes):
             AssetAmount: amount
             XferAsset: asset_id
             Fee: 0
-        end
-    end
-    return
-end
-
-
-func opt_in_to_asset_if_needed(asset_id: int):
-    if asset_id:
-        int is_opted_in
-        is_opted_in, _ = asset_holding_get(AssetBalance, Global.CurrentApplicationAddress, asset_id)
-
-        if is_opted_in == 0:
-            transfer(asset_id, 0, Global.CurrentApplicationAddress, Global.CurrentApplicationAddress)
         end
     end
     return

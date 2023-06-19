@@ -2,13 +2,14 @@ import unittest
 import uuid
 
 from algojig import get_suggested_params, JigLedger
+from algojig.gojig import run
 from algosdk import transaction
 from algosdk.account import generate_account
 from algosdk.constants import ZERO_ADDRESS
 from algosdk.encoding import decode_address
 from algosdk.logic import get_application_address
 
-from tests.constants import TOTAL_POWERS, DAY, SLOPE_CHANGES, locking_approval_program, WEEK, INITIAL_MINIMUM_BALANCE_REQUIREMENT, ACCOUNT_STATE_SIZE, ACCOUNT_POWER_BOX_SIZE, SLOPE_CHANGE_SIZE, ACCOUNT_POWER_BOX_ARRAY_LEN, TOTAL_POWER_BOX_ARRAY_LEN, TOTAL_POWER_BOX_SIZE, rewards_approval_program
+from tests.constants import TOTAL_POWERS, DAY, SLOPE_CHANGES, locking_approval_program, WEEK, LOCKING_APP_MINIMUM_BALANCE_REQUIREMENT, ACCOUNT_STATE_SIZE, ACCOUNT_POWER_BOX_SIZE, SLOPE_CHANGE_SIZE, ACCOUNT_POWER_BOX_ARRAY_LEN, TOTAL_POWER_BOX_ARRAY_LEN, TOTAL_POWER_BOX_SIZE, rewards_approval_program, REWARDS_APP_MINIMUM_BALANCE_REQUIREMENT, REWARD_HISTORY_BOX_ARRAY_LEN, REWARD_HISTORY, REWARD_HISTORY_SIZE, REWARD_HISTORY_BOX_SIZE
 from tests.constants import voting_approval_program, PROPOSALS, MAX_OPTION_COUNT, TOTAL_POWER_SIZE
 from tests.utils import itob, sign_txns, get_start_timestamp_of_week, parse_box_account_state, get_latest_checkpoint_indexes, get_latest_checkpoint_timestamp, get_required_minimum_balance_of_box, get_latest_account_power_indexes, get_account_power_index_at, get_total_power_index_at
 
@@ -37,6 +38,8 @@ class BaseTestCase(unittest.TestCase):
 
         cls.tiny_asset_creator_sk, cls.tiny_asset_creator_address = generate_account()
         cls.tiny_asset_id = 12345
+        # 1_000_000_000 - 000_000
+        # 100_000_000_000_000_000_000_000 - 000_000
         cls.tiny_params = dict(
             total=100_000_000_000_000_000_000_000_000_000,
             decimals=6,
@@ -50,7 +53,14 @@ class BaseTestCase(unittest.TestCase):
         # self.ledger.set_account_balance(self.tiny_asset_creator_address, 1_000_000)
         self.ledger.create_asset(self.tiny_asset_id, params=dict())
 
-    def create_locking_app(self, app_id, app_creator_address):
+    def low_level_eval(self, signed_txns, block_timestamp):
+        self.ledger.init_ledger_db(block_timestamp)
+        self.ledger.write()
+        self.ledger.write_transactions(signed_txns)
+        output = run("eval")
+        return output
+
+    def create_locking_app(self, app_id, app_creator_address, creation_timestamp):
         if app_creator_address not in self.ledger.accounts:
             self.ledger.set_account_balance(app_creator_address, 1_000_000)
 
@@ -70,13 +80,13 @@ class BaseTestCase(unittest.TestCase):
                 b'tiny_asset_id': self.tiny_asset_id,
                 b'total_locked_amount': 0,
                 b'total_power_count': 0,
-                b'creation_timestamp': 1640995200,
+                b'creation_timestamp': creation_timestamp,
             }
         )
 
     def init_locking_app(self, app_id, timestamp):
         # Min balance requirement
-        self.ledger.set_account_balance(get_application_address(app_id), INITIAL_MINIMUM_BALANCE_REQUIREMENT)
+        self.ledger.set_account_balance(get_application_address(app_id), LOCKING_APP_MINIMUM_BALANCE_REQUIREMENT)
         # Opt-in
         self.ledger.set_account_balance(get_application_address(app_id), 0, asset_id=self.tiny_asset_id)
         self.set_box_total_power(app_id, index=0, bias=0, timestamp=timestamp, slope=0, cumulative_power=0)
@@ -118,7 +128,7 @@ class BaseTestCase(unittest.TestCase):
             }
         )
 
-    def create_rewards_app(self, app_id, app_creator_address, locking_app_id):
+    def create_rewards_app(self, app_id, app_creator_address, locking_app_id, creation_timestamp):
         if app_creator_address not in self.ledger.accounts:
             self.ledger.set_account_balance(app_creator_address, 1_000_000)
 
@@ -139,6 +149,21 @@ class BaseTestCase(unittest.TestCase):
             {
                 b'tiny_asset_id': self.tiny_asset_id,
                 b'locking_app_id': locking_app_id,
+                b'creation_timestamp': creation_timestamp
+            }
+        )
+
+    def init_rewards_app(self, app_id, timestamp, reward_amount=100_000_000):
+        # Min balance requirement
+        self.ledger.set_account_balance(get_application_address(app_id), REWARDS_APP_MINIMUM_BALANCE_REQUIREMENT)
+        # Opt-in
+        self.ledger.set_account_balance(get_application_address(app_id), 0, asset_id=self.tiny_asset_id)
+        self.set_box_reward_history(app_id, index=0, timestamp=timestamp, reward_amount=reward_amount)
+
+        self.ledger.update_global_state(
+            app_id,
+            {
+                b'reward_history_count': 1,
             }
         )
 
@@ -173,6 +198,23 @@ class BaseTestCase(unittest.TestCase):
         end = start + TOTAL_POWER_SIZE
         data = bytearray(self.ledger.boxes[app_id][box_name])
         data[start:end] = total_power
+        self.ledger.boxes[app_id][box_name] = bytes(data)
+
+    def set_box_reward_history(self, app_id, index, timestamp, reward_amount):
+        self.init_app_boxes(app_id)
+
+        box_index = index // REWARD_HISTORY_BOX_ARRAY_LEN
+        array_index = index % REWARD_HISTORY_BOX_ARRAY_LEN
+
+        box_name = REWARD_HISTORY + itob(box_index)
+        if box_name not in self.ledger.boxes[app_id]:
+            self.ledger.boxes[app_id][box_name] = itob(0, 1) * REWARD_HISTORY_BOX_SIZE
+
+        reward_history = itob(timestamp) + itob(reward_amount)
+        start = array_index * REWARD_HISTORY_SIZE
+        end = start + REWARD_HISTORY_SIZE
+        data = bytearray(self.ledger.boxes[app_id][box_name])
+        data[start:end] = reward_history
         self.ledger.boxes[app_id][box_name] = bytes(data)
 
     def set_box_slope_change(self, app_id, timestamp, slope_delta):
@@ -281,12 +323,18 @@ class LockingAppMixin:
         # while True:
         box_index, array_index = get_latest_checkpoint_indexes(self.ledger, app_id)
         latest_checkpoint_timestamp = get_latest_checkpoint_timestamp(self.ledger, app_id)
-        slope_change_timestamp = get_start_timestamp_of_week(latest_checkpoint_timestamp + WEEK)
+        latest_checkpoint_week_timestamp = get_start_timestamp_of_week(latest_checkpoint_timestamp)
+        this_week_timestamp = get_start_timestamp_of_week(block_timestamp)
 
-        new_checkpoint_count = (max(block_timestamp, min(slope_change_timestamp, block_timestamp)) // DAY) - (latest_checkpoint_timestamp // DAY)
-        # if latest_checkpoint_timestamp == block_timestamp:
-        #     break
-        new_checkpoint_count = min(new_checkpoint_count, 7)
+        new_checkpoint_count = (this_week_timestamp  - latest_checkpoint_week_timestamp) // WEEK
+        new_checkpoint_count = min(new_checkpoint_count, 6)
+
+        slope_change_boxes = []
+        for i in range(new_checkpoint_count):
+            ts = latest_checkpoint_week_timestamp + ((i + 1) * WEEK)
+            slope_change_boxes.append(
+                (0, SLOPE_CHANGES + itob(ts))
+            )
 
         # TODO: find the right formula
         # op_budget = 360 + (new_checkpoint_count - 1) * 270
@@ -317,7 +365,7 @@ class LockingAppMixin:
                     boxes=[
                         (0, TOTAL_POWERS + itob(box_index)),
                         (0, TOTAL_POWERS + itob(box_index + 1)),
-                        (0, SLOPE_CHANGES + itob(slope_change_timestamp)),
+                        *slope_change_boxes,
                     ]
                 ),
                 *[get_budget_increase_txn(user_address, sp=self.sp, index=app_id) for _ in range(increase_txn_count)],
@@ -330,11 +378,18 @@ class LockingAppMixin:
         start_timestamp_of_week = get_start_timestamp_of_week(block_timestamp)
 
         payment_amount = 0
+        new_total_power_count = 1
+        latest_checkpoint_timestamp = get_latest_checkpoint_timestamp(self.ledger, app_id)
+        latest_checkpoint_week_timestamp = get_start_timestamp_of_week(latest_checkpoint_timestamp)
+        this_week_timestamp = get_start_timestamp_of_week(block_timestamp)
+        if latest_checkpoint_week_timestamp != this_week_timestamp:
+            new_total_power_count += 1
+
         if account_power_array_index == ACCOUNT_POWER_BOX_ARRAY_LEN - 1:
             new_account_power_box_name = decode_address(user_address) + itob(total_powers_box_index + 1)
             payment_amount += 2_500 + 400 * (len(new_account_power_box_name) + ACCOUNT_POWER_BOX_SIZE)
 
-        if total_powers_array_index == TOTAL_POWER_BOX_ARRAY_LEN - 1:
+        if total_powers_array_index + new_total_power_count >= TOTAL_POWER_BOX_ARRAY_LEN:
             new_total_powers_box_name = TOTAL_POWERS + itob(total_powers_box_index + 1)
             payment_amount += 2_500 + 400 * (len(new_total_powers_box_name) + TOTAL_POWER_BOX_SIZE)
 
@@ -385,6 +440,12 @@ class LockingAppMixin:
         start_timestamp_of_week = get_start_timestamp_of_week(block_timestamp)
 
         payment_amount = 0
+        new_total_power_count = 1
+        latest_checkpoint_timestamp = get_latest_checkpoint_timestamp(self.ledger, app_id)
+        latest_checkpoint_week_timestamp = get_start_timestamp_of_week(latest_checkpoint_timestamp)
+        this_week_timestamp = get_start_timestamp_of_week(block_timestamp)
+        if latest_checkpoint_week_timestamp != this_week_timestamp:
+            new_total_power_count += 1
 
         new_slope_change_box_name = SLOPE_CHANGES + itob(new_lock_end_timestamp)
         if new_slope_change_box_name not in self.ledger.boxes[app_id]:
@@ -394,7 +455,7 @@ class LockingAppMixin:
             new_account_power_box_name = decode_address(user_address) + itob(total_powers_box_index + 1)
             payment_amount += 2_500 + 400 * (len(new_account_power_box_name) + ACCOUNT_POWER_BOX_SIZE)
 
-        if total_powers_array_index == TOTAL_POWER_BOX_ARRAY_LEN - 1:
+        if total_powers_array_index + new_total_power_count >= TOTAL_POWER_BOX_ARRAY_LEN:
             new_total_powers_box_name = TOTAL_POWERS + itob(total_powers_box_index + 1)
             payment_amount += 2_500 + 400 * (len(new_total_powers_box_name) + TOTAL_POWER_BOX_SIZE)
 

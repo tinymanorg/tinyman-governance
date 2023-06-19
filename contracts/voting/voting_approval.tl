@@ -13,6 +13,10 @@ struct Proposal:
     votes: bytes[128]
 end
 
+# TODO: Pool V2
+# TODO: 1 Pool - Program use same dist account
+# % Power for proposal, update able
+
 # struct Votes:
 #     option_0_count: int
 #     option_1_count: int
