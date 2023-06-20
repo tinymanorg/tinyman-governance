@@ -9,8 +9,8 @@ from algosdk.encoding import decode_address
 from algosdk.logic import get_application_address
 
 from tests.common import BaseTestCase, LockingAppMixin, get_budget_increase_txn
-from tests.constants import TOTAL_POWERS, DAY, WEEK, locking_approval_program, rewards_approval_program, rewards_clear_state_program, REWARD_HISTORY, REWARDS_APP_MINIMUM_BALANCE_REQUIREMENT, REWARD_HISTORY_BOX_ARRAY_LEN, REWARD_HISTORY_BOX_SIZE, ACCOUNT_POWER_BOX_ARRAY_LEN, TOTAL_POWER_BOX_ARRAY_LEN
-from tests.utils import get_start_timestamp_of_week, print_boxes, itob, sign_txns, btoi, parse_box_total_power, parse_box_reward_history, get_reward_history_index_at, get_total_power_index_at, get_account_power_index_at
+from tests.constants import TOTAL_POWERS, WEEK, rewards_approval_program, rewards_clear_state_program, REWARD_HISTORY, REWARDS_APP_MINIMUM_BALANCE_REQUIREMENT, REWARD_HISTORY_BOX_ARRAY_LEN, REWARD_HISTORY_BOX_SIZE, ACCOUNT_POWER_BOX_ARRAY_LEN, TOTAL_POWER_BOX_ARRAY_LEN
+from tests.utils import get_start_timestamp_of_week, print_boxes, itob, sign_txns, parse_box_reward_history, get_reward_history_index_at, get_total_power_index_at, get_account_power_index_at
 
 
 class RewardsTestCase(LockingAppMixin, BaseTestCase):
@@ -232,7 +232,7 @@ class RewardsTestCase(LockingAppMixin, BaseTestCase):
 
         # Create checkpoints
         block_timestamp = lock_end_timestamp + 1
-        self.create_checkpoints(block_timestamp, self.locking_app_id)
+        self.create_checkpoints(self.user_address, self.user_sk, block_timestamp, self.locking_app_id)
 
         # Withdraw
         txn_group = self.get_withdraw_txn_group(self.user_address, app_id=self.locking_app_id)

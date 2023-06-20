@@ -16,7 +16,6 @@ struct RewardHistory:
     reward_amount: int
 end
 
-
 # 2^64 - 1
 # const int MAX_UINT64 = 18446744073709551615
 # 7 * DAY
@@ -34,7 +33,7 @@ const bytes REWARD_HISTORY = "rh"
 const bytes BIT_ZERO = "\x00"
 const bytes BIT_ONE = "\x01"
 
-const int REWARD_SHEET_SIZE = 1024
+const int REWARD_SHEET_BOX_SIZE = 1024
 
 const int REWARD_HISTORY_SIZE = 16
 const int REWARD_HISTORY_BOX_SIZE = 1024
@@ -48,7 +47,7 @@ switch Txn.OnCompletion:
     NoOp: main
     OptIn: fail
     CloseOut: fail
-    UpdateApplication: fail
+    UpdateApplication: update_app
     DeleteApplication: fail
 end
 
@@ -69,12 +68,24 @@ block create_app:
     exit(1)
 end
 
+block update_app:
+    bytes user_address = Txn.Sender
+    assert(user_address == app_global_get(MANAGER_KEY))
+    exit(1)
+end
+
 block main:
     switch Txn.ApplicationArgs[0]:
         "claim_rewards": claim_rewards
+        "increase_budget": increase_budget
         "init": init
         "set_reward_amount": set_reward_amount
         "set_manager": set_manager
+    end
+
+    block increase_budget:
+        # Box read budget and opcode budget will be incread using this method.
+        exit(1)
     end
 
     block claim_rewards:
@@ -224,10 +235,10 @@ func get_reward_amount(timestamp: int, index: int) int:
 end
 
 func check_and_save_claimed_reward(address: bytes, period_index: int):
-    int box_index = period_index / REWARD_SHEET_SIZE
-    int array_index = period_index % REWARD_SHEET_SIZE
+    int box_index = period_index / REWARD_SHEET_BOX_SIZE
+    int array_index = period_index % REWARD_SHEET_BOX_SIZE
     bytes box_name = concat(address, itob(box_index))
-    _ = box_create(box_name, REWARD_SHEET_SIZE)
+    _ = box_create(box_name, REWARD_SHEET_BOX_SIZE)
     assert(box_extract(box_name, array_index, 1) == BIT_ZERO)
     box_replace(box_name, array_index, BIT_ONE)
     return

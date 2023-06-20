@@ -4,8 +4,8 @@ from algojig import TealishProgram
 locking_approval_program = TealishProgram('contracts/locking/locking_approval.tl')
 locking_clear_state_program = TealishProgram('contracts/locking/locking_clear_state.tl')
 
-voting_approval_program = TealishProgram('contracts/voting/voting_approval.tl')
-voting_clear_state_program = TealishProgram('contracts/voting/voting_clear_state.tl')
+staking_voting_approval_program = TealishProgram('contracts/staking_voting/staking_voting_approval.tl')
+staking_voting_clear_state_program = TealishProgram('contracts/staking_voting/staking_voting_clear_state.tl')
 
 rewards_approval_program = TealishProgram('contracts/rewards/rewards_approval.tl')
 rewards_clear_state_program = TealishProgram('contracts/rewards/rewards_clear_state.tl')
@@ -18,13 +18,14 @@ MAX_OPTION_COUNT = 16
 
 TWO_TO_THE_64 = 2 ** 64
 
-TOTAL_POWERS = b"tp"
-SLOPE_CHANGES = b"sc"
+TOTAL_POWERS = b'tp'
+SLOPE_CHANGES = b'sc'
 
-REWARD_HISTORY = b"rh"
+REWARD_HISTORY = b'rh'
 
-PROPOSALS = b"proposals"
-VOTES = b"votes"
+PROPOSAL_BOX_PREFIX = b'p'
+VOTE_BOX_PREFIX = b'v'
+ATTENDANCE_BOX_PREFIX = b'a'
 
 # 100_000 Default
 # 100_000 Opt-in

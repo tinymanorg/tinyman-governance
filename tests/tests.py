@@ -7,7 +7,7 @@ from algosdk.logic import get_application_address
 
 from tests.common import BaseTestCase
 from tests.constants import TOTAL_POWERS, DAY, SLOPE_CHANGES, WEEK, ACCOUNT_STATE_SIZE, ACCOUNT_POWER_BOX_SIZE, SLOPE_CHANGE_SIZE, ACCOUNT_POWER_BOX_ARRAY_LEN, TOTAL_POWER_BOX_ARRAY_LEN, TOTAL_POWER_BOX_SIZE
-from tests.utils import itob, sign_txns, get_start_timestamp_of_week, parse_box_account_state, get_latest_checkpoint_indexes, get_latest_checkpoint_timestamp, get_required_minimum_balance_of_box, get_latest_account_power_indexes, get_account_power_index_at, get_total_power_index_at
+from tests.utils import itob, get_start_timestamp_of_week, parse_box_account_state, get_latest_checkpoint_indexes, get_latest_checkpoint_timestamp, get_required_minimum_balance_of_box, get_latest_account_power_indexes, get_account_power_index_at, get_total_power_index_at
 
 
 def get_budget_increase_txn(sender, sp, index, boxes):
@@ -38,15 +38,6 @@ class LockingTestCase(BaseTestCase):
         self.ledger.set_account_balance(self.user_address, 100_000_000)
         self.ledger.set_account_balance(self.user_2_address, 100_000_000)
         self.ledger.set_account_balance(self.user_3_address, 100_000_000)
-
-    def create_checkpoints(self, block_timestamp):
-        while True:
-            txn_group = self.get_create_checkpoints_txn_group(self.user_address, block_timestamp, self.app_id)
-            if not txn_group:
-                break
-            transaction.assign_group_id(txn_group)
-            signed_txns = sign_txns(txn_group, self.user_sk)
-            self.ledger.eval_transactions(signed_txns, block_timestamp=block_timestamp)
 
     def get_create_lock_txn_group(self, user_address, locked_amount, lock_end_timestamp, app_id):
         latest_total_power_box_index, total_power_array_index = get_latest_checkpoint_indexes(self.ledger, app_id)

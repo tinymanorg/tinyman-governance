@@ -10,20 +10,24 @@ from algosdk.encoding import decode_address
 from algosdk.logic import get_application_address
 
 from tests.constants import TOTAL_POWERS, DAY, SLOPE_CHANGES, locking_approval_program, WEEK, LOCKING_APP_MINIMUM_BALANCE_REQUIREMENT, ACCOUNT_STATE_SIZE, ACCOUNT_POWER_BOX_SIZE, SLOPE_CHANGE_SIZE, ACCOUNT_POWER_BOX_ARRAY_LEN, TOTAL_POWER_BOX_ARRAY_LEN, TOTAL_POWER_BOX_SIZE, rewards_approval_program, REWARDS_APP_MINIMUM_BALANCE_REQUIREMENT, REWARD_HISTORY_BOX_ARRAY_LEN, REWARD_HISTORY, REWARD_HISTORY_SIZE, REWARD_HISTORY_BOX_SIZE
-from tests.constants import voting_approval_program, PROPOSALS, MAX_OPTION_COUNT, TOTAL_POWER_SIZE
+from tests.constants import staking_voting_approval_program, PROPOSAL_BOX_PREFIX, MAX_OPTION_COUNT, TOTAL_POWER_SIZE
 from tests.utils import itob, sign_txns, get_start_timestamp_of_week, parse_box_account_state, get_latest_checkpoint_indexes, get_latest_checkpoint_timestamp, get_required_minimum_balance_of_box, get_latest_account_power_indexes, get_account_power_index_at, get_total_power_index_at
 
 
-def get_budget_increase_txn(sender, sp, index, boxes=None):
+def get_budget_increase_txn(sender, sp, index, foreign_apps=None, boxes=None):
+    if foreign_apps is None:
+        foreign_apps = []
+
     if boxes is None:
         boxes = []
-    boxes = boxes + ([(0, "")] * (8 - len(boxes)))
+    boxes = boxes + ([(0, "")] * ((8 - len(foreign_apps)) - len(boxes)))
 
     return transaction.ApplicationNoOpTxn(
         sender=sender,
         sp=sp,
         index=index,
         app_args=["increase_budget"],
+        foreign_apps=foreign_apps,
         boxes=boxes,
         # Make transactions unique to avoid "transaction already in ledger" error
         note=uuid.uuid4().bytes
@@ -104,7 +108,7 @@ class BaseTestCase(unittest.TestCase):
 
         self.ledger.create_app(
             app_id=app_id,
-            approval_program=voting_approval_program,
+            approval_program=staking_voting_approval_program,
             creator=app_creator_address,
             local_ints=0,
             local_bytes=0,
@@ -123,8 +127,11 @@ class BaseTestCase(unittest.TestCase):
                 b'proposal_min_locked_amount': 0,
                 b'proposal_min_lock_time': 0,
                 b'proposal_threshold': 10,
-                b'voting_delay': 0,
-                b'voting_period': 0,
+                b'voting_delay': 1,
+                b'voting_duration': 7,
+
+                b'manager': decode_address(app_creator_address),
+                b'proposal_manager': decode_address(app_creator_address)
             }
         )
 
@@ -171,18 +178,6 @@ class BaseTestCase(unittest.TestCase):
         if app_id not in self.ledger.boxes:
             self.ledger.boxes[app_id] = {}
 
-    # TODO: Delete setters
-    def set_box_account_state(self, app_id, address, locked_amount, lock_end_time, first_index, last_index):
-        assert (lock_end_time % WEEK) == 0
-        self.init_app_boxes(app_id)
-        self.ledger.boxes[app_id][decode_address(address)] = itob(locked_amount) + itob(lock_end_time) + itob(first_index) + itob(last_index)
-
-    def set_box_account_power(self, app_id, address, index, locked_amount, locked_round, start_time, end_time, valid_until=0):
-        assert (start_time % DAY) == 0
-        assert (end_time % WEEK) == 0
-        self.init_app_boxes(app_id)
-        self.ledger.boxes[app_id][decode_address(address) + itob(index)] = itob(locked_amount) + itob(locked_round) + itob(start_time) + itob(end_time) + itob(valid_until)
-
     def set_box_total_power(self, app_id, index, bias, timestamp, slope, cumulative_power):
         self.init_app_boxes(app_id)
 
@@ -217,45 +212,15 @@ class BaseTestCase(unittest.TestCase):
         data[start:end] = reward_history
         self.ledger.boxes[app_id][box_name] = bytes(data)
 
-    def set_box_slope_change(self, app_id, timestamp, slope_delta):
-        assert (timestamp % WEEK) == 0
-        self.init_app_boxes(app_id)
-        self.ledger.boxes[app_id][SLOPE_CHANGES + itob(timestamp)] = itob(slope_delta, 16)
-
-    def init_global_indexes(self, app_id, index):
-        self.ledger.global_states[app_id][b'first_index'] = index
-        self.ledger.global_states[app_id][b'last_index'] = index
-
-    def set_box_proposal(self, app_id, proposal_id, creation_time, voting_start_time, voting_end_time, option_count, vote_count=0, is_cancelled=False, is_executed=False, proposer=ZERO_ADDRESS, votes=None):
-        self.init_app_boxes(app_id)
-
-        if votes is None:
-            votes = [0] * MAX_OPTION_COUNT
-
-        box = [
-            itob(creation_time),
-            itob(voting_start_time),
-            itob(voting_end_time),
-            itob(option_count),
-            itob(vote_count),
-            itob(bool(is_cancelled)),
-            itob(bool(is_executed)),
-            decode_address(proposer),
-            b"".join([itob(vote) for vote in votes])
-        ]
-        value = b"".join(box)
-
-        self.ledger.boxes[app_id][PROPOSALS + proposal_id] = value
-
 class LockingAppMixin:
 
-    def create_checkpoints(self, block_timestamp, app_id):
+    def create_checkpoints(self, user_address, user_sk, block_timestamp, app_id):
         while True:
-            txn_group = self.get_create_checkpoints_txn_group(self.user_address, block_timestamp, app_id)
+            txn_group = self.get_create_checkpoints_txn_group(user_address, block_timestamp, app_id)
             if not txn_group:
                 break
             transaction.assign_group_id(txn_group)
-            signed_txns = sign_txns(txn_group, self.user_sk)
+            signed_txns = sign_txns(txn_group, user_sk)
             self.ledger.eval_transactions(signed_txns, block_timestamp=block_timestamp)
 
     def get_create_lock_txn_group(self, user_address, locked_amount, lock_end_timestamp, app_id):

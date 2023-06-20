@@ -1,9 +1,10 @@
 from datetime import datetime
+from pprint import pprint
 from zoneinfo import ZoneInfo
 
 from algosdk.encoding import encode_address, decode_address
 
-from tests.constants import TOTAL_POWERS, SLOPE_CHANGES, MAX_LOCK_TIME, DAY, WEEK, PROPOSALS, MAX_OPTION_COUNT, TOTAL_POWER_BOX_ARRAY_LEN, TWO_TO_THE_64, ACCOUNT_POWER_BOX_ARRAY_LEN, ACCOUNT_POWER_SIZE, TOTAL_POWER_SIZE, REWARD_HISTORY_SIZE, REWARD_HISTORY_BOX_ARRAY_LEN, REWARD_HISTORY
+from tests.constants import TOTAL_POWERS, SLOPE_CHANGES, MAX_LOCK_TIME, DAY, WEEK, PROPOSAL_BOX_PREFIX, TOTAL_POWER_BOX_ARRAY_LEN, TWO_TO_THE_64, ACCOUNT_POWER_BOX_ARRAY_LEN, ACCOUNT_POWER_SIZE, TOTAL_POWER_SIZE, REWARD_HISTORY_SIZE, REWARD_HISTORY_BOX_ARRAY_LEN, REWARD_HISTORY, VOTE_BOX_PREFIX, ATTENDANCE_BOX_PREFIX
 
 
 def itob(value, length=8):
@@ -83,20 +84,15 @@ def parse_box_slope_change(raw_box):
 
 def parse_box_proposal(raw_box):
     data = dict(
-        creation_time=btoi(raw_box[:8]),
-        voting_start_time=btoi(raw_box[8:16]),
-        voting_end_time=btoi(raw_box[16:24]),
-        option_count=btoi(raw_box[24:32]),
-        vote_count=btoi(raw_box[32:40]),
-        is_cancelled=btoi(raw_box[40:48]),
-        is_executed=btoi(raw_box[48:56]),
-        proposer=encode_address(raw_box[56:88]),
-        votes=raw_box[88:216]
+        index=btoi(raw_box[:8]),
+        creation_timestamp=btoi(raw_box[8:16]),
+        voting_start_timestamp=btoi(raw_box[16:24]),
+        voting_end_timestamp=btoi(raw_box[24:32]),
+        voting_power=btoi(raw_box[32:40]),
+        vote_count=btoi(raw_box[40:48]),
+        is_cancelled=btoi(raw_box[48:56]),
+        is_executed=btoi(raw_box[56:64]),
     )
-    data["creation_date"] = datetime.fromtimestamp(data["creation_time"], ZoneInfo("UTC")).date().isoformat()
-    data["voting_start_date"] = datetime.fromtimestamp(data["voting_start_time"], ZoneInfo("UTC")).date().isoformat()
-    data["voting_end_date"] = datetime.fromtimestamp(data["voting_end_time"], ZoneInfo("UTC")).date().isoformat()
-    data[f"vote_counts"] = [btoi(data["votes"][i * 8: (i + 1) * 8]) for i in range(MAX_OPTION_COUNT)]
     return data
 
 def parse_box_reward_history(raw_box):
@@ -129,6 +125,20 @@ def print_boxes(boxes):
             dt = datetime.fromtimestamp(timestamp, ZoneInfo("UTC"))
             print("SlopeChange" + f"_{btoi(key[len(SLOPE_CHANGES):])}")
             print("-", dt, parse_box_slope_change(value))
+        elif key.startswith(PROPOSAL_BOX_PREFIX):
+            proposal_id = btoi(key[len(PROPOSAL_BOX_PREFIX):])
+            print(f"PROPOSALS {proposal_id}")
+            pprint(parse_box_proposal(value))
+        elif key.startswith(VOTE_BOX_PREFIX) and len(key) == 17:
+            proposal_id = btoi(key[1:9])
+            asset_id = btoi(key[9:17])
+            vote_amount = btoi(value)
+            print(f"Proposal {proposal_id} - Asset ID {asset_id}", vote_amount)
+        elif key.startswith(ATTENDANCE_BOX_PREFIX) and len(key) == 41:
+            address = encode_address(key[1:33])
+            box_index = btoi(key[33:])
+            attendance_array = [v for v in value]
+            print(f"ATTENDANCE {address}:{box_index}", attendance_array)
         elif len(value) == 1008:
             powers = parse_box_account_power(value)
             print(encode_address(key[:32]) + f"_{btoi(key[32:])}")
@@ -137,9 +147,6 @@ def print_boxes(boxes):
         elif len(value) == 24:
             print(encode_address(key))
             print(parse_box_account_state(value))
-        elif PROPOSALS in key:
-            proposal_id = btoi(key[len(PROPOSALS):])
-            print(f"PROPOSALS {proposal_id}", parse_box_proposal(value))
 
 # def parse_global_state():
 #     {
