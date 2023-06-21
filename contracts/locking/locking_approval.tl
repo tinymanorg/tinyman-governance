@@ -368,25 +368,25 @@ block main:
 
     block get_total_tiny_power_at:
         int timestamp = btoi(Txn.ApplicationArgs[1])
-        int index = btoi(Txn.ApplicationArgs[2])
+        int total_power_index = btoi(Txn.ApplicationArgs[2])
         int tiny_power = 0
-        assert(index < app_global_get(TOTAL_POWER_COUNT_KEY))
+        assert(total_power_index < app_global_get(TOTAL_POWER_COUNT_KEY))
         assert(timestamp <= Global.LatestTimestamp)
 
-        TotalPower total_power = get_total_power(index)
+        TotalPower total_power = get_total_power(total_power_index)
         # Ensure that the latest checkpoint belongs to the same week so the slope is not changed.
         assert((total_power.timestamp / WEEK) == (timestamp / WEEK))
     
         if total_power.timestamp <= timestamp:
-            if (index + 1) < app_global_get(TOTAL_POWER_COUNT_KEY):
-                TotalPower next_total_power = get_total_power(index + 1)
+            if (total_power_index + 1) < app_global_get(TOTAL_POWER_COUNT_KEY):
+                TotalPower next_total_power = get_total_power(total_power_index + 1)
                 assert(timestamp < next_total_power.timestamp)
             end
 
             tiny_power = get_power(total_power.bias, total_power.slope, (timestamp - total_power.timestamp))
         else:
             # Index must be 0, it indicates that the given timestamp predates the first checkpoint.
-            assert(!index)
+            assert(!total_power_index)
         end
 
         log(itob(tiny_power))

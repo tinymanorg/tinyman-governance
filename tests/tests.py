@@ -7,7 +7,7 @@ from algosdk.logic import get_application_address
 
 from tests.common import BaseTestCase
 from tests.constants import TOTAL_POWERS, DAY, SLOPE_CHANGES, WEEK, ACCOUNT_STATE_SIZE, ACCOUNT_POWER_BOX_SIZE, SLOPE_CHANGE_SIZE, ACCOUNT_POWER_BOX_ARRAY_LEN, TOTAL_POWER_BOX_ARRAY_LEN, TOTAL_POWER_BOX_SIZE
-from tests.utils import itob, get_start_timestamp_of_week, parse_box_account_state, get_latest_checkpoint_indexes, get_latest_checkpoint_timestamp, get_required_minimum_balance_of_box, get_latest_account_power_indexes, get_account_power_index_at, get_total_power_index_at
+from tests.utils import itob, get_start_timestamp_of_week, parse_box_account_state, get_latest_total_powers_indexes, get_latest_checkpoint_timestamp, get_required_minimum_balance_of_box, get_latest_account_power_indexes, get_account_power_index_at, get_total_power_index_at
 
 
 def get_budget_increase_txn(sender, sp, index, boxes):
@@ -40,7 +40,7 @@ class LockingTestCase(BaseTestCase):
         self.ledger.set_account_balance(self.user_3_address, 100_000_000)
 
     def get_create_lock_txn_group(self, user_address, locked_amount, lock_end_timestamp, app_id):
-        latest_total_power_box_index, total_power_array_index = get_latest_checkpoint_indexes(self.ledger, app_id)
+        latest_total_power_box_index, total_power_array_index = get_latest_total_powers_indexes(self.ledger, app_id)
 
         account_state_box_name = decode_address(user_address)
         total_power_box_name = TOTAL_POWERS + itob(latest_total_power_box_index)
@@ -102,7 +102,7 @@ class LockingTestCase(BaseTestCase):
 
     def get_create_checkpoints_txn_group(self, user_address, block_timestamp, app_id):
         # while True:
-        box_index, array_index = get_latest_checkpoint_indexes(self.ledger, app_id)
+        box_index, array_index = get_latest_total_powers_indexes(self.ledger, app_id)
         latest_checkpoint_timestamp = get_latest_checkpoint_timestamp(self.ledger, app_id)
         slope_change_timestamp = get_start_timestamp_of_week(latest_checkpoint_timestamp + WEEK)
 
@@ -148,7 +148,7 @@ class LockingTestCase(BaseTestCase):
         return txn_group
 
     def get_increase_lock_amount_txn_group(self, user_address, locked_amount, lock_end_timestamp, block_timestamp, app_id):
-        total_powers_box_index, total_powers_array_index = get_latest_checkpoint_indexes(self.ledger, app_id)
+        total_powers_box_index, total_powers_array_index = get_latest_total_powers_indexes(self.ledger, app_id)
         account_power_box_index, account_power_array_index = get_latest_account_power_indexes(self.ledger, app_id, user_address)
         start_timestamp_of_week = get_start_timestamp_of_week(block_timestamp)
 
@@ -210,7 +210,7 @@ class LockingTestCase(BaseTestCase):
         return txn_group
 
     def get_extend_lock_end_time_txn_group(self, user_address, old_lock_end_timestamp, new_lock_end_timestamp, block_timestamp, app_id):
-        total_powers_box_index, total_powers_array_index = get_latest_checkpoint_indexes(self.ledger, app_id)
+        total_powers_box_index, total_powers_array_index = get_latest_total_powers_indexes(self.ledger, app_id)
         account_power_box_index, account_power_array_index = get_latest_account_power_indexes(self.ledger, app_id, user_address)
         start_timestamp_of_week = get_start_timestamp_of_week(block_timestamp)
 
@@ -330,7 +330,7 @@ class LockingTestCase(BaseTestCase):
         return txn_group
 
     def get_get_total_tiny_power_txn_group(self, user_address, app_id):
-        total_powers_box_index, _ = get_latest_checkpoint_indexes(self.ledger, app_id)
+        total_powers_box_index, _ = get_latest_total_powers_indexes(self.ledger, app_id)
         txn_group = [
             transaction.ApplicationNoOpTxn(
                 sender=user_address,

@@ -7,6 +7,9 @@ locking_clear_state_program = TealishProgram('contracts/locking/locking_clear_st
 staking_voting_approval_program = TealishProgram('contracts/staking_voting/staking_voting_approval.tl')
 staking_voting_clear_state_program = TealishProgram('contracts/staking_voting/staking_voting_clear_state.tl')
 
+proposal_voting_approval_program = TealishProgram('contracts/proposal_voting/proposal_voting_approval.tl')
+proposal_voting_clear_state_program = TealishProgram('contracts/proposal_voting/proposal_voting_clear_state.tl')
+
 rewards_approval_program = TealishProgram('contracts/rewards/rewards_approval.tl')
 rewards_clear_state_program = TealishProgram('contracts/rewards/rewards_clear_state.tl')
 

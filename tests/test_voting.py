@@ -8,7 +8,7 @@ from algosdk.logic import get_application_address
 
 from tests.common import BaseTestCase, LockingAppMixin, get_budget_increase_txn
 from tests.constants import PROPOSAL_BOX_PREFIX, DAY, WEEK, ACCOUNT_POWER_BOX_ARRAY_LEN, ATTENDANCE_BOX_PREFIX
-from tests.utils import get_start_timestamp_of_week, print_boxes, itob, sign_txns, get_account_power_index_at, parse_box_proposal, btoi, get_required_minimum_balance_of_box
+from tests.utils import get_start_timestamp_of_week, print_boxes, itob, sign_txns, get_account_power_index_at, parse_box_staking_proposal, btoi, get_required_minimum_balance_of_box
 
 
 class StakingVotingTestCase(LockingAppMixin, BaseTestCase):
@@ -39,7 +39,7 @@ class StakingVotingTestCase(LockingAppMixin, BaseTestCase):
         account_power_box_index = account_power_index // ACCOUNT_POWER_BOX_ARRAY_LEN
 
         proposal_box_name = PROPOSAL_BOX_PREFIX + proposal_id
-        proposal_index = parse_box_proposal(self.ledger.boxes[self.voting_app_id][proposal_box_name])["index"]
+        proposal_index = parse_box_staking_proposal(self.ledger.boxes[self.voting_app_id][proposal_box_name])["index"]
         account_attendance_box_index = proposal_index // 1024
         account_attendance_box_name = ATTENDANCE_BOX_PREFIX + decode_address(user_address) + itob(account_attendance_box_index)
         boxes=[
@@ -95,8 +95,8 @@ class StakingVotingTestCase(LockingAppMixin, BaseTestCase):
     @classmethod
     def setUpClass(cls) -> None:
         super().setUpClass()
-        cls.locking_app_id = 9000
-        cls.voting_app_id = 9876
+        cls.locking_app_id = 6000
+        cls.voting_app_id = 8000
         cls.app_creator_sk, cls.app_creator_address = generate_account()
         cls.locking_app_creation_timestamp = int(datetime(year=2022, month=3, day=1, tzinfo=ZoneInfo("UTC")).timestamp())
 
@@ -110,7 +110,7 @@ class StakingVotingTestCase(LockingAppMixin, BaseTestCase):
         user_sk, user_address = generate_account()
         self.ledger.set_account_balance(user_address, 1_000_000)
 
-        self.create_voting_app(self.voting_app_id, self.app_creator_address, self.locking_app_id)
+        self.create_staking_voting_app(self.voting_app_id, self.app_creator_address, self.locking_app_id)
         self.ledger.set_account_balance(get_application_address(self.voting_app_id), 1_000_000)
 
         block_timestamp = self.locking_app_creation_timestamp + 2 * WEEK
@@ -129,7 +129,7 @@ class StakingVotingTestCase(LockingAppMixin, BaseTestCase):
         self.ledger.set_account_balance(user_2_address, 10_000_000)
         self.ledger.set_account_balance(get_application_address(self.voting_app_id), 1_000_000)
 
-        self.create_voting_app(self.voting_app_id, self.app_creator_address, self.locking_app_id)
+        self.create_staking_voting_app(self.voting_app_id, self.app_creator_address, self.locking_app_id)
         self.ledger.set_account_balance(get_application_address(self.voting_app_id), 1_000_000)
 
         block_timestamp = self.locking_app_creation_timestamp + 2 * WEEK

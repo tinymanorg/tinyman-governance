@@ -18,8 +18,8 @@ class RewardsTestCase(LockingAppMixin, BaseTestCase):
     @classmethod
     def setUpClass(cls) -> None:
         super().setUpClass()
-        cls.locking_app_id = 9000
-        cls.rewards_app_id = 10999
+        cls.locking_app_id = 6000
+        cls.rewards_app_id = 7000
         cls.app_creator_sk, cls.app_creator_address = generate_account()
         cls.user_sk, cls.user_address = generate_account()
         # cls.user_2_sk, cls.user_2_address = generate_account()

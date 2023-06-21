@@ -11,7 +11,7 @@ from algosdk.logic import get_application_address
 
 from tests.common import BaseTestCase, LockingAppMixin, get_budget_increase_txn
 from tests.constants import TOTAL_POWERS, DAY, SLOPE_CHANGES, locking_approval_program, locking_clear_state_program, WEEK, MAX_LOCK_TIME, LOCKING_APP_MINIMUM_BALANCE_REQUIREMENT, TWO_TO_THE_64
-from tests.utils import itob, sign_txns, parse_box_total_power, get_start_timestamp_of_week, parse_box_account_power, parse_box_account_state, parse_box_slope_change, get_slope, btoi, get_latest_checkpoint_indexes, get_latest_checkpoint_timestamp, get_bias
+from tests.utils import itob, sign_txns, parse_box_total_power, get_start_timestamp_of_week, parse_box_account_power, parse_box_account_state, parse_box_slope_change, get_slope, btoi, get_latest_total_powers_indexes, get_latest_checkpoint_timestamp, get_bias
 
 
 class LockingTestCase(LockingAppMixin, BaseTestCase):
@@ -1347,7 +1347,7 @@ class LockingTestCase(LockingAppMixin, BaseTestCase):
         print("Power", btoi(block[b'txns'][0][b'dt'][b'lg'][-1]))
 
         while True:
-            box_index, _ = get_latest_checkpoint_indexes(self.ledger, self.app_id)
+            box_index, _ = get_latest_total_powers_indexes(self.ledger, self.app_id)
             latest_checkpoint_timestamp = get_latest_checkpoint_timestamp(self.ledger, self.app_id)
             slope_change_timestamp = get_start_timestamp_of_week(latest_checkpoint_timestamp + WEEK)
 
@@ -1383,7 +1383,7 @@ class LockingTestCase(LockingAppMixin, BaseTestCase):
             # print_boxes(self.ledger.boxes[self.app_id])
 
         # Create lock again
-        box_index, _ = get_latest_checkpoint_indexes(self.ledger, self.app_id)
+        box_index, _ = get_latest_total_powers_indexes(self.ledger, self.app_id)
         lock_end_timestamp = get_start_timestamp_of_week(int((block_datetime + timedelta(days=20)).timestamp()))
         txn_group = [
             transaction.AssetTransferTxn(

@@ -82,7 +82,7 @@ def parse_box_slope_change(raw_box):
     )
 
 
-def parse_box_proposal(raw_box):
+def parse_box_staking_proposal(raw_box):
     data = dict(
         index=btoi(raw_box[:8]),
         creation_timestamp=btoi(raw_box[8:16]),
@@ -90,8 +90,26 @@ def parse_box_proposal(raw_box):
         voting_end_timestamp=btoi(raw_box[24:32]),
         voting_power=btoi(raw_box[32:40]),
         vote_count=btoi(raw_box[40:48]),
-        is_cancelled=btoi(raw_box[48:56]),
-        is_executed=btoi(raw_box[56:64]),
+        is_cancelled=btoi(raw_box[48:49]),
+    )
+    return data
+
+def parse_box_proposal(raw_box):
+    data = dict(
+        index=btoi(raw_box[:8]),
+        creation_timestamp=btoi(raw_box[8:16]),
+        voting_start_timestamp=btoi(raw_box[16:24]),
+        voting_end_timestamp=btoi(raw_box[24:32]),
+        snapshot_total_voting_power=btoi(raw_box[32:40]),
+        vote_count=btoi(raw_box[40:48]),
+        quorum_numerator=btoi(raw_box[48:56]),
+        against_vote_amount=btoi(raw_box[56:64]),
+        for_vote_amount=btoi(raw_box[64:72]),
+        abstain_vote_amount=btoi(raw_box[72:80]),
+        is_cancelled=btoi(raw_box[80:81]),
+        is_executed=btoi(raw_box[81:82]),
+        is_quorum_reached=btoi(raw_box[82:83]),
+        proposer=encode_address(raw_box[83:115]),
     )
     return data
 
@@ -126,9 +144,16 @@ def print_boxes(boxes):
             print("SlopeChange" + f"_{btoi(key[len(SLOPE_CHANGES):])}")
             print("-", dt, parse_box_slope_change(value))
         elif key.startswith(PROPOSAL_BOX_PREFIX):
-            proposal_id = btoi(key[len(PROPOSAL_BOX_PREFIX):])
-            print(f"PROPOSALS {proposal_id}")
-            pprint(parse_box_proposal(value))
+            if len(value) == 49:
+                proposal_id = btoi(key[len(PROPOSAL_BOX_PREFIX):])
+                print(f"PROPOSALS {proposal_id}")
+                pprint(parse_box_staking_proposal(value))
+            elif len(value) == 115:
+                proposal_id = btoi(key[len(PROPOSAL_BOX_PREFIX):])
+                print(f"PROPOSALS {proposal_id}")
+                pprint(parse_box_proposal(value))
+            else:
+                raise NotImplementedError()
         elif key.startswith(VOTE_BOX_PREFIX) and len(key) == 17:
             proposal_id = btoi(key[1:9])
             asset_id = btoi(key[9:17])
@@ -148,15 +173,7 @@ def print_boxes(boxes):
             print(encode_address(key))
             print(parse_box_account_state(value))
 
-# def parse_global_state():
-#     {
-#         b'total_power_count': 4,
-#         b'tiny_asset_id': self.tiny_asset_id,
-#         b'total_locked_amount': amount
-#     }
-
-
-def get_latest_checkpoint_indexes(ledger, app_id):
+def get_latest_total_powers_indexes(ledger, app_id):
     total_power_count = ledger.global_states[app_id][b'total_power_count']
 
     latest_index = total_power_count - 1
@@ -241,7 +258,7 @@ def get_reward_history_index_at(ledger, app_id, timestamp):
 
 
 def get_latest_checkpoint_timestamp(ledger, app_id):
-    box_index, array_index = get_latest_checkpoint_indexes(ledger, app_id)
+    box_index, array_index = get_latest_total_powers_indexes(ledger, app_id)
     boxes = ledger.boxes[app_id]
     timestamp = parse_box_total_power(boxes[TOTAL_POWERS + itob(box_index)])[array_index]["timestamp"]
     return timestamp

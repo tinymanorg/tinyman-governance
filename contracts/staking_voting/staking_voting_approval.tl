@@ -10,8 +10,7 @@ struct Proposal:
     voting_end_timestamp: int
     voting_power: int
     vote_count: int
-    is_cancelled: int
-    is_executed: int
+    is_cancelled: bytes[1]
 end
 
 # Name: <proposal_index><asset_id>
@@ -65,8 +64,8 @@ block create_app:
     app_global_put(LOCKING_APP_ID_KEY, Txn.Applications[1])
     app_global_put(PROPOSAL_ID_COUNTER_KEY, 0)
 
-    app_global_put(VOTING_DELAY_KEY, 1)
-    app_global_put(VOTING_DURATION_KEY, (7 * DAY))
+    app_global_put(VOTING_DELAY_KEY, 2)
+    app_global_put(VOTING_DURATION_KEY, 7)
 
     app_global_put(MANAGER_KEY, Txn.Sender)
     app_global_put(PROPOSAL_MANAGER_KEY, Txn.Sender)
@@ -83,6 +82,7 @@ block main:
     switch Txn.ApplicationArgs[0]:
         "create_proposal": create_proposal
         "cast_vote": cast_vote
+        "cancel_proposal": cancel_proposal
         "set_manager": set_manager
         "set_proposal_manager": set_proposal_manager
         "increase_budget": increase_budget
@@ -112,6 +112,20 @@ block main:
         exit(1)
     end
 
+    block cancel_proposal:
+        bytes user_address = Txn.Sender
+        assert(user_address == app_global_get(PROPOSAL_MANAGER_KEY))
+
+        bytes proposal_id = Txn.ApplicationArgs[1]
+        bytes proposal_box_name = concat(PROPOSAL_BOX_PREFIX, proposal_id)
+        box<Proposal> proposal = OpenBox(proposal_box_name)
+        assert(proposal.is_cancelled == BIT_ZERO)
+        proposal.is_cancelled = BIT_ONE
+
+        # TODO: Add event log
+        exit(1)
+    end
+
     block create_proposal:
         bytes user_address = Txn.Sender
         assert(user_address == app_global_get(MANAGER_KEY))
@@ -122,7 +136,7 @@ block main:
         assert(!proposal_exists(proposal_id))
 
         int voting_start_timestamp = get_start_timestamp_of_day(Global.LatestTimestamp) + (app_global_get(VOTING_DELAY_KEY) * DAY)
-        int voting_end_timestamp = voting_start_timestamp + app_global_get(VOTING_DURATION_KEY)
+        int voting_end_timestamp = voting_start_timestamp + (app_global_get(VOTING_DURATION_KEY) * DAY)
 
         box<Proposal> proposal = CreateBox(concat(PROPOSAL_BOX_PREFIX, proposal_id))
         proposal.index = app_global_get(PROPOSAL_ID_COUNTER_KEY)
@@ -135,7 +149,6 @@ block main:
         # asa_count: int
         # vote_count: int
         # is_cancelled: int
-        # is_executed: int
         
         app_global_put(PROPOSAL_ID_COUNTER_KEY, app_global_get(PROPOSAL_ID_COUNTER_KEY) + 1)
 
@@ -148,7 +161,7 @@ block main:
         bytes proposal_id = Txn.ApplicationArgs[1]
         bytes votes_as_percentage = Txn.ApplicationArgs[2]
         bytes asset_ids = Txn.ApplicationArgs[3]
-        bytes account_power_box_index = Txn.ApplicationArgs[4]
+        bytes account_power_index = Txn.ApplicationArgs[4]
 
         # vote count and asset count must be equal
         assert(len(votes_as_percentage))
@@ -159,11 +172,17 @@ block main:
         
         bytes proposal_box_name = concat(PROPOSAL_BOX_PREFIX, proposal_id)
         box<Proposal> proposal = OpenBox(proposal_box_name)
-        assert(proposal.voting_end_timestamp > Global.LatestTimestamp)
+
+        # Proposal Active
+        # proposal.voting_start_timestamp <= Global.LatestTimestamp < proposal.voting_end_timestamp
+        assert(proposal.voting_start_timestamp <= Global.LatestTimestamp)
+        assert(Global.LatestTimestamp < proposal.voting_end_timestamp)
+        assert(proposal.is_cancelled == BIT_ZERO)
+
         int proposal_index = proposal.index
         set_user_as_voted(user_address, proposal_index)
 
-        int account_voting_power = get_account_voting_power(user_address, proposal.voting_start_timestamp, account_power_box_index)
+        int account_voting_power = get_account_voting_power(user_address, proposal.voting_start_timestamp, account_power_index)
         bytes votes = calculate_votes(option_count, votes_as_percentage, account_voting_power)
 
         # Update proposal
@@ -197,32 +216,16 @@ block main:
     end
 end
 
-func get_account_voting_power(address: bytes, snapshot_timestamp: int, account_power_box_index: bytes) int:
+func get_account_voting_power(address: bytes, snapshot_timestamp: int, account_power_index: bytes) int:
     inner_txn:
         TypeEnum: Appl
         ApplicationID: app_global_get(LOCKING_APP_ID_KEY)
         ApplicationArgs[0]: "get_tiny_power_of_at"
         ApplicationArgs[1]: itob(snapshot_timestamp)
-        ApplicationArgs[2]: account_power_box_index
+        ApplicationArgs[2]: account_power_index
         Accounts[0]: address
         Fee: 0
     end
-
-    # tiny_power+delegatee
-    int voting_power = extract_uint64(Itxn.LastLog, 0)
-    return voting_power
-end
-
-func get_total_voting_power(snapshot_timestamp: int) int:
-    inner_txn:
-        TypeEnum: Appl
-        ApplicationID: app_global_get(LOCKING_APP_ID_KEY)
-        ApplicationArgs[0]: "get_total_tiny_power_at"
-        ApplicationArgs[1]: itob(snapshot_timestamp)
-        Fee: 0
-    end
-
-    # tiny_power+delegatee
     int voting_power = extract_uint64(Itxn.LastLog, 0)
     return voting_power
 end
@@ -268,8 +271,4 @@ end
 
 func get_start_timestamp_of_day(timestamp: int) int:
     return ((timestamp / DAY) * DAY)
-end
-
-func get_start_timestamp_of_next_day(timestamp: int) int:
-    return (((timestamp / DAY) * DAY) + DAY)
 end
