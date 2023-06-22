@@ -4,7 +4,11 @@ from zoneinfo import ZoneInfo
 
 from algosdk.encoding import encode_address, decode_address
 
-from tests.constants import TOTAL_POWERS, SLOPE_CHANGES, MAX_LOCK_TIME, DAY, WEEK, PROPOSAL_BOX_PREFIX, TOTAL_POWER_BOX_ARRAY_LEN, TWO_TO_THE_64, ACCOUNT_POWER_BOX_ARRAY_LEN, ACCOUNT_POWER_SIZE, TOTAL_POWER_SIZE, REWARD_HISTORY_SIZE, REWARD_HISTORY_BOX_ARRAY_LEN, REWARD_HISTORY, VOTE_BOX_PREFIX, ATTENDANCE_BOX_PREFIX
+from common.constants import DAY, WEEK
+from locking.constants import ACCOUNT_POWER_SIZE, TOTAL_POWER_SIZE, TOTAL_POWERS, SLOPE_CHANGES, TOTAL_POWER_COUNT_KEY, TOTAL_POWER_BOX_ARRAY_LEN, ACCOUNT_POWER_BOX_ARRAY_LEN, TWO_TO_THE_64, MAX_LOCK_TIME
+from proposal_voting.constants import PROPOSAL_BOX_PREFIX, ATTENDANCE_BOX_PREFIX
+from rewards.constants import REWARD_HISTORY_SIZE, REWARD_HISTORY_BOX_ARRAY_LEN, REWARD_HISTORY
+from staking_voting.constants import VOTE_BOX_PREFIX
 
 
 def itob(value, length=8):
@@ -31,11 +35,11 @@ def parse_box_account_state(raw_box):
 
 
 def parse_box_account_power(raw_box):
-    n = ACCOUNT_POWER_SIZE
-    rows = [raw_box[i:i+n] for i in range(0, len(raw_box), n)]
+    box_size = ACCOUNT_POWER_SIZE
+    rows = [raw_box[i:i + box_size] for i in range(0, len(raw_box), box_size)]
     powers = []
     for row in rows:
-        if row == (b'\x00' * n):
+        if row == (b'\x00' * box_size):
             break
 
         powers.append(
@@ -48,21 +52,14 @@ def parse_box_account_power(raw_box):
             )
         )
     return powers
-    # data = dict(
-    #     bias=btoi(raw_box[:8]),
-    #     timestamp=btoi(raw_box[8:16]),
-    #     slope=btoi(raw_box[16:32]),
-    # )
-    # data["datetime"] = datetime.fromtimestamp(data["timestamp"], ZoneInfo("UTC"))
-    # return data
 
 
 def parse_box_total_power(raw_box):
-    n = TOTAL_POWER_SIZE
-    rows = [raw_box[i:i+n] for i in range(0, len(raw_box), n)]
+    box_size = TOTAL_POWER_SIZE
+    rows = [raw_box[i:i + box_size] for i in range(0, len(raw_box), box_size)]
     powers = []
     for row in rows:
-        if row == (b'\x00' * n):
+        if row == (b'\x00' * box_size):
             break
 
         powers.append(
@@ -94,6 +91,7 @@ def parse_box_staking_proposal(raw_box):
     )
     return data
 
+
 def parse_box_proposal(raw_box):
     data = dict(
         index=btoi(raw_box[:8]),
@@ -113,12 +111,13 @@ def parse_box_proposal(raw_box):
     )
     return data
 
+
 def parse_box_reward_history(raw_box):
-    n = REWARD_HISTORY_SIZE
-    rows = [raw_box[i:i+n] for i in range(0, len(raw_box), n)]
+    box_size = REWARD_HISTORY_SIZE
+    rows = [raw_box[i:i + box_size] for i in range(0, len(raw_box), box_size)]
     reward_histories = []
     for row in rows:
-        if row == (b'\x00' * n):
+        if row == (b'\x00' * box_size):
             break
 
         reward_histories.append(
@@ -173,14 +172,17 @@ def print_boxes(boxes):
             print(encode_address(key))
             print(parse_box_account_state(value))
 
+
 def get_latest_total_powers_indexes(ledger, app_id):
-    total_power_count = ledger.global_states[app_id][b'total_power_count']
+    total_power_count = ledger.global_states[app_id][TOTAL_POWER_COUNT_KEY]
 
     latest_index = total_power_count - 1
     box_index = latest_index // TOTAL_POWER_BOX_ARRAY_LEN
     array_index = latest_index % TOTAL_POWER_BOX_ARRAY_LEN
+    is_full = not total_power_count % TOTAL_POWER_BOX_ARRAY_LEN
 
-    return box_index, array_index
+    return box_index, array_index, is_full
+
 
 def get_latest_account_power_indexes(ledger, app_id, user_address):
     account_state = parse_box_account_state(ledger.boxes[app_id][decode_address(user_address)])
@@ -189,8 +191,10 @@ def get_latest_account_power_indexes(ledger, app_id, user_address):
 
     box_index = latest_index // ACCOUNT_POWER_BOX_ARRAY_LEN
     array_index = latest_index % ACCOUNT_POWER_BOX_ARRAY_LEN
+    is_full = not power_count % ACCOUNT_POWER_BOX_ARRAY_LEN
 
-    return box_index, array_index
+    return box_index, array_index, is_full
+
 
 def get_account_power_index_at(ledger, app_id, user_address, timestamp):
     account_power_index = None
@@ -214,9 +218,10 @@ def get_account_power_index_at(ledger, app_id, user_address, timestamp):
 
     return account_power_index
 
+
 def get_total_power_index_at(ledger, app_id, timestamp):
     total_power_index = None
-    total_power_count = ledger.global_states[app_id][b'total_power_count']
+    total_power_count = ledger.global_states[app_id][TOTAL_POWER_COUNT_KEY]
 
     box_count = total_power_count // TOTAL_POWER_BOX_ARRAY_LEN
     box_count += bool(total_power_count % TOTAL_POWER_BOX_ARRAY_LEN)
@@ -256,9 +261,8 @@ def get_reward_history_index_at(ledger, app_id, timestamp):
     return reward_history_index
 
 
-
 def get_latest_checkpoint_timestamp(ledger, app_id):
-    box_index, array_index = get_latest_total_powers_indexes(ledger, app_id)
+    box_index, array_index, _ = get_latest_total_powers_indexes(ledger, app_id)
     boxes = ledger.boxes[app_id]
     timestamp = parse_box_total_power(boxes[TOTAL_POWERS + itob(box_index)])[array_index]["timestamp"]
     return timestamp
@@ -267,19 +271,23 @@ def get_latest_checkpoint_timestamp(ledger, app_id):
 def get_slope(locked_amount):
     return locked_amount * TWO_TO_THE_64 // MAX_LOCK_TIME
 
+
 def get_bias(slope, time_delta):
     assert time_delta >= 0
     return (slope * time_delta) // TWO_TO_THE_64
 
+
 def get_voting_power(slope, remaining_time):
-    return slope * remaining_time // 2**64
+    return slope * remaining_time // 2 ** 64
 
 
 def get_start_time_of_day(value):
     return (value // DAY) * DAY
 
+
 def get_start_timestamp_of_week(value):
     return (value // WEEK) * WEEK
 
+
 def get_required_minimum_balance_of_box(box_name, box_size):
-    return 2500 + 400 * (len(box_name) + box_size)
+    return 2_500 + 400 * (len(box_name) + box_size)

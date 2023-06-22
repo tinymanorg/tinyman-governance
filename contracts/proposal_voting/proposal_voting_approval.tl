@@ -22,12 +22,10 @@ end
 
 # 24 * 60 * 60
 const int DAY = 86400
-const int MAX_OPTION_COUNT = 16
 const bytes BIT_ZERO = "\x00"
 const bytes BIT_ONE = "\x01"
 
 # Global States
-const bytes TINY_ASSET_ID_KEY = "tiny_asset_id"
 const bytes LOCKING_APP_ID_KEY = "locking_app_id"
 const bytes PROPOSAL_ID_COUNTER_KEY = "proposal_id_counter"
 const bytes VOTING_DELAY_KEY = "voting_delay"
@@ -38,12 +36,8 @@ const bytes MANAGER_KEY = "manager"
 const bytes PROPOSAL_MANAGER_KEY = "proposal_manager"
 
 # Box
-# abbreviation for 
 const bytes PROPOSAL_BOX_PREFIX = "p"
-const bytes VOTE_BOX_PREFIX = "v"
 const bytes ATTENDANCE_BOX_PREFIX = "a"
-
-const int PROPOSAL_ASSET_BOX_SIZE = 8
 const int ACCOUNT_ATTENDANCE_SHEET_BOX_SIZE = 24
 
 if !Txn.ApplicationID:
@@ -63,7 +57,6 @@ block fail:
 end
 
 block create_app:
-    app_global_put(TINY_ASSET_ID_KEY, Txn.Assets[0])
     app_global_put(LOCKING_APP_ID_KEY, Txn.Applications[1])
     app_global_put(PROPOSAL_ID_COUNTER_KEY, 0)
 

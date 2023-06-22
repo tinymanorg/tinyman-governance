@@ -1,14 +1,6 @@
 #pragma version 8
 #tealish version git+https://github.com/Hipo/tealish.git@483cb7a30912747814c5ee0ee0dd7a7b1684c5f5
 
-# Name: <address>
-# Size: 24 bytes
-struct AccountState:
-    latest_cumulat: int
-    lock_end_time: int
-    power_count: int
-end
-
 # Name: rh<box_index><array_index>
 # Size: 16 bytes
 struct RewardHistory:
@@ -21,22 +13,21 @@ end
 # 7 * DAY
 const int WEEK = 604800
 
-const bytes TWO_TO_THE_64 = "\x01\x00\x00\x00\x00\x00\x00\x00\x00"
-const bytes BYTE_ZERO_128 = "\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00"
+# Global states
 const bytes TINY_ASSET_ID_KEY = "tiny_asset_id"
 const bytes LOCKING_APP_ID_KEY = "locking_app_id"
 const bytes CREATION_TIMESTAMP_KEY = "creation_timestamp"
 const bytes REWARD_HISTORY_COUNT_KEY = "reward_history_count"
 const bytes MANAGER_KEY = "manager"
-const bytes REWARD_HISTORY = "rh"
 
 const bytes BIT_ZERO = "\x00"
 const bytes BIT_ONE = "\x01"
 
+# Boxes
+const bytes REWARD_HISTORY = "rh"
 const int REWARD_SHEET_BOX_SIZE = 1024
-
 const int REWARD_HISTORY_SIZE = 16
-const int REWARD_HISTORY_BOX_SIZE = 1024
+const int REWARD_HISTORY_BOX_SIZE = 256
 const int REWARD_HISTORY_BOX_ARRAY_LEN = 16
 
 if !Txn.ApplicationID:
@@ -98,6 +89,7 @@ block main:
         bytes total_power_index_2 = Txn.ApplicationArgs[5]
         int reward_amount_index = btoi(Txn.ApplicationArgs[6])
 
+        # Reward cycles are weekly. 
         assert(!(timestamp % WEEK))
         int end_timestamp = timestamp + WEEK
 
@@ -245,6 +237,11 @@ func check_and_save_claimed_reward(address: bytes, period_index: int):
 end
 
 func get_period_index(timestamp: int) int:
+    # TODO: Reward cycles may start 1 week after. Update the logic accordingly.
+    # int cycle_week = timestamp / WEEK
+    # int creation_week = app_global_get(CREATION_TIMESTAMP_KEY) / WEEK
+    # assert(cycle_week >= (creation_week + 1))
+
     return (timestamp / WEEK) - (app_global_get(CREATION_TIMESTAMP_KEY) / WEEK)
 end
 
