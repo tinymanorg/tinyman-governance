@@ -90,6 +90,8 @@ block main:
         "increase_budget": increase_budget
         "get_proposal": get_proposal
         "has_voted": has_voted
+        "cancel_proposal": cancel_proposal
+        "execute_proposal": execute_proposal
         "set_manager": set_manager
         "set_proposal_manager": set_proposal_manager
     end

@@ -78,9 +78,6 @@ block main:
         "set_proposal_manager": set_proposal_manager
         "increase_budget": increase_budget
     end
-        # TODO:
-        # "has_voted": has_voted
-        # "get_state": get_state
 
     block increase_budget:
         # Box read budget and opcode budget will be incread using this method.
