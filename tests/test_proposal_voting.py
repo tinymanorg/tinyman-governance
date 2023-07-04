@@ -4,14 +4,14 @@ from zoneinfo import ZoneInfo
 from algojig import LogicEvalError
 from algosdk import transaction
 from algosdk.account import generate_account
-from algosdk.encoding import decode_address
+from algosdk.encoding import decode_address, encode_address
 from algosdk.logic import get_application_address
 
 from common.constants import TINY_ASSET_ID, WEEK, DAY
 from common.utils import get_start_timestamp_of_week, itob, sign_txns, parse_box_proposal, get_start_time_of_day, get_bias, get_slope
 from locking.transactions import prepare_create_lock_txn_group, prepare_withdraw_txn_group, prepare_increase_lock_amount_txn_group
 from proposal_voting.constants import PROPOSAL_BOX_PREFIX
-from proposal_voting.transactions import prepare_create_proposal_txn_group, prepare_cast_vote_txn_group
+from proposal_voting.transactions import prepare_create_proposal_txn_group, prepare_cast_vote_txn_group, prepare_get_proposal_txn_group, prepare_cancel_proposal_txn_group, prepare_execute_proposal_txn_group, prepare_has_voted_txn_group
 from tests.common import BaseTestCase, LockingAppMixin, ProposalVotingAppMixin
 from common.constants import LOCKING_APP_ID, PROPOSAL_VOTING_APP_ID
 
@@ -337,3 +337,200 @@ class ProposalVotingTestCase(LockingAppMixin, ProposalVotingAppMixin, BaseTestCa
         proposal_box_name = PROPOSAL_BOX_PREFIX + proposal_id
         # TODO Calculation error (it is giving +1 result)
         self.assertEqual(parse_box_proposal(self.ledger.boxes[PROPOSAL_VOTING_APP_ID][proposal_box_name])["for_vote_amount"], bias)
+
+    def test_get_proposal(self):
+        user_sk, user_address = generate_account()
+
+        self.ledger.set_account_balance(user_address, 10_000_000)
+        self.ledger.set_account_balance(get_application_address(PROPOSAL_VOTING_APP_ID), 1_000_000)
+
+        self.create_proposal_voting_app(self.app_creator_address)
+        self.ledger.set_account_balance(get_application_address(PROPOSAL_VOTING_APP_ID), 1_000_000)
+
+        block_timestamp = self.locking_app_creation_timestamp + 2 * WEEK
+        self.create_checkpoints(user_address, user_sk, block_timestamp)
+
+        # Create lock
+        lock_end_timestamp = get_start_timestamp_of_week(block_timestamp) + 15 * WEEK
+        amount = 100_000_000
+        self.ledger.move(
+            amount,
+            asset_id=TINY_ASSET_ID,
+            sender=self.ledger.assets[TINY_ASSET_ID]["creator"],
+            receiver=user_address
+        )
+        txn_group = prepare_create_lock_txn_group(self.ledger, user_address=user_address, locked_amount=amount, lock_end_timestamp=lock_end_timestamp, sp=self.sp)
+        transaction.assign_group_id(txn_group)
+        signed_txns = sign_txns(txn_group, user_sk)
+        self.ledger.eval_transactions(signed_txns, block_timestamp=block_timestamp)
+
+        # Create proposal
+        proposal_id = itob(1) * 4
+        txn_group = prepare_create_proposal_txn_group(self.ledger, user_address, proposal_id, self.sp)
+        transaction.assign_group_id(txn_group)
+        signed_txns = sign_txns(txn_group, user_sk)
+        self.ledger.eval_transactions(signed_txns, block_timestamp=block_timestamp)
+
+        # Get Proposal Info
+        block_timestamp += 1
+        txn_group = prepare_get_proposal_txn_group(user_address, proposal_id, self.sp)
+        transaction.assign_group_id(txn_group)
+        signed_txns = sign_txns(txn_group, user_sk)
+        self.ledger.eval_transactions(signed_txns, block_timestamp=block_timestamp)
+
+    def test_has_voted(self):
+        user_sk, user_address = generate_account()
+
+        self.ledger.set_account_balance(user_address, 10_000_000)
+        self.ledger.set_account_balance(get_application_address(PROPOSAL_VOTING_APP_ID), 1_000_000)
+
+        self.create_proposal_voting_app(self.app_creator_address)
+        self.ledger.set_account_balance(get_application_address(PROPOSAL_VOTING_APP_ID), 1_000_000)
+
+        block_timestamp = self.locking_app_creation_timestamp + 2 * WEEK
+        self.create_checkpoints(user_address, user_sk, block_timestamp)
+
+        # Create lock
+        lock_end_timestamp = get_start_timestamp_of_week(block_timestamp) + 15 * WEEK
+        amount = 100_000_000
+        self.ledger.move(
+            amount,
+            asset_id=TINY_ASSET_ID,
+            sender=self.ledger.assets[TINY_ASSET_ID]["creator"],
+            receiver=user_address
+        )
+        txn_group = prepare_create_lock_txn_group(self.ledger, user_address=user_address, locked_amount=amount, lock_end_timestamp=lock_end_timestamp, sp=self.sp)
+        transaction.assign_group_id(txn_group)
+        signed_txns = sign_txns(txn_group, user_sk)
+        self.ledger.eval_transactions(signed_txns, block_timestamp=block_timestamp)
+
+        # Create proposal
+        proposal_id = itob(1) * 4
+        txn_group = prepare_create_proposal_txn_group(self.ledger, user_address, proposal_id, self.sp)
+        transaction.assign_group_id(txn_group)
+        signed_txns = sign_txns(txn_group, user_sk)
+        self.ledger.eval_transactions(signed_txns, block_timestamp=block_timestamp)
+
+        # Check if it has voted
+        block_timestamp += 1
+        txn_group = prepare_has_voted_txn_group(self.ledger, user_address, proposal_id, self.sp)
+        transaction.assign_group_id(txn_group)
+        signed_txns = sign_txns(txn_group, user_sk)
+        self.ledger.eval_transactions(signed_txns, block_timestamp=block_timestamp)
+
+    def test_cancel_proposal(self):
+        user_sk, user_address = generate_account()
+
+        self.ledger.set_account_balance(user_address, 10_000_000)
+        self.ledger.set_account_balance(get_application_address(PROPOSAL_VOTING_APP_ID), 1_000_000)
+
+        self.create_proposal_voting_app(self.app_creator_address)
+        self.ledger.set_account_balance(get_application_address(PROPOSAL_VOTING_APP_ID), 1_000_000)
+
+        block_timestamp = self.locking_app_creation_timestamp + 2 * WEEK
+        self.create_checkpoints(user_address, user_sk, block_timestamp)
+
+        # Create lock
+        lock_end_timestamp = get_start_timestamp_of_week(block_timestamp) + 15 * WEEK
+        amount = 100_000_000
+        self.ledger.move(
+            amount,
+            asset_id=TINY_ASSET_ID,
+            sender=self.ledger.assets[TINY_ASSET_ID]["creator"],
+            receiver=user_address
+        )
+        txn_group = prepare_create_lock_txn_group(self.ledger, user_address=user_address, locked_amount=amount, lock_end_timestamp=lock_end_timestamp, sp=self.sp)
+        transaction.assign_group_id(txn_group)
+        signed_txns = sign_txns(txn_group, user_sk)
+        self.ledger.eval_transactions(signed_txns, block_timestamp=block_timestamp)
+
+        # Create proposal
+        proposal_id = itob(1) * 4
+        txn_group = prepare_create_proposal_txn_group(self.ledger, user_address, proposal_id, self.sp)
+        transaction.assign_group_id(txn_group)
+        signed_txns = sign_txns(txn_group, user_sk)
+        self.ledger.eval_transactions(signed_txns, block_timestamp=block_timestamp)
+
+        proposal_creation_timestamp = block_timestamp
+
+        # Cancel proposal
+        proposal_box_name = PROPOSAL_BOX_PREFIX + proposal_id
+        proposal_manager_address = self.app_creator_address
+        proposal_manager_sk = self.app_creator_sk
+        block_timestamp += 1
+
+        txn_group = prepare_cancel_proposal_txn_group(proposal_manager_address, proposal_id, self.sp)
+        transaction.assign_group_id(txn_group)
+        signed_txns = sign_txns(txn_group, proposal_manager_sk)
+        self.ledger.eval_transactions(signed_txns, block_timestamp=block_timestamp)
+        self.assertEqual(parse_box_proposal(self.ledger.boxes[PROPOSAL_VOTING_APP_ID][proposal_box_name])["is_executed"], 1)
+
+        # Try to cast vote
+        block_timestamp = proposal_creation_timestamp + DAY
+
+        vote = 1
+        txn_group = prepare_cast_vote_txn_group(self.ledger, user_address, proposal_id, vote, proposal_creation_timestamp, self.sp)
+        transaction.assign_group_id(txn_group)
+        signed_txns = sign_txns(txn_group, user_sk)
+        with self.assertRaises(LogicEvalError) as e:
+            self.ledger.eval_transactions(signed_txns, block_timestamp=block_timestamp)
+        self.assertEqual(e.exception.source['line'], 'assert(proposal.is_cancelled == BIT_ZERO)')
+
+    def test_execute_proposal(self):
+        user_sk, user_address = generate_account()
+
+        self.ledger.set_account_balance(user_address, 10_000_000)
+        self.ledger.set_account_balance(get_application_address(PROPOSAL_VOTING_APP_ID), 1_000_000)
+
+        self.create_proposal_voting_app(self.app_creator_address)
+        self.ledger.set_account_balance(get_application_address(PROPOSAL_VOTING_APP_ID), 1_000_000)
+
+        block_timestamp = self.locking_app_creation_timestamp + 2 * WEEK
+        self.create_checkpoints(user_address, user_sk, block_timestamp)
+
+        # Create lock
+        lock_end_timestamp = get_start_timestamp_of_week(block_timestamp) + 15 * WEEK
+        amount = 100_000_000
+        self.ledger.move(
+            amount,
+            asset_id=TINY_ASSET_ID,
+            sender=self.ledger.assets[TINY_ASSET_ID]["creator"],
+            receiver=user_address
+        )
+        txn_group = prepare_create_lock_txn_group(self.ledger, user_address=user_address, locked_amount=amount, lock_end_timestamp=lock_end_timestamp, sp=self.sp)
+        transaction.assign_group_id(txn_group)
+        signed_txns = sign_txns(txn_group, user_sk)
+        self.ledger.eval_transactions(signed_txns, block_timestamp=block_timestamp)
+
+        # Create proposal
+        proposal_id = itob(1) * 4
+        txn_group = prepare_create_proposal_txn_group(self.ledger, user_address, proposal_id, self.sp)
+        transaction.assign_group_id(txn_group)
+        signed_txns = sign_txns(txn_group, user_sk)
+        self.ledger.eval_transactions(signed_txns, block_timestamp=block_timestamp)
+
+        proposal_creation_timestamp = block_timestamp
+
+        # Execute Proposal
+        proposal_box_name = PROPOSAL_BOX_PREFIX + proposal_id
+        proposal_manager_address = self.app_creator_address
+        proposal_manager_sk = self.app_creator_sk
+        block_timestamp += 1
+
+        txn_group = prepare_execute_proposal_txn_group(proposal_manager_address, proposal_id, self.sp)
+        transaction.assign_group_id(txn_group)
+        signed_txns = sign_txns(txn_group, proposal_manager_sk)
+        self.ledger.eval_transactions(signed_txns, block_timestamp=block_timestamp)
+        self.assertEqual(parse_box_proposal(self.ledger.boxes[PROPOSAL_VOTING_APP_ID][proposal_box_name])["is_executed"], 1)
+
+        # Try to cast vote
+        block_timestamp = proposal_creation_timestamp + DAY
+
+        vote = 1
+        txn_group = prepare_cast_vote_txn_group(self.ledger, user_address, proposal_id, vote, proposal_creation_timestamp, self.sp)
+        transaction.assign_group_id(txn_group)
+        signed_txns = sign_txns(txn_group, user_sk)
+        with self.assertRaises(LogicEvalError) as e:
+            self.ledger.eval_transactions(signed_txns, block_timestamp=block_timestamp)
+        # TODO missing check for execution
+        self.assertEqual(e.exception.source['line'], 'ssert(proposal.is_executed == BIT_ZERO)')
