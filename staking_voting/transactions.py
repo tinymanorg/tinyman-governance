@@ -25,6 +25,22 @@ def prepare_create_proposal_txn_group(user_address, proposal_id, sp):
     return txn_group
 
 
+def prepare_cancel_proposal_txn_group(user_address, proposal_id, sp):
+    proposal_box_name = PROPOSAL_BOX_PREFIX + proposal_id
+    txn_group = [
+        transaction.ApplicationNoOpTxn(
+            sender=user_address,
+            sp=sp,
+            index=STAKING_VOTING_APP_ID,
+            app_args=["cancel_proposal", proposal_id],
+            boxes=[
+                (0, proposal_box_name),
+            ]
+        )
+    ]
+    return txn_group
+
+
 def prepare_cast_vote_txn_group(ledger, user_address, proposal_id, votes, asset_ids, proposal_creation_timestamp, sp):
     assert (len(votes) == len(asset_ids))
     arg_votes = b"".join([itob(vote) for vote in votes])
@@ -86,3 +102,32 @@ def prepare_cast_vote_txn_group(ledger, user_address, proposal_id, votes, asset_
             )
         ] + txn_group
     return txn_group
+
+
+def prepare_set_manager_txn_group(user_address, new_manager_address, sp):
+    txn_group = [
+        transaction.ApplicationNoOpTxn(
+            sender=user_address,
+            sp=sp,
+            index=STAKING_VOTING_APP_ID,
+            app_args=["set_manager"],
+            accounts=[new_manager_address],
+        ),
+    ]
+
+    return txn_group
+
+
+def prepare_set_proposal_manager_txn_group(user_address, new_manager_address, sp):
+    txn_group = [
+        transaction.ApplicationNoOpTxn(
+            sender=user_address,
+            sp=sp,
+            index=STAKING_VOTING_APP_ID,
+            app_args=["set_proposal_manager"],
+            accounts=[new_manager_address],
+        ),
+    ]
+
+    return txn_group
+

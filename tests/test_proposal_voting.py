@@ -4,7 +4,7 @@ from zoneinfo import ZoneInfo
 from algojig import LogicEvalError
 from algosdk import transaction
 from algosdk.account import generate_account
-from algosdk.encoding import decode_address, encode_address
+from algosdk.encoding import decode_address
 from algosdk.logic import get_application_address
 
 from common.constants import TINY_ASSET_ID, WEEK, DAY
@@ -14,6 +14,7 @@ from proposal_voting.constants import PROPOSAL_BOX_PREFIX
 from proposal_voting.transactions import prepare_create_proposal_txn_group, prepare_cast_vote_txn_group, prepare_get_proposal_txn_group, prepare_cancel_proposal_txn_group, prepare_execute_proposal_txn_group, prepare_has_voted_txn_group
 from tests.common import BaseTestCase, LockingAppMixin, ProposalVotingAppMixin
 from common.constants import LOCKING_APP_ID, PROPOSAL_VOTING_APP_ID
+
 
 class ProposalVotingTestCase(LockingAppMixin, ProposalVotingAppMixin, BaseTestCase):
 
@@ -273,7 +274,7 @@ class ProposalVotingTestCase(LockingAppMixin, ProposalVotingAppMixin, BaseTestCa
         signed_txns = sign_txns(txn_group, user_sk)
         with self.assertRaises(LogicEvalError):
             self.ledger.eval_transactions(signed_txns, block_timestamp=block_timestamp)
-    
+
     def test_cast_vote_after_increase_lock_amount(self):
         user_sk, user_address = generate_account()
 
@@ -463,7 +464,7 @@ class ProposalVotingTestCase(LockingAppMixin, ProposalVotingAppMixin, BaseTestCa
         transaction.assign_group_id(txn_group)
         signed_txns = sign_txns(txn_group, proposal_manager_sk)
         self.ledger.eval_transactions(signed_txns, block_timestamp=block_timestamp)
-        self.assertEqual(parse_box_proposal(self.ledger.boxes[PROPOSAL_VOTING_APP_ID][proposal_box_name])["is_executed"], 1)
+        self.assertEqual(parse_box_proposal(self.ledger.boxes[PROPOSAL_VOTING_APP_ID][proposal_box_name])["is_cancelled"], 1)
 
         # Try to cast vote
         block_timestamp = proposal_creation_timestamp + DAY
