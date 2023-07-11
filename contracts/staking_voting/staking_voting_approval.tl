@@ -118,7 +118,7 @@ block main:
         bytes user_address = Txn.Sender
         assert(user_address == app_global_get(PROPOSAL_MANAGER_KEY))
 
-        # proposal id will be calculate off-chian. it is 32 bit hash of the proposal data.
+        # proposal id will be calculate off-chain. it is 32 bit hash of the proposal data.
         bytes proposal_id = Txn.ApplicationArgs[1]
         assert(len(proposal_id) ==  32)
         assert(!proposal_exists(proposal_id))
