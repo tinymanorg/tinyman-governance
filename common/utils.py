@@ -7,7 +7,7 @@ from algosdk.encoding import encode_address, decode_address
 from common.constants import DAY, WEEK
 from locking.constants import ACCOUNT_POWER_SIZE, TOTAL_POWER_SIZE, TOTAL_POWERS, SLOPE_CHANGES, TOTAL_POWER_COUNT_KEY, TOTAL_POWER_BOX_ARRAY_LEN, ACCOUNT_POWER_BOX_ARRAY_LEN, TWO_TO_THE_64, MAX_LOCK_TIME
 from proposal_voting.constants import PROPOSAL_BOX_PREFIX, ATTENDANCE_BOX_PREFIX
-from rewards.constants import REWARD_HISTORY_SIZE, REWARD_HISTORY_BOX_ARRAY_LEN, REWARD_HISTORY
+from rewards.constants import REWARD_HISTORY_SIZE, REWARD_HISTORY_BOX_ARRAY_LEN, REWARD_HISTORY_BOX_PREFIX
 from staking_voting.constants import VOTE_BOX_PREFIX
 
 
@@ -249,7 +249,7 @@ def get_reward_history_index_at(ledger, app_id, timestamp):
 
     reward_histories = []
     for box_index in range(box_count):
-        raw_box = ledger.boxes[app_id][REWARD_HISTORY + itob(box_index)]
+        raw_box = ledger.boxes[app_id][REWARD_HISTORY_BOX_PREFIX + itob(box_index)]
         reward_histories.extend(parse_box_reward_history(raw_box))
 
     for index, reward_history in enumerate(reward_histories):

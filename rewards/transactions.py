@@ -6,8 +6,38 @@ from common.constants import WEEK, LOCKING_APP_ID, REWARDS_APP_ID, TINY_ASSET_ID
 from common.utils import get_account_power_index_at, get_total_power_index_at, get_reward_history_index_at, itob, get_required_minimum_balance_of_box
 from locking.constants import ACCOUNT_POWER_BOX_ARRAY_LEN, TOTAL_POWERS, TOTAL_POWER_BOX_ARRAY_LEN
 from locking.transactions import prepare_budget_increase_txn
-from rewards.constants import REWARD_HISTORY_BOX_SIZE, REWARD_HISTORY_BOX_ARRAY_LEN, REWARD_HISTORY
+from rewards.constants import REWARD_HISTORY_BOX_SIZE, REWARD_HISTORY_BOX_ARRAY_LEN, REWARD_HISTORY_BOX_PREFIX, REWARDS_APP_ID, REWARDS_APP_MINIMUM_BALANCE_REQUIREMENT
 
+
+def prepare_init_txn_group(ledger, user_address, reward_amount: int, sp):
+    reward_histories_box_name = REWARD_HISTORY_BOX_PREFIX + itob(0)
+
+    payment_txn = transaction.PaymentTxn(
+        sender=user_address,
+        sp=sp,
+        receiver=get_application_address(REWARDS_APP_ID),
+        amt=REWARDS_APP_MINIMUM_BALANCE_REQUIREMENT,
+    )
+    appcall_txn = transaction.ApplicationNoOpTxn(
+        sender=user_address,
+        sp=sp,
+        index=REWARDS_APP_ID,
+        app_args=[
+            "init",
+            reward_amount
+        ],
+        foreign_assets=[
+            TINY_ASSET_ID
+        ],
+        boxes=[
+            (0, reward_histories_box_name),
+        ]
+    )
+    txn_group = [payment_txn, appcall_txn]
+    txn_group[1].fee *= 2
+
+    transaction.assign_group_id(txn_group)
+    return txn_group
 
 def prepare_claim_rewards_txn_group(ledger, user_address, timestamp, sp):
     account_power_index_1 = get_account_power_index_at(ledger, LOCKING_APP_ID, user_address, timestamp)
@@ -27,7 +57,7 @@ def prepare_claim_rewards_txn_group(ledger, user_address, timestamp, sp):
 
     boxes = [
         (0, account_rewards_sheet_box_name),
-        (0, REWARD_HISTORY + itob(reward_amount_index)),
+        (0, REWARD_HISTORY_BOX_PREFIX + itob(reward_amount_index)),
         (LOCKING_APP_ID, decode_address(user_address)),
         (LOCKING_APP_ID, decode_address(user_address) + itob(account_power_box_index_1)),
         (LOCKING_APP_ID, decode_address(user_address) + itob(account_power_box_index_2)),
@@ -68,3 +98,7 @@ def prepare_claim_rewards_txn_group(ledger, user_address, timestamp, sp):
         ] + txn_group
 
     return txn_group
+
+
+def prepare_set_reward_amount_txn_group(ledger, user_address, timestamp, sp):
+    pass

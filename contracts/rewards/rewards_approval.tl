@@ -24,7 +24,7 @@ const bytes BIT_ZERO = "\x00"
 const bytes BIT_ONE = "\x01"
 
 # Boxes
-const bytes REWARD_HISTORY = "rh"
+const bytes REWARD_HISTORY_BOX_PREFIX = "rh"
 const int REWARD_SHEET_BOX_SIZE = 1024
 const int REWARD_HISTORY_SIZE = 16
 const int REWARD_HISTORY_BOX_SIZE = 256
@@ -255,7 +255,7 @@ func save_reward_history(data: bytes):
     assert(len(data) == REWARD_HISTORY_SIZE)
     int box_index = index / REWARD_HISTORY_BOX_ARRAY_LEN
     int array_index = index % REWARD_HISTORY_BOX_ARRAY_LEN
-    bytes box_name = concat(REWARD_HISTORY, itob(box_index))
+    bytes box_name = concat(REWARD_HISTORY_BOX_PREFIX, itob(box_index))
     _ = box_create(box_name, REWARD_HISTORY_BOX_SIZE)
     box_replace(box_name, (array_index * REWARD_HISTORY_SIZE), data)
 
@@ -266,7 +266,7 @@ end
 func get_reward_history(index: int) bytes:
     int box_index = index / REWARD_HISTORY_BOX_ARRAY_LEN
     int array_index = index % REWARD_HISTORY_BOX_ARRAY_LEN
-    bytes box_name = concat(REWARD_HISTORY, itob(box_index))
+    bytes box_name = concat(REWARD_HISTORY_BOX_PREFIX, itob(box_index))
     return box_extract(box_name, (array_index * REWARD_HISTORY_SIZE), REWARD_HISTORY_SIZE)
 end
 

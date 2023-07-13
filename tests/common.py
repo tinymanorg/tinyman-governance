@@ -11,7 +11,7 @@ from common.constants import staking_voting_approval_program, rewards_approval_p
 from common.utils import itob, sign_txns
 from locking.constants import TINY_ASSET_ID_KEY, TOTAL_LOCKED_AMOUNT_KEY, TOTAL_POWER_COUNT_KEY, CREATION_TIMESTAMP_KEY, LOCKING_APP_MINIMUM_BALANCE_REQUIREMENT, TOTAL_POWER_BOX_ARRAY_LEN, TOTAL_POWERS, TOTAL_POWER_BOX_SIZE, TOTAL_POWER_SIZE
 from locking.transactions import prepare_create_checkpoints_txn_group
-from rewards.constants import REWARD_HISTORY_BOX_ARRAY_LEN, REWARD_HISTORY_BOX_SIZE, REWARD_HISTORY_SIZE, REWARD_HISTORY, REWARDS_APP_MINIMUM_BALANCE_REQUIREMENT
+from rewards.constants import REWARD_HISTORY_BOX_ARRAY_LEN, REWARD_HISTORY_BOX_SIZE, REWARD_HISTORY_SIZE, REWARD_HISTORY_BOX_PREFIX, REWARDS_APP_MINIMUM_BALANCE_REQUIREMENT
 
 
 class BaseTestCase(unittest.TestCase):
@@ -162,7 +162,7 @@ class RewardsAppMixin:
         box_index = index // REWARD_HISTORY_BOX_ARRAY_LEN
         array_index = index % REWARD_HISTORY_BOX_ARRAY_LEN
 
-        box_name = REWARD_HISTORY + itob(box_index)
+        box_name = REWARD_HISTORY_BOX_PREFIX + itob(box_index)
         if box_name not in self.ledger.boxes[REWARDS_APP_ID]:
             self.ledger.boxes[REWARDS_APP_ID][box_name] = itob(0, 1) * REWARD_HISTORY_BOX_SIZE
 

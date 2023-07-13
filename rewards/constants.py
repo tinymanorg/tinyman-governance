@@ -9,7 +9,7 @@ REWARD_HISTORY_COUNT_KEY = b'reward_history_count'
 MANAGER_KEY = b'manager'
 
 # Boxes
-REWARD_HISTORY = b'rh'
+REWARD_HISTORY_BOX_PREFIX = b'rh'
 
 REWARD_SHEET_BOX_SIZE = 1024
 
