@@ -12,9 +12,29 @@ from common.constants import TINY_ASSET_ID, rewards_approval_program, rewards_cl
 from common.utils import get_start_timestamp_of_week, itob, sign_txns, parse_box_reward_history
 from locking.constants import TOTAL_LOCKED_AMOUNT_KEY
 from locking.transactions import prepare_create_lock_txn_group, prepare_withdraw_txn_group
-from rewards.constants import CREATION_TIMESTAMP_KEY, TINY_ASSET_ID_KEY, LOCKING_APP_ID_KEY, MANAGER_KEY, REWARD_HISTORY_COUNT_KEY, REWARD_HISTORY, REWARDS_APP_MINIMUM_BALANCE_REQUIREMENT
+from rewards.constants import CREATION_TIMESTAMP_KEY, TINY_ASSET_ID_KEY, LOCKING_APP_ID_KEY, MANAGER_KEY, REWARD_HISTORY_COUNT_KEY, REWARD_HISTORY, REWARDS_APP_MINIMUM_BALANCE_REQUIREMENT, ATTENDANCE_BOX_PREFIX
 from rewards.transactions import prepare_claim_rewards_txn_group
 from tests.common import BaseTestCase, LockingAppMixin, RewardsAppMixin
+
+def check_nth_bit_from_left(input_bytes, n):
+    # ensure n is within the range of the bytes
+    if n >= len(input_bytes) * 8:
+        raise ValueError(f"n should be less than {len(input_bytes) * 8}")
+
+    # convert bytes to int
+    num = int.from_bytes(input_bytes, 'big')
+
+    # calculate which bit to check from the left
+    bit_to_check = (len(input_bytes) * 8 - 1) - n
+
+    # create a number with nth bit set
+    nth_bit = 1 << bit_to_check
+
+    # if the nth bit is set in the given number, return 1. Otherwise, return 0
+    if num & nth_bit:
+        return 1
+    else:
+        return 0
 
 
 class RewardsTestCase(LockingAppMixin, RewardsAppMixin, BaseTestCase):
@@ -199,8 +219,14 @@ class RewardsTestCase(LockingAppMixin, RewardsAppMixin, BaseTestCase):
         signed_txns = sign_txns(txn_group, self.user_sk)
         self.ledger.eval_transactions(signed_txns, block_timestamp=block_timestamp)
 
+        # account_rewards_sheet_box_name = ATTENDANCE_BOX_PREFIX + decode_address(self.user_address) + itob(0)
+        # sheet = self.ledger.boxes[REWARDS_APP_ID][account_rewards_sheet_box_name]
+        # sheet = [check_nth_bit_from_left(sheet, i) for i in range(0, (len(sheet) * 8))]
+        # print(sheet)
+
         txn_group = prepare_claim_rewards_txn_group(self.ledger,self.user_address, timestamp, self.sp)
         transaction.assign_group_id(txn_group)
         signed_txns = sign_txns(txn_group, self.user_sk)
-        with self.assertRaises(LogicEvalError):
+        with self.assertRaises(LogicEvalError) as e:
             self.ledger.eval_transactions(signed_txns, block_timestamp=block_timestamp)
+        self.assertEqual(e.exception.source['line'], "assert(!getbit(sheet, array_index))")

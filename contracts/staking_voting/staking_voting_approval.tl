@@ -16,8 +16,8 @@ end
 # 24 * 60 * 60
 const int DAY = 86400
 const int MAX_OPTION_COUNT = 16
-const bytes BIT_ZERO = "\x00"
-const bytes BIT_ONE = "\x01"
+const bytes BYTES_ZERO = "\x00"
+const bytes BYTES_ONE = "\x01"
 
 # Global States
 const bytes LOCKING_APP_ID_KEY = "locking_app_id"
@@ -107,8 +107,8 @@ block main:
         bytes proposal_id = Txn.ApplicationArgs[1]
         bytes proposal_box_name = concat(PROPOSAL_BOX_PREFIX, proposal_id)
         box<Proposal> proposal = OpenBox(proposal_box_name)
-        assert(proposal.is_cancelled == BIT_ZERO)
-        proposal.is_cancelled = BIT_ONE
+        assert(proposal.is_cancelled == BYTES_ZERO)
+        proposal.is_cancelled = BYTES_ONE
 
         # TODO: Add event log
         exit(1)
@@ -158,7 +158,7 @@ block main:
         # proposal.voting_start_timestamp <= Global.LatestTimestamp < proposal.voting_end_timestamp
         assert(proposal.voting_start_timestamp <= Global.LatestTimestamp)
         assert(Global.LatestTimestamp < proposal.voting_end_timestamp)
-        assert(proposal.is_cancelled == BIT_ZERO)
+        assert(proposal.is_cancelled == BYTES_ZERO)
 
         # vote count and asset count must be equal
         assert(len(votes_as_percentage))
@@ -238,12 +238,16 @@ func calculate_votes(option_count: int, votes_as_percentage: bytes, account_voti
 end
 
 func set_user_as_voted(address: bytes, proposal_index: int):
-    int box_index = proposal_index / ACCOUNT_ATTENDANCE_SHEET_BOX_SIZE
-    int array_index = proposal_index % ACCOUNT_ATTENDANCE_SHEET_BOX_SIZE
+    int box_index = proposal_index / (ACCOUNT_ATTENDANCE_SHEET_BOX_SIZE * 8)
+    int array_index = proposal_index % (ACCOUNT_ATTENDANCE_SHEET_BOX_SIZE * 8)
     bytes box_name = concat(ATTENDANCE_BOX_PREFIX, concat(address, itob(box_index)))
+
+    bytes sheet
     _ = box_create(box_name, ACCOUNT_ATTENDANCE_SHEET_BOX_SIZE)
-    assert(box_extract(box_name, array_index, 1) == BIT_ZERO)
-    box_replace(box_name, array_index, BIT_ONE)
+    _, sheet = box_get(box_name)
+    assert(!getbit(sheet, array_index))
+    sheet = setbit(sheet, array_index, 1)
+    box_put(box_name, sheet)
     return
 end
 

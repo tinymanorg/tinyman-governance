@@ -22,8 +22,8 @@ end
 
 # 24 * 60 * 60
 const int DAY = 86400
-const bytes BIT_ZERO = "\x00"
-const bytes BIT_ONE = "\x01"
+const bytes BYTES_ZERO = "\x00"
+const bytes BYTES_ONE = "\x01"
 
 # Global States
 const bytes LOCKING_APP_ID_KEY = "locking_app_id"
@@ -124,9 +124,9 @@ block main:
         bytes proposal_id = Txn.ApplicationArgs[1]
         bytes proposal_box_name = concat(PROPOSAL_BOX_PREFIX, proposal_id)
         box<Proposal> proposal = OpenBox(proposal_box_name)
-        assert(proposal.is_cancelled == BIT_ZERO)
-        assert(proposal.is_executed == BIT_ZERO)
-        proposal.is_cancelled = BIT_ONE
+        assert(proposal.is_cancelled == BYTES_ZERO)
+        assert(proposal.is_executed == BYTES_ZERO)
+        proposal.is_cancelled = BYTES_ONE
 
         # TODO: Add event log
         exit(1)
@@ -140,9 +140,9 @@ block main:
         bytes proposal_box_name = concat(PROPOSAL_BOX_PREFIX, proposal_id)
         box<Proposal> proposal = OpenBox(proposal_box_name)
         assert(proposal.voting_end_timestamp < Global.LatestTimestamp)
-        assert(proposal.is_cancelled == BIT_ZERO)
-        assert(proposal.is_executed == BIT_ZERO)
-        proposal.is_executed = BIT_ONE
+        assert(proposal.is_cancelled == BYTES_ZERO)
+        assert(proposal.is_executed == BYTES_ZERO)
+        proposal.is_executed = BYTES_ONE
 
         # TODO: Add event log
         exit(1)
@@ -201,8 +201,8 @@ block main:
         # proposal.voting_start_timestamp <= Global.LatestTimestamp < proposal.voting_end_timestamp
         assert(proposal.voting_start_timestamp <= Global.LatestTimestamp)
         assert(Global.LatestTimestamp < proposal.voting_end_timestamp)
-        assert(proposal.is_cancelled == BIT_ZERO)
-        assert(proposal.is_executed == BIT_ZERO)
+        assert(proposal.is_cancelled == BYTES_ZERO)
+        assert(proposal.is_executed == BYTES_ZERO)
 
         # Check attendance
         int proposal_index = proposal.index
@@ -223,7 +223,7 @@ block main:
         end
         
         if (itob(proposal.snapshot_total_voting_power) b* itob(proposal.quorum_numerator)) b<= (itob(proposal.for_vote_amount + proposal.abstain_vote_amount) b* itob(100)):
-            proposal.is_quorum_reached = BIT_ONE
+            proposal.is_quorum_reached = BYTES_ONE
         end
 
         # Update proposal
@@ -262,26 +262,29 @@ block main:
 end
 
 func has_voted(address: bytes, proposal_index: int) int:
-    int box_index = proposal_index / ACCOUNT_ATTENDANCE_SHEET_BOX_SIZE
-    int array_index = proposal_index % ACCOUNT_ATTENDANCE_SHEET_BOX_SIZE
+    int box_index = proposal_index / (ACCOUNT_ATTENDANCE_SHEET_BOX_SIZE * 8)
+    int array_index = proposal_index % (ACCOUNT_ATTENDANCE_SHEET_BOX_SIZE * 8)
     bytes box_name = concat(ATTENDANCE_BOX_PREFIX, concat(address, itob(box_index)))
 
     int exists
     exists, _ = box_len(box_name)
     if exists:
-        return box_extract(box_name, array_index, 1) == BIT_ONE
+        return getbit(box_extract(box_name, 0, ACCOUNT_ATTENDANCE_SHEET_BOX_SIZE), array_index)
     end
     return 0
 end
 
 func set_user_as_voted(address: bytes, proposal_index: int):
-    int box_index = proposal_index / ACCOUNT_ATTENDANCE_SHEET_BOX_SIZE
-    int array_index = proposal_index % ACCOUNT_ATTENDANCE_SHEET_BOX_SIZE
+    int box_index = proposal_index / (ACCOUNT_ATTENDANCE_SHEET_BOX_SIZE * 8)
+    int array_index = proposal_index % (ACCOUNT_ATTENDANCE_SHEET_BOX_SIZE * 8)
     bytes box_name = concat(ATTENDANCE_BOX_PREFIX, concat(address, itob(box_index)))
 
+    bytes sheet
     _ = box_create(box_name, ACCOUNT_ATTENDANCE_SHEET_BOX_SIZE)
-    assert(box_extract(box_name, array_index, 1) == BIT_ZERO)
-    box_replace(box_name, array_index, BIT_ONE)
+    _, sheet = box_get(box_name)
+    assert(!getbit(sheet, array_index))
+    sheet = setbit(sheet, array_index, 1)
+    box_put(box_name, sheet)
     return
 end
 

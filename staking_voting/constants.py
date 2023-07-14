@@ -1,6 +1,6 @@
 MAX_OPTION_COUNT = 16
-BIT_ZERO = b'\x00'
-BIT_ONE = b'\x01'
+BYTES_ZERO = b'\x00'
+BYTES_ONE = b'\x01'
 
 # Global States
 TINY_ASSET_ID_KEY = b'tiny_asset_id'

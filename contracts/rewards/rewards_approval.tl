@@ -20,15 +20,14 @@ const bytes CREATION_TIMESTAMP_KEY = "creation_timestamp"
 const bytes REWARD_HISTORY_COUNT_KEY = "reward_history_count"
 const bytes MANAGER_KEY = "manager"
 
-const bytes BIT_ZERO = "\x00"
-const bytes BIT_ONE = "\x01"
-
 # Boxes
 const bytes REWARD_HISTORY = "rh"
 const int REWARD_SHEET_BOX_SIZE = 1024
 const int REWARD_HISTORY_SIZE = 16
 const int REWARD_HISTORY_BOX_SIZE = 256
 const int REWARD_HISTORY_BOX_ARRAY_LEN = 16
+
+const bytes ATTENDANCE_BOX_PREFIX = "a"
 
 if !Txn.ApplicationID:
     jump create_app
@@ -122,7 +121,7 @@ block main:
         int reward_amount = btoi((itob(total_reward_amount) b* account_cumulative_power_delta) b/ total_cumulative_power_delta)
 
         # TODO: Event Log
-        log(itob(Global.OpcodeBudget))
+        # log(itob(Global.OpcodeBudget))
 
         transfer(app_global_get(TINY_ASSET_ID_KEY), reward_amount, Global.CurrentApplicationAddress, user_address)
         exit(1)
@@ -227,12 +226,16 @@ func get_reward_amount(timestamp: int, index: int) int:
 end
 
 func check_and_save_claimed_reward(address: bytes, period_index: int):
-    int box_index = period_index / REWARD_SHEET_BOX_SIZE
-    int array_index = period_index % REWARD_SHEET_BOX_SIZE
-    bytes box_name = concat(address, itob(box_index))
+    int box_index = period_index / (REWARD_SHEET_BOX_SIZE * 8)
+    int array_index = period_index % (REWARD_SHEET_BOX_SIZE * 8)
+    bytes box_name = concat(ATTENDANCE_BOX_PREFIX, concat(address, itob(box_index)))
+
+    bytes sheet
     _ = box_create(box_name, REWARD_SHEET_BOX_SIZE)
-    assert(box_extract(box_name, array_index, 1) == BIT_ZERO)
-    box_replace(box_name, array_index, BIT_ONE)
+    _, sheet = box_get(box_name)
+    assert(!getbit(sheet, array_index))
+    sheet = setbit(sheet, array_index, 1)
+    box_put(box_name, sheet)
     return
 end
 

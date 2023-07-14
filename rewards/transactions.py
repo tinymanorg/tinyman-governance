@@ -6,7 +6,7 @@ from common.constants import WEEK, LOCKING_APP_ID, REWARDS_APP_ID, TINY_ASSET_ID
 from common.utils import get_account_power_index_at, get_total_power_index_at, get_reward_history_index_at, itob, get_required_minimum_balance_of_box
 from locking.constants import ACCOUNT_POWER_BOX_ARRAY_LEN, TOTAL_POWERS, TOTAL_POWER_BOX_ARRAY_LEN
 from locking.transactions import prepare_budget_increase_txn
-from rewards.constants import REWARD_HISTORY_BOX_SIZE, REWARD_HISTORY_BOX_ARRAY_LEN, REWARD_HISTORY
+from rewards.constants import REWARD_HISTORY_BOX_SIZE, REWARD_HISTORY, ATTENDANCE_BOX_PREFIX, REWARD_SHEET_BOX_SIZE
 
 
 def prepare_claim_rewards_txn_group(ledger, user_address, timestamp, sp):
@@ -22,8 +22,8 @@ def prepare_claim_rewards_txn_group(ledger, user_address, timestamp, sp):
 
     reward_amount_index = get_reward_history_index_at(ledger, REWARDS_APP_ID, timestamp)
     reward_period_index = timestamp // WEEK - ledger.global_states[REWARDS_APP_ID][b"creation_timestamp"] // WEEK
-    reward_period_box_index = reward_period_index // REWARD_HISTORY_BOX_ARRAY_LEN
-    account_rewards_sheet_box_name = decode_address(user_address) + itob(reward_period_box_index)
+    reward_period_box_index = reward_period_index // (REWARD_SHEET_BOX_SIZE * 8)
+    account_rewards_sheet_box_name = ATTENDANCE_BOX_PREFIX + decode_address(user_address) + itob(reward_period_box_index)
 
     boxes = [
         (0, account_rewards_sheet_box_name),

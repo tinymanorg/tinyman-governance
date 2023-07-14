@@ -36,7 +36,7 @@ def prepare_cast_vote_txn_group(ledger, user_address, proposal_id, votes, asset_
 
     proposal_box_name = PROPOSAL_BOX_PREFIX + proposal_id
     proposal_index = parse_box_staking_proposal(ledger.boxes[STAKING_VOTING_APP_ID][proposal_box_name])["index"]
-    account_attendance_box_index = proposal_index // 1024
+    account_attendance_box_index = proposal_index // (1024 * 8)
     account_attendance_box_name = ATTENDANCE_BOX_PREFIX + decode_address(user_address) + itob(account_attendance_box_index)
     boxes = [
         (STAKING_VOTING_APP_ID, proposal_box_name),

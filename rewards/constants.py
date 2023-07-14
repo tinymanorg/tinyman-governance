@@ -1,5 +1,5 @@
-BIT_ZERO = b'\x00'
-BIT_ONE = b'\x01'
+BYTES_ZERO = b'\x00'
+BYTES_ONE = b'\x01'
 
 # Global states
 TINY_ASSET_ID_KEY = b'tiny_asset_id'
@@ -10,6 +10,7 @@ MANAGER_KEY = b'manager'
 
 # Boxes
 REWARD_HISTORY = b'rh'
+ATTENDANCE_BOX_PREFIX = b'a'
 
 REWARD_SHEET_BOX_SIZE = 1024
 
