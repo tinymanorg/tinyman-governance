@@ -16,27 +16,6 @@ from rewards.constants import CREATION_TIMESTAMP_KEY, TINY_ASSET_ID_KEY, LOCKING
 from rewards.transactions import prepare_claim_rewards_txn_group
 from tests.common import BaseTestCase, LockingAppMixin, RewardsAppMixin
 
-def check_nth_bit_from_left(input_bytes, n):
-    # ensure n is within the range of the bytes
-    if n >= len(input_bytes) * 8:
-        raise ValueError(f"n should be less than {len(input_bytes) * 8}")
-
-    # convert bytes to int
-    num = int.from_bytes(input_bytes, 'big')
-
-    # calculate which bit to check from the left
-    bit_to_check = (len(input_bytes) * 8 - 1) - n
-
-    # create a number with nth bit set
-    nth_bit = 1 << bit_to_check
-
-    # if the nth bit is set in the given number, return 1. Otherwise, return 0
-    if num & nth_bit:
-        return 1
-    else:
-        return 0
-
-
 class RewardsTestCase(LockingAppMixin, RewardsAppMixin, BaseTestCase):
 
     @classmethod

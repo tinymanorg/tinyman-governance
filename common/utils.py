@@ -19,6 +19,25 @@ def itob(value, length=8):
 def btoi(value):
     return int.from_bytes(value, 'big')
 
+def check_nth_bit_from_left(input_bytes, n):
+    # ensure n is within the range of the bytes
+    if n >= len(input_bytes) * 8:
+        raise ValueError(f"n should be less than {len(input_bytes) * 8}")
+
+    # convert bytes to int
+    num = int.from_bytes(input_bytes, 'big')
+
+    # calculate which bit to check from the left
+    bit_to_check = (len(input_bytes) * 8 - 1) - n
+
+    # create a number with nth bit set
+    nth_bit = 1 << bit_to_check
+
+    # if the nth bit is set in the given number, return 1. Otherwise, return 0
+    if num & nth_bit:
+        return 1
+    else:
+        return 0
 
 def sign_txns(txns, secret_key):
     return [txn.sign(secret_key) for txn in txns]
@@ -161,7 +180,7 @@ def print_boxes(boxes):
         elif key.startswith(ATTENDANCE_BOX_PREFIX) and len(key) == 41:
             address = encode_address(key[1:33])
             box_index = btoi(key[33:])
-            attendance_array = [v for v in value]
+            attendance_array = [check_nth_bit_from_left(value, i) for i in range(0, (len(value) * 8))]
             print(f"ATTENDANCE {address}:{box_index}", attendance_array)
         elif len(value) == 1008:
             powers = parse_box_account_power(value)

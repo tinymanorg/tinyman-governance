@@ -171,7 +171,6 @@ block main:
         set_user_as_voted(user_address, proposal_index)
 
         int account_voting_power = get_account_voting_power(user_address, proposal.voting_start_timestamp, account_power_index)
-        bytes votes = calculate_votes(option_count, votes_as_percentage, account_voting_power)
 
         # Update proposal
         proposal.vote_count = proposal.vote_count + 1
@@ -192,7 +191,7 @@ block main:
             assert(total_percentage <= 100)
 
             # update vote amounts
-            option_vote_amount = extract_uint64(votes, tmp_index)
+            option_vote_amount = tmp_vote_percentage * (account_voting_power / 100)
             asset_id = extract_uint64(asset_ids, tmp_index)
             add_vote_amount(proposal_index, asset_id, option_vote_amount)
         end
@@ -222,19 +221,6 @@ func proposal_exists(proposal_id: bytes) int:
     int exists
     exists, _ = box_len(concat(PROPOSAL_BOX_PREFIX, proposal_id))
     return exists
-end
-
-func calculate_votes(option_count: int, votes_as_percentage: bytes, account_voting_power: int) bytes:
-    bytes votes
-    if option_count > 8:
-        int low_len = 8 * (option_count - 8)
-        bytes high_votes = bzero(64) b| (extract(0, 64, votes_as_percentage) b* itob(account_voting_power / 100))
-        bytes low_votes = bzero(low_len) b| (extract3(votes_as_percentage, 64, low_len) b* itob(account_voting_power / 100))
-        votes = concat(high_votes, low_votes)
-    else:
-        votes = bzero(option_count * 8) b| (votes_as_percentage b* itob(account_voting_power / 100))
-    end
-    return votes
 end
 
 func set_user_as_voted(address: bytes, proposal_index: int):
