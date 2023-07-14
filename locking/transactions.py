@@ -368,8 +368,7 @@ def prepare_get_tiny_power_of_txn_group(user_address, sp):
             sender=user_address,
             sp=sp,
             index=LOCKING_APP_ID,
-            app_args=["get_tiny_power_of"],
-            accounts=[user_address],
+            app_args=["get_tiny_power_of", decode_address(user_address)],
             boxes=[
                 (0, decode_address(user_address)),
             ]
@@ -390,8 +389,7 @@ def prepare_get_tiny_power_of_at_txn_group(ledger, user_address, timestamp, sp):
             sender=user_address,
             sp=sp,
             index=LOCKING_APP_ID,
-            app_args=["get_tiny_power_of_at", timestamp, account_power_index],
-            accounts=[user_address],
+            app_args=["get_tiny_power_of_at", decode_address(user_address), timestamp, account_power_index],
             boxes=[
                 (0, decode_address(user_address)),
                 (0, decode_address(user_address) + itob(account_power_box_index)),
@@ -473,8 +471,7 @@ def prepare_get_cumulative_power_of_at_txn_group(ledger, user_address, timestamp
             sender=user_address,
             sp=sp,
             index=LOCKING_APP_ID,
-            app_args=["get_cumulative_power_of_at", timestamp, account_power_index],
-            accounts=[user_address],
+            app_args=["get_cumulative_power_of_at", decode_address(user_address), timestamp, account_power_index],
             boxes=[
                 (0, decode_address(user_address)),
                 (0, decode_address(user_address) + itob(account_power_box_index)),

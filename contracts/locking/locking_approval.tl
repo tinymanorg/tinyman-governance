@@ -36,7 +36,7 @@ end
 # 2^64 - 1
 # const int MAX_UINT64 = 18446744073709551615
 # 24 * 60 * 60
-const int DAY = 86400
+# const int DAY = 86400
 # 7 * DAY
 const int WEEK = 604800
 # 4 * 365 * DAY
@@ -81,7 +81,7 @@ block fail:
 end
 
 block create_app:
-    app_global_put(TINY_ASSET_ID_KEY, Txn.Assets[0])
+    app_global_put(TINY_ASSET_ID_KEY, btoi(Txn.ApplicationArgs[0]))
     app_global_put(TOTAL_LOCKED_AMOUNT_KEY, 0)
     app_global_put(TOTAL_POWER_COUNT_KEY, 0)
     app_global_put(CREATION_TIMESTAMP_KEY, Global.LatestTimestamp)
@@ -296,7 +296,7 @@ block main:
     block get_tiny_power_of:
         # Current power can be calculated by using account state and account power.
         # The calculation is made using the account state to reduce required box references.
-        bytes user_address = Txn.Accounts[1]
+        bytes user_address = Txn.ApplicationArgs[1]
         int timestamp = Global.LatestTimestamp
         int tiny_power = 0
 
@@ -316,9 +316,9 @@ block main:
     end
 
     block get_tiny_power_of_at:
-        bytes user_address = Txn.Accounts[1]
-        int timestamp = btoi(Txn.ApplicationArgs[1])
-        int index = btoi(Txn.ApplicationArgs[2])
+        bytes user_address = Txn.ApplicationArgs[1]
+        int timestamp = btoi(Txn.ApplicationArgs[2])
+        int index = btoi(Txn.ApplicationArgs[3])
         int tiny_power = 0
         assert(timestamp <= Global.LatestTimestamp)
 
@@ -344,9 +344,9 @@ block main:
     end
 
     block get_cumulative_power_of_at:
-        bytes user_address = Txn.Accounts[1]
-        int timestamp = btoi(Txn.ApplicationArgs[1])
-        int account_power_index = btoi(Txn.ApplicationArgs[2])
+        bytes user_address = Txn.ApplicationArgs[1]
+        int timestamp = btoi(Txn.ApplicationArgs[2])
+        int account_power_index = btoi(Txn.ApplicationArgs[3])
 
         bytes cumulative_power =  get_cumulative_power_of_at(user_address, timestamp, account_power_index)
         log(cumulative_power)
@@ -403,13 +403,13 @@ block main:
     end
 
     block get_cumulative_powers_for_rewards:
-        bytes user_address = Txn.Accounts[1]
-        int timestamp_1 = btoi(Txn.ApplicationArgs[1])
-        int timestamp_2 = btoi(Txn.ApplicationArgs[2])
-        int account_power_index_1 = btoi(Txn.ApplicationArgs[3])
-        int account_power_index_2 = btoi(Txn.ApplicationArgs[4])
-        int total_power_index_1 = btoi(Txn.ApplicationArgs[5])
-        int total_power_index_2 = btoi(Txn.ApplicationArgs[6])
+        bytes user_address = Txn.ApplicationArgs[1]
+        int timestamp_1 = btoi(Txn.ApplicationArgs[2])
+        int timestamp_2 = btoi(Txn.ApplicationArgs[3])
+        int account_power_index_1 = btoi(Txn.ApplicationArgs[4])
+        int account_power_index_2 = btoi(Txn.ApplicationArgs[5])
+        int total_power_index_1 = btoi(Txn.ApplicationArgs[6])
+        int total_power_index_2 = btoi(Txn.ApplicationArgs[7])
 
         bytes cumulative_power_1 = get_cumulative_power_of_at(user_address, timestamp_1, account_power_index_1)
         bytes cumulative_power_2 = get_cumulative_power_of_at(user_address, timestamp_2, account_power_index_2)

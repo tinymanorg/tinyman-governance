@@ -48,7 +48,7 @@ class LockingTestCase(LockingAppMixin, BaseTestCase):
                 global_schema=transaction.StateSchema(num_uints=4, num_byte_slices=0),
                 local_schema=transaction.StateSchema(num_uints=0, num_byte_slices=0),
                 extra_pages=1,
-                foreign_assets=[TINY_ASSET_ID],
+                app_args=[TINY_ASSET_ID],
             )
         ]
 

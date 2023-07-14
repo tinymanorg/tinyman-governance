@@ -47,7 +47,7 @@ block fail:
 end
 
 block create_app:
-    app_global_put(TINY_ASSET_ID_KEY, Txn.Assets[0])
+    app_global_put(TINY_ASSET_ID_KEY, btoi(Txn.ApplicationArgs[0]))
     app_global_put(LOCKING_APP_ID_KEY, Txn.Applications[1])
     app_global_put(REWARD_HISTORY_COUNT_KEY, 0)
 
@@ -160,7 +160,7 @@ block main:
         bytes user_address = Txn.Sender
         assert(user_address == app_global_get(MANAGER_KEY))
 
-        app_global_put(MANAGER_KEY, Txn.Accounts[1])
+        app_global_put(MANAGER_KEY, Txn.ApplicationArgs[1])
         exit(1)
     end
 end
@@ -170,9 +170,9 @@ func get_account_cumulative_power_at(address: bytes, snapshot_time: int, account
         TypeEnum: Appl
         ApplicationID: app_global_get(LOCKING_APP_ID_KEY)
         ApplicationArgs[0]: "get_cumulative_power_of_at"
-        ApplicationArgs[1]: itob(snapshot_time)
-        ApplicationArgs[2]: account_power_index
-        Accounts[0]: address
+        ApplicationArgs[1]: address
+        ApplicationArgs[2]: itob(snapshot_time)
+        ApplicationArgs[3]: account_power_index
         Fee: 0
     end
 
@@ -199,13 +199,13 @@ func get_cumulative_powers_for_rewards(address: bytes, timestamp_1: int, timesta
         TypeEnum: Appl
         ApplicationID: app_global_get(LOCKING_APP_ID_KEY)
         ApplicationArgs[0]: "get_cumulative_powers_for_rewards"
-        ApplicationArgs[1]: itob(timestamp_1)
-        ApplicationArgs[2]: itob(timestamp_2)
-        ApplicationArgs[3]: account_power_index_1
-        ApplicationArgs[4]: account_power_index_2
-        ApplicationArgs[5]: total_power_index_1
-        ApplicationArgs[6]: total_power_index_2
-        Accounts[0]: address
+        ApplicationArgs[1]: address
+        ApplicationArgs[2]: itob(timestamp_1)
+        ApplicationArgs[3]: itob(timestamp_2)
+        ApplicationArgs[4]: account_power_index_1
+        ApplicationArgs[5]: account_power_index_2
+        ApplicationArgs[6]: total_power_index_1
+        ApplicationArgs[7]: total_power_index_2
         Fee: 0
     end
 

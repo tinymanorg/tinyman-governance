@@ -52,7 +52,7 @@ block fail:
 end
 
 block create_app:
-    app_global_put(LOCKING_APP_ID_KEY, Txn.Applications[1])
+    app_global_put(LOCKING_APP_ID_KEY, Txn.ApplicationArgs[0])
     app_global_put(PROPOSAL_ID_COUNTER_KEY, 0)
 
     app_global_put(VOTING_DELAY_KEY, 2)
@@ -88,7 +88,7 @@ block main:
         bytes user_address = Txn.Sender
         assert(user_address == app_global_get(MANAGER_KEY))
 
-        app_global_put(MANAGER_KEY, Txn.Accounts[1])
+        app_global_put(MANAGER_KEY, Txn.ApplicationArgs[1])
         exit(1)
     end
 
@@ -96,7 +96,7 @@ block main:
         bytes user_address = Txn.Sender
         assert(user_address == app_global_get(MANAGER_KEY))
 
-        app_global_put(PROPOSAL_MANAGER_KEY, Txn.Accounts[1])
+        app_global_put(PROPOSAL_MANAGER_KEY, Txn.ApplicationArgs[1])
         exit(1)
     end
 
@@ -209,9 +209,9 @@ func get_account_voting_power(address: bytes, snapshot_timestamp: int, account_p
         TypeEnum: Appl
         ApplicationID: app_global_get(LOCKING_APP_ID_KEY)
         ApplicationArgs[0]: "get_tiny_power_of_at"
-        ApplicationArgs[1]: itob(snapshot_timestamp)
-        ApplicationArgs[2]: account_power_index
-        Accounts[0]: address
+        ApplicationArgs[1]: address
+        ApplicationArgs[2]: itob(snapshot_timestamp)
+        ApplicationArgs[3]: account_power_index
         Fee: 0
     end
     int voting_power = extract_uint64(Itxn.LastLog, 0)
