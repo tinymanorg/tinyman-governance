@@ -220,7 +220,7 @@ func get_reward_amount(timestamp: int, index: int) int:
     assert(reward_history.timestamp <= timestamp)
 
     if (index + 1) < app_global_get(REWARD_HISTORY_COUNT_KEY):
-        TotalPower next_reward_history = get_reward_history(index + 1)
+        RewardHistory next_reward_history = get_reward_history(index + 1)
         assert(timestamp < next_reward_history.timestamp)
     end
     return reward_history.reward_amount

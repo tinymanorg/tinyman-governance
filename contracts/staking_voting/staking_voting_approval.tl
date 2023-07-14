@@ -150,14 +150,7 @@ block main:
         bytes votes_as_percentage = Txn.ApplicationArgs[2]
         bytes asset_ids = Txn.ApplicationArgs[3]
         bytes account_power_index = Txn.ApplicationArgs[4]
-
-        # vote count and asset count must be equal
-        assert(len(votes_as_percentage))
-        assert(len(asset_ids) == len(votes_as_percentage))
-        assert(!(len(votes_as_percentage) % 8))
-        int option_count = len(votes_as_percentage) / 8
-        assert(option_count <= MAX_OPTION_COUNT)
-        
+      
         bytes proposal_box_name = concat(PROPOSAL_BOX_PREFIX, proposal_id)
         box<Proposal> proposal = OpenBox(proposal_box_name)
 
@@ -166,6 +159,13 @@ block main:
         assert(proposal.voting_start_timestamp <= Global.LatestTimestamp)
         assert(Global.LatestTimestamp < proposal.voting_end_timestamp)
         assert(proposal.is_cancelled == BIT_ZERO)
+
+        # vote count and asset count must be equal
+        assert(len(votes_as_percentage))
+        assert(len(asset_ids) == len(votes_as_percentage))
+        assert(!(len(votes_as_percentage) % 8))
+        int option_count = len(votes_as_percentage) / 8
+        assert(option_count <= MAX_OPTION_COUNT)
 
         int proposal_index = proposal.index
         set_user_as_voted(user_address, proposal_index)

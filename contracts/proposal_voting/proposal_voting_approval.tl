@@ -139,6 +139,7 @@ block main:
         bytes proposal_id = Txn.ApplicationArgs[1]
         bytes proposal_box_name = concat(PROPOSAL_BOX_PREFIX, proposal_id)
         box<Proposal> proposal = OpenBox(proposal_box_name)
+        assert(proposal.voting_end_timestamp < Global.LatestTimestamp)
         assert(proposal.is_cancelled == BIT_ZERO)
         assert(proposal.is_executed == BIT_ZERO)
         proposal.is_executed = BIT_ONE
@@ -201,6 +202,7 @@ block main:
         assert(proposal.voting_start_timestamp <= Global.LatestTimestamp)
         assert(Global.LatestTimestamp < proposal.voting_end_timestamp)
         assert(proposal.is_cancelled == BIT_ZERO)
+        assert(proposal.is_executed == BIT_ZERO)
 
         # Check attendance
         int proposal_index = proposal.index
