@@ -72,12 +72,18 @@ switch Txn.OnCompletion:
     NoOp: main
     OptIn: fail
     CloseOut: fail
-    UpdateApplication: fail
+    UpdateApplication: update_app
     DeleteApplication: fail
 end
 
 block fail:
     exit(0)
+end
+
+block update_app:
+    # TODO: REMOVE THIS FOR MAINNET!
+    assert(Txn.Sender == Global.CreatorAddress)
+    exit(1)
 end
 
 block create_app:
