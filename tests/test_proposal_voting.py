@@ -9,25 +9,25 @@ from algosdk.logic import get_application_address
 
 from common.constants import TINY_ASSET_ID, WEEK, DAY
 from common.utils import get_start_timestamp_of_week, itob, sign_txns, parse_box_proposal, get_start_time_of_day, get_bias, get_slope
-from locking.transactions import prepare_create_lock_txn_group
+from vault.transactions import prepare_create_lock_txn_group
 from proposal_voting.constants import PROPOSAL_BOX_PREFIX
 from proposal_voting.transactions import prepare_create_proposal_txn_group, prepare_cast_vote_txn_group
-from tests.common import BaseTestCase, LockingAppMixin, ProposalVotingAppMixin
-from common.constants import LOCKING_APP_ID, PROPOSAL_VOTING_APP_ID
+from tests.common import BaseTestCase, VaultAppMixin, ProposalVotingAppMixin
+from common.constants import VAULT_APP_ID, PROPOSAL_VOTING_APP_ID
 
-class ProposalVotingTestCase(LockingAppMixin, ProposalVotingAppMixin, BaseTestCase):
+class ProposalVotingTestCase(VaultAppMixin, ProposalVotingAppMixin, BaseTestCase):
 
     @classmethod
     def setUpClass(cls) -> None:
         super().setUpClass()
         cls.app_creator_sk, cls.app_creator_address = generate_account()
-        cls.locking_app_creation_timestamp = int(datetime(year=2022, month=3, day=1, tzinfo=ZoneInfo("UTC")).timestamp())
+        cls.vault_app_creation_timestamp = int(datetime(year=2022, month=3, day=1, tzinfo=ZoneInfo("UTC")).timestamp())
 
     def setUp(self):
         super().setUp()
         self.ledger.set_account_balance(self.app_creator_address, 1_000_000)
-        self.create_locking_app(self.app_creator_address, self.locking_app_creation_timestamp)
-        self.init_locking_app(self.locking_app_creation_timestamp + 30)
+        self.create_vault_app(self.app_creator_address, self.vault_app_creation_timestamp)
+        self.init_vault_app(self.vault_app_creation_timestamp + 30)
 
     def test_create_proposal(self):
         user_sk, user_address = generate_account()
@@ -40,7 +40,7 @@ class ProposalVotingTestCase(LockingAppMixin, ProposalVotingAppMixin, BaseTestCa
         self.create_proposal_voting_app(self.app_creator_address)
         self.ledger.set_account_balance(get_application_address(PROPOSAL_VOTING_APP_ID), 1_000_000)
 
-        block_timestamp = self.locking_app_creation_timestamp + 2 * WEEK
+        block_timestamp = self.vault_app_creation_timestamp + 2 * WEEK
         self.create_checkpoints(user_address, user_sk, block_timestamp)
 
         # Create lock 1
@@ -86,7 +86,7 @@ class ProposalVotingTestCase(LockingAppMixin, ProposalVotingAppMixin, BaseTestCa
         self.assertDictEqual(
             self.ledger.global_states[PROPOSAL_VOTING_APP_ID],
             {
-                b'locking_app_id': LOCKING_APP_ID,
+                b'vault_app_id': VAULT_APP_ID,
                 b'manager': decode_address(self.app_creator_address),
                 b'proposal_id_counter': 1,
                 b'proposal_threshold': 10,  # %10
@@ -144,7 +144,7 @@ class ProposalVotingTestCase(LockingAppMixin, ProposalVotingAppMixin, BaseTestCa
         self.create_proposal_voting_app(self.app_creator_address)
         self.ledger.set_account_balance(get_application_address(PROPOSAL_VOTING_APP_ID), 1_000_000)
 
-        block_timestamp = self.locking_app_creation_timestamp + 2 * WEEK
+        block_timestamp = self.vault_app_creation_timestamp + 2 * WEEK
         self.create_checkpoints(user_address, user_sk, block_timestamp)
 
         # Create lock 1

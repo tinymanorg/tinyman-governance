@@ -7,10 +7,10 @@ from algosdk.account import generate_account
 from algosdk.encoding import decode_address
 from algosdk.logic import get_application_address
 
-from common.constants import staking_voting_approval_program, rewards_approval_program, locking_approval_program, proposal_voting_approval_program, TINY_ASSET_ID, LOCKING_APP_ID, PROPOSAL_VOTING_APP_ID, REWARDS_APP_ID, STAKING_VOTING_APP_ID
+from common.constants import staking_voting_approval_program, rewards_approval_program, vault_approval_program, proposal_voting_approval_program, TINY_ASSET_ID, VAULT_APP_ID, PROPOSAL_VOTING_APP_ID, REWARDS_APP_ID, STAKING_VOTING_APP_ID
 from common.utils import itob, sign_txns
-from locking.constants import TINY_ASSET_ID_KEY, TOTAL_LOCKED_AMOUNT_KEY, TOTAL_POWER_COUNT_KEY, CREATION_TIMESTAMP_KEY, LOCKING_APP_MINIMUM_BALANCE_REQUIREMENT, TOTAL_POWER_BOX_ARRAY_LEN, TOTAL_POWERS, TOTAL_POWER_BOX_SIZE, TOTAL_POWER_SIZE
-from locking.transactions import prepare_create_checkpoints_txn_group
+from vault.constants import TINY_ASSET_ID_KEY, TOTAL_LOCKED_AMOUNT_KEY, TOTAL_POWER_COUNT_KEY, CREATION_TIMESTAMP_KEY, VAULT_APP_MINIMUM_BALANCE_REQUIREMENT, TOTAL_POWER_BOX_ARRAY_LEN, TOTAL_POWERS, TOTAL_POWER_BOX_SIZE, TOTAL_POWER_SIZE
+from vault.transactions import prepare_create_checkpoints_txn_group
 from rewards.constants import REWARD_HISTORY_BOX_ARRAY_LEN, REWARD_HISTORY_BOX_SIZE, REWARD_HISTORY_SIZE, REWARD_HISTORY, REWARDS_APP_MINIMUM_BALANCE_REQUIREMENT
 
 
@@ -47,16 +47,16 @@ class BaseTestCase(unittest.TestCase):
             self.ledger.boxes[app_id] = {}
 
 
-class LockingAppMixin:
+class VaultAppMixin:
 
-    def create_locking_app(self, app_creator_address, creation_timestamp):
+    def create_vault_app(self, app_creator_address, creation_timestamp):
         if app_creator_address not in self.ledger.accounts:
             self.ledger.set_account_balance(app_creator_address, 1_000_000)
 
         # TODO: Update int and byte counts
         self.ledger.create_app(
-            app_id=LOCKING_APP_ID,
-            approval_program=locking_approval_program,
+            app_id=VAULT_APP_ID,
+            approval_program=vault_approval_program,
             creator=app_creator_address,
             local_ints=0,
             local_bytes=0,
@@ -65,7 +65,7 @@ class LockingAppMixin:
         )
 
         self.ledger.set_global_state(
-            LOCKING_APP_ID,
+            VAULT_APP_ID,
             {
                 TINY_ASSET_ID_KEY: TINY_ASSET_ID,
                 TOTAL_LOCKED_AMOUNT_KEY: 0,
@@ -74,15 +74,15 @@ class LockingAppMixin:
             }
         )
 
-    def init_locking_app(self, timestamp):
+    def init_vault_app(self, timestamp):
         # Min balance requirement
-        self.ledger.set_account_balance(get_application_address(LOCKING_APP_ID), LOCKING_APP_MINIMUM_BALANCE_REQUIREMENT)
+        self.ledger.set_account_balance(get_application_address(VAULT_APP_ID), VAULT_APP_MINIMUM_BALANCE_REQUIREMENT)
         # Opt-in
-        self.ledger.set_account_balance(get_application_address(LOCKING_APP_ID), 0, asset_id=TINY_ASSET_ID)
+        self.ledger.set_account_balance(get_application_address(VAULT_APP_ID), 0, asset_id=TINY_ASSET_ID)
         self.set_box_total_power(index=0, bias=0, timestamp=timestamp, slope=0, cumulative_power=0)
 
         self.ledger.update_global_state(
-            LOCKING_APP_ID,
+            VAULT_APP_ID,
             {
                 TOTAL_POWER_COUNT_KEY: 1,
             }
@@ -99,21 +99,21 @@ class LockingAppMixin:
 
 
     def set_box_total_power(self, index, bias, timestamp, slope, cumulative_power):
-        self.init_app_boxes(LOCKING_APP_ID)
+        self.init_app_boxes(VAULT_APP_ID)
 
         box_index = index // TOTAL_POWER_BOX_ARRAY_LEN
         array_index = index % TOTAL_POWER_BOX_ARRAY_LEN
 
         box_name = TOTAL_POWERS + itob(box_index)
-        if box_name not in self.ledger.boxes[LOCKING_APP_ID]:
-            self.ledger.boxes[LOCKING_APP_ID][box_name] = itob(0, 1) * TOTAL_POWER_BOX_SIZE
+        if box_name not in self.ledger.boxes[VAULT_APP_ID]:
+            self.ledger.boxes[VAULT_APP_ID][box_name] = itob(0, 1) * TOTAL_POWER_BOX_SIZE
 
         total_power = itob(bias) + itob(timestamp) + itob(slope, 16) + itob(cumulative_power, 16)
         start = array_index * TOTAL_POWER_SIZE
         end = start + TOTAL_POWER_SIZE
-        data = bytearray(self.ledger.boxes[LOCKING_APP_ID][box_name])
+        data = bytearray(self.ledger.boxes[VAULT_APP_ID][box_name])
         data[start:end] = total_power
-        self.ledger.boxes[LOCKING_APP_ID][box_name] = bytes(data)
+        self.ledger.boxes[VAULT_APP_ID][box_name] = bytes(data)
 
 class RewardsAppMixin:
     def create_rewards_app(self, app_creator_address, creation_timestamp):
@@ -137,7 +137,7 @@ class RewardsAppMixin:
             REWARDS_APP_ID,
             {
                 TINY_ASSET_ID_KEY: TINY_ASSET_ID,
-                b'locking_app_id': LOCKING_APP_ID,
+                b'vault_app_id': VAULT_APP_ID,
                 CREATION_TIMESTAMP_KEY: creation_timestamp
             }
         )
@@ -197,7 +197,7 @@ class StakingVotingAppMixin:
             STAKING_VOTING_APP_ID,
             {
                 TINY_ASSET_ID_KEY: TINY_ASSET_ID,
-                b'locking_app_id': LOCKING_APP_ID,
+                b'vault_app_id': VAULT_APP_ID,
                 b'proposal_id_counter': 0,
                 b'voting_delay': 1,
                 b'voting_duration': 7,
@@ -228,7 +228,7 @@ class ProposalVotingAppMixin:
         self.ledger.set_global_state(
             PROPOSAL_VOTING_APP_ID,
             {
-                b'locking_app_id': LOCKING_APP_ID,
+                b'vault_app_id': VAULT_APP_ID,
                 b'proposal_id_counter': 0,
                 b'proposal_threshold': 10,
                 b'voting_delay': 1,

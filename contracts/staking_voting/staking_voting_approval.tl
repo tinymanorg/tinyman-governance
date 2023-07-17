@@ -20,7 +20,7 @@ const bytes BYTES_ZERO = "\x00"
 const bytes BYTES_ONE = "\x01"
 
 # Global States
-const bytes LOCKING_APP_ID_KEY = "locking_app_id"
+const bytes VAULT_APP_ID_KEY = "vault_app_id"
 const bytes PROPOSAL_ID_COUNTER_KEY = "proposal_id_counter"
 const bytes VOTING_DELAY_KEY = "voting_delay"
 const bytes VOTING_DURATION_KEY = "voting_duration"
@@ -52,7 +52,7 @@ block fail:
 end
 
 block create_app:
-    app_global_put(LOCKING_APP_ID_KEY, Txn.ApplicationArgs[0])
+    app_global_put(VAULT_APP_ID_KEY, Txn.ApplicationArgs[0])
     app_global_put(PROPOSAL_ID_COUNTER_KEY, 0)
 
     app_global_put(VOTING_DELAY_KEY, 2)
@@ -206,7 +206,7 @@ end
 func get_account_voting_power(address: bytes, snapshot_timestamp: int, account_power_index: bytes) int:
     inner_txn:
         TypeEnum: Appl
-        ApplicationID: app_global_get(LOCKING_APP_ID_KEY)
+        ApplicationID: app_global_get(VAULT_APP_ID_KEY)
         ApplicationArgs[0]: "get_tiny_power_of_at"
         ApplicationArgs[1]: address
         ApplicationArgs[2]: itob(snapshot_timestamp)

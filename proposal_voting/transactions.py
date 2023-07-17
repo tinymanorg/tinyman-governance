@@ -3,14 +3,14 @@ from algosdk.encoding import decode_address
 from algosdk.logic import get_application_address
 
 from common.utils import itob, get_latest_total_powers_indexes, parse_box_staking_proposal, get_account_power_index_at, get_required_minimum_balance_of_box
-from locking.constants import TOTAL_POWERS, ACCOUNT_POWER_BOX_ARRAY_LEN
+from vault.constants import TOTAL_POWERS, ACCOUNT_POWER_BOX_ARRAY_LEN
 from proposal_voting.constants import PROPOSAL_BOX_PREFIX, ATTENDANCE_BOX_PREFIX
-from common.constants import PROPOSAL_VOTING_APP_ID, LOCKING_APP_ID
+from common.constants import PROPOSAL_VOTING_APP_ID, VAULT_APP_ID
 
 def prepare_create_proposal_txn_group(ledger, user_address, proposal_id, sp):
     proposal_box_name = PROPOSAL_BOX_PREFIX + proposal_id
     account_state_box_name = decode_address(user_address)
-    latest_total_powers_box_index, _, _ = get_latest_total_powers_indexes(ledger, LOCKING_APP_ID)
+    latest_total_powers_box_index, _, _ = get_latest_total_powers_indexes(ledger, VAULT_APP_ID)
     latest_total_powers_box_name = TOTAL_POWERS + itob(latest_total_powers_box_index)
 
     txn_group = [
@@ -19,11 +19,11 @@ def prepare_create_proposal_txn_group(ledger, user_address, proposal_id, sp):
             sp=sp,
             index=PROPOSAL_VOTING_APP_ID,
             app_args=["create_proposal", proposal_id],
-            foreign_apps=[LOCKING_APP_ID],
+            foreign_apps=[VAULT_APP_ID],
             boxes=[
                 (PROPOSAL_VOTING_APP_ID, proposal_box_name),
-                (LOCKING_APP_ID, account_state_box_name),
-                (LOCKING_APP_ID, latest_total_powers_box_name)
+                (VAULT_APP_ID, account_state_box_name),
+                (VAULT_APP_ID, latest_total_powers_box_name)
             ]
         )
     ]
@@ -34,7 +34,7 @@ def prepare_create_proposal_txn_group(ledger, user_address, proposal_id, sp):
 def prepare_cast_vote_txn_group(ledger, user_address, proposal_id, vote, proposal_creation_timestamp, sp):
     assert vote in [0, 1, 2]
 
-    account_power_index = get_account_power_index_at(ledger, LOCKING_APP_ID, user_address, proposal_creation_timestamp)
+    account_power_index = get_account_power_index_at(ledger, VAULT_APP_ID, user_address, proposal_creation_timestamp)
     # assert account_power_index is not None
     account_power_box_index = account_power_index // ACCOUNT_POWER_BOX_ARRAY_LEN
 
@@ -46,12 +46,12 @@ def prepare_cast_vote_txn_group(ledger, user_address, proposal_id, vote, proposa
     boxes = [
         (PROPOSAL_VOTING_APP_ID, proposal_box_name),
         (PROPOSAL_VOTING_APP_ID, account_attendance_box_name),
-        (LOCKING_APP_ID, decode_address(user_address)),
-        (LOCKING_APP_ID, decode_address(user_address) + itob(account_power_box_index)),
+        (VAULT_APP_ID, decode_address(user_address)),
+        (VAULT_APP_ID, decode_address(user_address) + itob(account_power_box_index)),
     ]
     if not (account_power_index + 1) % ACCOUNT_POWER_BOX_ARRAY_LEN:
         boxes.append(
-            (LOCKING_APP_ID, decode_address(user_address) + itob(account_power_box_index + 1)),
+            (VAULT_APP_ID, decode_address(user_address) + itob(account_power_box_index + 1)),
         )
 
     txn_group = [
@@ -60,7 +60,7 @@ def prepare_cast_vote_txn_group(ledger, user_address, proposal_id, vote, proposa
             sp=sp,
             index=PROPOSAL_VOTING_APP_ID,
             app_args=["cast_vote", proposal_id, vote, account_power_index],
-            foreign_apps=[LOCKING_APP_ID],
+            foreign_apps=[VAULT_APP_ID],
             boxes=boxes
         ),
     ]

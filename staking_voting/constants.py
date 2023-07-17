@@ -4,7 +4,7 @@ BYTES_ONE = b'\x01'
 
 # Global States
 TINY_ASSET_ID_KEY = b'tiny_asset_id'
-LOCKING_APP_ID_KEY = b'locking_app_id'
+VAULT_APP_ID_KEY = b'vault_app_id'
 PROPOSAL_ID_COUNTER_KEY = b'proposal_id_counter'
 VOTING_DELAY_KEY = b'voting_delay'
 VOTING_DURATION_KEY = b'voting_duration'

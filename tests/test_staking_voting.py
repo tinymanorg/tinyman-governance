@@ -7,24 +7,24 @@ from algosdk.logic import get_application_address
 
 from common.constants import WEEK, TINY_ASSET_ID, DAY, STAKING_VOTING_APP_ID
 from common.utils import get_start_timestamp_of_week, itob, sign_txns
-from locking.transactions import prepare_create_lock_txn_group
+from vault.transactions import prepare_create_lock_txn_group
 from staking_voting.transactions import prepare_create_proposal_txn_group, prepare_cast_vote_txn_group
-from tests.common import BaseTestCase, LockingAppMixin, StakingVotingAppMixin
+from tests.common import BaseTestCase, VaultAppMixin, StakingVotingAppMixin
 
 
-class StakingVotingTestCase(LockingAppMixin, StakingVotingAppMixin, BaseTestCase):
+class StakingVotingTestCase(VaultAppMixin, StakingVotingAppMixin, BaseTestCase):
 
     @classmethod
     def setUpClass(cls) -> None:
         super().setUpClass()
         cls.app_creator_sk, cls.app_creator_address = generate_account()
-        cls.locking_app_creation_timestamp = int(datetime(year=2022, month=3, day=1, tzinfo=ZoneInfo("UTC")).timestamp())
+        cls.vault_app_creation_timestamp = int(datetime(year=2022, month=3, day=1, tzinfo=ZoneInfo("UTC")).timestamp())
 
     def setUp(self):
         super().setUp()
         self.ledger.set_account_balance(self.app_creator_address, 1_000_000)
-        self.create_locking_app(self.app_creator_address, self.locking_app_creation_timestamp)
-        self.init_locking_app(self.locking_app_creation_timestamp + 30)
+        self.create_vault_app(self.app_creator_address, self.vault_app_creation_timestamp)
+        self.init_vault_app(self.vault_app_creation_timestamp + 30)
 
     def test_create_proposal(self):
         user_sk, user_address = generate_account()
@@ -33,7 +33,7 @@ class StakingVotingTestCase(LockingAppMixin, StakingVotingAppMixin, BaseTestCase
         self.create_staking_voting_app(self.app_creator_address)
         self.ledger.set_account_balance(get_application_address(STAKING_VOTING_APP_ID), 1_000_000)
 
-        block_timestamp = self.locking_app_creation_timestamp + 2 * WEEK
+        block_timestamp = self.vault_app_creation_timestamp + 2 * WEEK
         proposal_id = itob(1) * 4
         txn_group = prepare_create_proposal_txn_group(self.app_creator_address, proposal_id, self.sp)
         transaction.assign_group_id(txn_group)
@@ -52,7 +52,7 @@ class StakingVotingTestCase(LockingAppMixin, StakingVotingAppMixin, BaseTestCase
         self.create_staking_voting_app(self.app_creator_address)
         self.ledger.set_account_balance(get_application_address(STAKING_VOTING_APP_ID), 1_000_000)
 
-        block_timestamp = self.locking_app_creation_timestamp + 2 * WEEK
+        block_timestamp = self.vault_app_creation_timestamp + 2 * WEEK
         self.create_checkpoints(user_address, user_sk, block_timestamp)
 
         # Create lock 1

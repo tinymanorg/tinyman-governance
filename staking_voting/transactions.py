@@ -2,10 +2,10 @@ from algosdk import transaction
 from algosdk.encoding import decode_address
 from algosdk.logic import get_application_address
 
-from common.constants import STAKING_VOTING_APP_ID, LOCKING_APP_ID
+from common.constants import STAKING_VOTING_APP_ID, VAULT_APP_ID
 from common.utils import itob, get_account_power_index_at, parse_box_staking_proposal, get_required_minimum_balance_of_box
-from locking.constants import ACCOUNT_POWER_BOX_ARRAY_LEN
-from locking.transactions import prepare_budget_increase_txn
+from vault.constants import ACCOUNT_POWER_BOX_ARRAY_LEN
+from vault.transactions import prepare_budget_increase_txn
 from staking_voting.constants import PROPOSAL_BOX_PREFIX, ATTENDANCE_BOX_PREFIX
 
 
@@ -30,7 +30,7 @@ def prepare_cast_vote_txn_group(ledger, user_address, proposal_id, votes, asset_
     arg_votes = b"".join([itob(vote) for vote in votes])
     arg_asset_ids = b"".join([itob(asset_id) for asset_id in asset_ids])
 
-    account_power_index = get_account_power_index_at(ledger, LOCKING_APP_ID, user_address, proposal_creation_timestamp)
+    account_power_index = get_account_power_index_at(ledger, VAULT_APP_ID, user_address, proposal_creation_timestamp)
     # assert account_power_index is not None
     account_power_box_index = account_power_index // ACCOUNT_POWER_BOX_ARRAY_LEN
 
@@ -42,9 +42,9 @@ def prepare_cast_vote_txn_group(ledger, user_address, proposal_id, votes, asset_
         (STAKING_VOTING_APP_ID, proposal_box_name),
         (STAKING_VOTING_APP_ID, account_attendance_box_name),
         *[(STAKING_VOTING_APP_ID, b"v" + itob(proposal_index) + itob(asset_id)) for asset_id in asset_ids],
-        (LOCKING_APP_ID, decode_address(user_address)),
-        (LOCKING_APP_ID, decode_address(user_address) + itob(account_power_box_index)),
-        (LOCKING_APP_ID, decode_address(user_address) + itob(account_power_box_index + 1)),
+        (VAULT_APP_ID, decode_address(user_address)),
+        (VAULT_APP_ID, decode_address(user_address) + itob(account_power_box_index)),
+        (VAULT_APP_ID, decode_address(user_address) + itob(account_power_box_index + 1)),
     ]
     txn_group = [
         transaction.ApplicationNoOpTxn(
@@ -52,7 +52,7 @@ def prepare_cast_vote_txn_group(ledger, user_address, proposal_id, votes, asset_
             sp=sp,
             index=STAKING_VOTING_APP_ID,
             app_args=["cast_vote", proposal_id, arg_votes, arg_asset_ids, account_power_index],
-            foreign_apps=[LOCKING_APP_ID],
+            foreign_apps=[VAULT_APP_ID],
             boxes=boxes[:7]
         ),
     ]
@@ -60,11 +60,11 @@ def prepare_cast_vote_txn_group(ledger, user_address, proposal_id, votes, asset_
 
     if len(boxes) >= 7:
         txn_group.append(
-            prepare_budget_increase_txn(user_address, sp=sp, index=LOCKING_APP_ID, foreign_apps=[STAKING_VOTING_APP_ID], boxes=boxes[7:14]),
+            prepare_budget_increase_txn(user_address, sp=sp, index=VAULT_APP_ID, foreign_apps=[STAKING_VOTING_APP_ID], boxes=boxes[7:14]),
         )
     if len(boxes) >= 14:
         txn_group.append(
-            prepare_budget_increase_txn(user_address, sp=sp, index=LOCKING_APP_ID, foreign_apps=[STAKING_VOTING_APP_ID], boxes=boxes[14:]),
+            prepare_budget_increase_txn(user_address, sp=sp, index=VAULT_APP_ID, foreign_apps=[STAKING_VOTING_APP_ID], boxes=boxes[14:]),
         )
 
     payment_amount = 0

@@ -15,7 +15,7 @@ const int WEEK = 604800
 
 # Global states
 const bytes TINY_ASSET_ID_KEY = "tiny_asset_id"
-const bytes LOCKING_APP_ID_KEY = "locking_app_id"
+const bytes VAULT_APP_ID_KEY = "vault_app_id"
 const bytes CREATION_TIMESTAMP_KEY = "creation_timestamp"
 const bytes REWARD_HISTORY_COUNT_KEY = "reward_history_count"
 const bytes MANAGER_KEY = "manager"
@@ -47,7 +47,7 @@ end
 
 block create_app:
     app_global_put(TINY_ASSET_ID_KEY, btoi(Txn.ApplicationArgs[0]))
-    app_global_put(LOCKING_APP_ID_KEY, Txn.Applications[1])
+    app_global_put(VAULT_APP_ID_KEY, Txn.Applications[1])
     app_global_put(REWARD_HISTORY_COUNT_KEY, 0)
 
     int creation_timestamp
@@ -167,7 +167,7 @@ end
 func get_account_cumulative_power_at(address: bytes, snapshot_time: int, account_power_index: bytes) bytes:
     inner_txn:
         TypeEnum: Appl
-        ApplicationID: app_global_get(LOCKING_APP_ID_KEY)
+        ApplicationID: app_global_get(VAULT_APP_ID_KEY)
         ApplicationArgs[0]: "get_cumulative_power_of_at"
         ApplicationArgs[1]: address
         ApplicationArgs[2]: itob(snapshot_time)
@@ -182,7 +182,7 @@ end
 func get_total_cumulative_power_at(snapshot_time: int, total_power_index: bytes) bytes:
     inner_txn:
         TypeEnum: Appl
-        ApplicationID: app_global_get(LOCKING_APP_ID_KEY)
+        ApplicationID: app_global_get(VAULT_APP_ID_KEY)
         ApplicationArgs[0]: "get_total_cumulative_power_at"
         ApplicationArgs[1]: itob(snapshot_time)
         ApplicationArgs[2]: total_power_index
@@ -196,7 +196,7 @@ end
 func get_cumulative_powers_for_rewards(address: bytes, timestamp_1: int, timestamp_2: int, account_power_index_1: bytes, account_power_index_2: bytes, total_power_index_1: bytes, total_power_index_2: bytes) bytes, bytes, bytes, bytes:
     inner_txn:
         TypeEnum: Appl
-        ApplicationID: app_global_get(LOCKING_APP_ID_KEY)
+        ApplicationID: app_global_get(VAULT_APP_ID_KEY)
         ApplicationArgs[0]: "get_cumulative_powers_for_rewards"
         ApplicationArgs[1]: address
         ApplicationArgs[2]: itob(timestamp_1)

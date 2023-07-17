@@ -3,7 +3,7 @@ BYTES_ONE = b'\x01'
 
 # Global states
 TINY_ASSET_ID_KEY = b'tiny_asset_id'
-LOCKING_APP_ID_KEY = b'locking_app_id'
+VAULT_APP_ID_KEY = b'vault_app_id'
 CREATION_TIMESTAMP_KEY = b'creation_timestamp'
 REWARD_HISTORY_COUNT_KEY = b'reward_history_count'
 MANAGER_KEY = b'manager'

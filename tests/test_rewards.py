@@ -8,29 +8,29 @@ from algosdk.account import generate_account
 from algosdk.encoding import decode_address
 from algosdk.logic import get_application_address
 
-from common.constants import TINY_ASSET_ID, rewards_approval_program, rewards_clear_state_program, WEEK, LOCKING_APP_ID, REWARDS_APP_ID
+from common.constants import TINY_ASSET_ID, rewards_approval_program, rewards_clear_state_program, WEEK, VAULT_APP_ID, REWARDS_APP_ID
 from common.utils import get_start_timestamp_of_week, itob, sign_txns, parse_box_reward_history
-from locking.constants import TOTAL_LOCKED_AMOUNT_KEY
-from locking.transactions import prepare_create_lock_txn_group, prepare_withdraw_txn_group
-from rewards.constants import CREATION_TIMESTAMP_KEY, TINY_ASSET_ID_KEY, LOCKING_APP_ID_KEY, MANAGER_KEY, REWARD_HISTORY_COUNT_KEY, REWARD_HISTORY, REWARDS_APP_MINIMUM_BALANCE_REQUIREMENT, ATTENDANCE_BOX_PREFIX
+from vault.constants import TOTAL_LOCKED_AMOUNT_KEY
+from vault.transactions import prepare_create_lock_txn_group, prepare_withdraw_txn_group
+from rewards.constants import CREATION_TIMESTAMP_KEY, TINY_ASSET_ID_KEY, VAULT_APP_ID_KEY, MANAGER_KEY, REWARD_HISTORY_COUNT_KEY, REWARD_HISTORY, REWARDS_APP_MINIMUM_BALANCE_REQUIREMENT, ATTENDANCE_BOX_PREFIX
 from rewards.transactions import prepare_claim_rewards_txn_group
-from tests.common import BaseTestCase, LockingAppMixin, RewardsAppMixin
+from tests.common import BaseTestCase, VaultAppMixin, RewardsAppMixin
 
-class RewardsTestCase(LockingAppMixin, RewardsAppMixin, BaseTestCase):
+class RewardsTestCase(VaultAppMixin, RewardsAppMixin, BaseTestCase):
 
     @classmethod
     def setUpClass(cls) -> None:
         super().setUpClass()
         cls.app_creator_sk, cls.app_creator_address = generate_account()
         cls.user_sk, cls.user_address = generate_account()
-        cls.locking_app_creation_timestamp = int(datetime(year=2022, month=3, day=1, tzinfo=ZoneInfo("UTC")).timestamp())
+        cls.vault_app_creation_timestamp = int(datetime(year=2022, month=3, day=1, tzinfo=ZoneInfo("UTC")).timestamp())
 
     def setUp(self):
         super().setUp()
         self.ledger.set_account_balance(self.app_creator_address, 1_000_000)
 
-        self.create_locking_app(self.app_creator_address, self.locking_app_creation_timestamp)
-        self.init_locking_app(self.locking_app_creation_timestamp + 30)
+        self.create_vault_app(self.app_creator_address, self.vault_app_creation_timestamp)
+        self.init_vault_app(self.vault_app_creation_timestamp + 30)
 
         self.ledger.set_account_balance(self.user_address, 100_000_000)
 
@@ -50,7 +50,7 @@ class RewardsTestCase(LockingAppMixin, RewardsAppMixin, BaseTestCase):
                 local_schema=transaction.StateSchema(num_uints=0, num_byte_slices=0),
                 extra_pages=0,
                 app_args=[TINY_ASSET_ID],
-                foreign_apps=[LOCKING_APP_ID],
+                foreign_apps=[VAULT_APP_ID],
             )
         ]
 
@@ -63,8 +63,8 @@ class RewardsTestCase(LockingAppMixin, RewardsAppMixin, BaseTestCase):
         self.assertDictEqual(
             self.ledger.global_states[app_id],
             {
-                CREATION_TIMESTAMP_KEY: self.locking_app_creation_timestamp,
-                LOCKING_APP_ID_KEY: LOCKING_APP_ID,
+                CREATION_TIMESTAMP_KEY: self.vault_app_creation_timestamp,
+                VAULT_APP_ID_KEY: VAULT_APP_ID,
                 MANAGER_KEY: decode_address(self.app_creator_address),
                 REWARD_HISTORY_COUNT_KEY: 0,
                 TINY_ASSET_ID_KEY: TINY_ASSET_ID
@@ -121,7 +121,7 @@ class RewardsTestCase(LockingAppMixin, RewardsAppMixin, BaseTestCase):
         self.assertDictEqual(
             reward_history,
             {
-                'timestamp': self.locking_app_creation_timestamp,
+                'timestamp': self.vault_app_creation_timestamp,
                 'reward_amount': reward_amount
             }
         )
@@ -130,11 +130,11 @@ class RewardsTestCase(LockingAppMixin, RewardsAppMixin, BaseTestCase):
         block_datetime = datetime(year=2022, month=3, day=1, hour=1, tzinfo=ZoneInfo("UTC"))
         block_timestamp = int(block_datetime.timestamp())
         # last_checkpoint_timestamp = block_timestamp - 10
-        # self.create_locking_app(LOCKING_APP_ID, self.app_creator_address, self.locking_app_creation_timestamp)
-        # self.init_locking_app(LOCKING_APP_ID, timestamp=last_checkpoint_timestamp)
+        # self.create_vault_app(VAULT_APP_ID, self.app_creator_address, self.vault_app_creation_timestamp)
+        # self.init_vault_app(VAULT_APP_ID, timestamp=last_checkpoint_timestamp)
         reward_amount = 100_000_000
-        self.create_rewards_app(self.app_creator_address, self.locking_app_creation_timestamp)
-        self.init_rewards_app(self.locking_app_creation_timestamp, reward_amount)
+        self.create_rewards_app(self.app_creator_address, self.vault_app_creation_timestamp)
+        self.init_rewards_app(self.vault_app_creation_timestamp, reward_amount)
 
         self.ledger.move(
             reward_amount * 10,
@@ -156,7 +156,7 @@ class RewardsTestCase(LockingAppMixin, RewardsAppMixin, BaseTestCase):
         transaction.assign_group_id(txn_group)
         signed_txns = sign_txns(txn_group, self.user_sk)
         self.ledger.eval_transactions(signed_txns, block_timestamp=block_timestamp)
-        self.assertEqual(self.ledger.global_states[LOCKING_APP_ID][TOTAL_LOCKED_AMOUNT_KEY], amount)
+        self.assertEqual(self.ledger.global_states[VAULT_APP_ID][TOTAL_LOCKED_AMOUNT_KEY], amount)
         lock_start_timestamp = block_timestamp
 
         # Create checkpoints
@@ -168,7 +168,7 @@ class RewardsTestCase(LockingAppMixin, RewardsAppMixin, BaseTestCase):
         transaction.assign_group_id(txn_group)
         signed_txns = sign_txns(txn_group, self.user_sk)
         self.ledger.eval_transactions(signed_txns, block_timestamp=block_timestamp)
-        self.assertEqual(self.ledger.global_states[LOCKING_APP_ID][TOTAL_LOCKED_AMOUNT_KEY], 0)
+        self.assertEqual(self.ledger.global_states[VAULT_APP_ID][TOTAL_LOCKED_AMOUNT_KEY], 0)
 
         # Create lock
         lock_end_timestamp = lock_end_timestamp + 5 * WEEK
@@ -177,16 +177,16 @@ class RewardsTestCase(LockingAppMixin, RewardsAppMixin, BaseTestCase):
         transaction.assign_group_id(txn_group)
         signed_txns = sign_txns(txn_group, self.user_sk)
         self.ledger.eval_transactions(signed_txns, block_timestamp=block_timestamp)
-        self.assertEqual(self.ledger.global_states[LOCKING_APP_ID][TOTAL_LOCKED_AMOUNT_KEY], amount)
+        self.assertEqual(self.ledger.global_states[VAULT_APP_ID][TOTAL_LOCKED_AMOUNT_KEY], amount)
 
         # for t in [1646870401, 1646870400, 1646352000, 1646092800, 1646179200]:
-        #     txn_group = self.get_get_cumulative_power_of_at_txn_group(self.user_address, t, app_id=LOCKING_APP_ID)
+        #     txn_group = self.get_get_cumulative_power_of_at_txn_group(self.user_address, t, app_id=VAULT_APP_ID)
         #     transaction.assign_group_id(txn_group)
         #     signed_txns = sign_txns(txn_group, self.user_sk)
         #     block = self.ledger.eval_transactions(signed_txns, block_timestamp=block_timestamp)
         #     print(btoi(block[b'txns'][0][b'dt'][b'lg'][-1]))
         #
-        #     txn_group = self.get_get_total_cumulative_power_at_txn_group(self.user_address, t, app_id=LOCKING_APP_ID)
+        #     txn_group = self.get_get_total_cumulative_power_at_txn_group(self.user_address, t, app_id=VAULT_APP_ID)
         #     transaction.assign_group_id(txn_group)
         #     signed_txns = sign_txns(txn_group, self.user_sk)
         #     block = self.ledger.eval_transactions(signed_txns, block_timestamp=block_timestamp)

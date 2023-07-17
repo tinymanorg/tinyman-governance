@@ -4,9 +4,9 @@ from algosdk import transaction
 from algosdk.encoding import decode_address
 from algosdk.logic import get_application_address
 
-from common.constants import WEEK, TINY_ASSET_ID, LOCKING_APP_ID
+from common.constants import WEEK, TINY_ASSET_ID, VAULT_APP_ID
 from common.utils import itob, get_latest_total_powers_indexes, get_required_minimum_balance_of_box, get_latest_account_power_indexes, get_latest_checkpoint_timestamp, get_start_timestamp_of_week, get_account_power_index_at, get_total_power_index_at, parse_box_account_state
-from locking.constants import ACCOUNT_POWER_BOX_ARRAY_LEN, TOTAL_POWERS, SLOPE_CHANGES, ACCOUNT_STATE_SIZE, ACCOUNT_POWER_BOX_SIZE, SLOPE_CHANGE_SIZE, TOTAL_POWER_BOX_ARRAY_LEN, TOTAL_POWER_BOX_SIZE, LOCKING_APP_MINIMUM_BALANCE_REQUIREMENT
+from vault.constants import ACCOUNT_POWER_BOX_ARRAY_LEN, TOTAL_POWERS, SLOPE_CHANGES, ACCOUNT_STATE_SIZE, ACCOUNT_POWER_BOX_SIZE, SLOPE_CHANGE_SIZE, TOTAL_POWER_BOX_ARRAY_LEN, TOTAL_POWER_BOX_SIZE, VAULT_APP_MINIMUM_BALANCE_REQUIREMENT
 
 
 def prepare_budget_increase_txn(sender, sp, index, foreign_apps=None, boxes=None):
@@ -36,7 +36,7 @@ def prepare_init_txn_group(app_id, user_address, sp):
             sender=user_address,
             sp=sp,
             receiver=get_application_address(app_id),
-            amt=LOCKING_APP_MINIMUM_BALANCE_REQUIREMENT,
+            amt=VAULT_APP_MINIMUM_BALANCE_REQUIREMENT,
         ),
         transaction.ApplicationNoOpTxn(
             sender=user_address,
@@ -63,61 +63,61 @@ def prepare_create_lock_txn_group(ledger, user_address, locked_amount, lock_end_
     # Account State
     account_state_box_name = decode_address(user_address)
     boxes = [
-        (LOCKING_APP_ID, account_state_box_name),
+        (VAULT_APP_ID, account_state_box_name),
     ]
     
     # Account Power
-    if account_state_box_name not in ledger.boxes[LOCKING_APP_ID]:
+    if account_state_box_name not in ledger.boxes[VAULT_APP_ID]:
         min_balance_increase += get_required_minimum_balance_of_box(account_state_box_name, ACCOUNT_STATE_SIZE)
         account_power_box_name = decode_address(user_address) + itob(0)
         min_balance_increase += get_required_minimum_balance_of_box(account_power_box_name, ACCOUNT_POWER_BOX_SIZE)
 
         boxes += [
-            (LOCKING_APP_ID, account_power_box_name),
+            (VAULT_APP_ID, account_power_box_name),
         ]
     else:
-        latest_account_power_box_index, latest_account_power_array_index, is_full = get_latest_account_power_indexes(ledger, LOCKING_APP_ID, user_address)
+        latest_account_power_box_index, latest_account_power_array_index, is_full = get_latest_account_power_indexes(ledger, VAULT_APP_ID, user_address)
         latest_account_power_box_name = decode_address(user_address) + itob(latest_account_power_box_index)
         boxes += [
-            (LOCKING_APP_ID, latest_account_power_box_name),
+            (VAULT_APP_ID, latest_account_power_box_name),
         ]
 
         if is_full:
             next_account_power_box_name = decode_address(user_address) + itob(latest_account_power_box_index + 1)
             min_balance_increase += get_required_minimum_balance_of_box(next_account_power_box_name, ACCOUNT_POWER_BOX_SIZE)
             boxes += [
-                (LOCKING_APP_ID, next_account_power_box_name),
+                (VAULT_APP_ID, next_account_power_box_name),
             ]
 
     # Slope
     slope_change_box_name = SLOPE_CHANGES + itob(lock_end_timestamp)
-    if slope_change_box_name not in ledger.boxes[LOCKING_APP_ID]:
+    if slope_change_box_name not in ledger.boxes[VAULT_APP_ID]:
         min_balance_increase += get_required_minimum_balance_of_box(slope_change_box_name, SLOPE_CHANGE_SIZE)
 
     # Total Powers
-    latest_total_power_box_index, total_power_array_index, is_full = get_latest_total_powers_indexes(ledger, LOCKING_APP_ID)
+    latest_total_power_box_index, total_power_array_index, is_full = get_latest_total_powers_indexes(ledger, VAULT_APP_ID)
     latest_total_power_box_name = TOTAL_POWERS + itob(latest_total_power_box_index)
     next_total_power_box_name = TOTAL_POWERS + itob(latest_total_power_box_index + 1)
     if is_full:
         min_balance_increase += get_required_minimum_balance_of_box(next_total_power_box_name, TOTAL_POWER_BOX_SIZE)
 
     boxes += [
-        (LOCKING_APP_ID, slope_change_box_name),
-        (LOCKING_APP_ID, latest_total_power_box_name),
-        (LOCKING_APP_ID, next_total_power_box_name),
+        (VAULT_APP_ID, slope_change_box_name),
+        (VAULT_APP_ID, latest_total_power_box_name),
+        (VAULT_APP_ID, next_total_power_box_name),
     ]
     txn_group = [
         transaction.AssetTransferTxn(
             index=TINY_ASSET_ID,
             sender=user_address,
-            receiver=get_application_address(LOCKING_APP_ID),
+            receiver=get_application_address(VAULT_APP_ID),
             amt=locked_amount,
             sp=sp,
         ),
         transaction.ApplicationNoOpTxn(
             sender=user_address,
             sp=sp,
-            index=LOCKING_APP_ID,
+            index=VAULT_APP_ID,
             app_args=[
                 "create_lock",
                 lock_end_timestamp,
@@ -131,24 +131,24 @@ def prepare_create_lock_txn_group(ledger, user_address, locked_amount, lock_end_
             transaction.PaymentTxn(
                 sender=user_address,
                 sp=sp,
-                receiver=get_application_address(LOCKING_APP_ID),
+                receiver=get_application_address(VAULT_APP_ID),
                 amt=min_balance_increase,
             )
         ] + txn_group
 
-    if account_state_box := ledger.boxes[LOCKING_APP_ID].get(decode_address(user_address)):
+    if account_state_box := ledger.boxes[VAULT_APP_ID].get(decode_address(user_address)):
         account_state = parse_box_account_state(account_state_box)
         power_count = account_state["power_count"]
 
         if power_count:
             txn_group.append(
-                prepare_budget_increase_txn(user_address, sp=sp, index=LOCKING_APP_ID)
+                prepare_budget_increase_txn(user_address, sp=sp, index=VAULT_APP_ID)
             )
     return txn_group
 
 def prepare_create_checkpoints_txn_group(ledger, user_address, block_timestamp, sp):
-    box_index, array_index, _ = get_latest_total_powers_indexes(ledger, LOCKING_APP_ID)
-    latest_checkpoint_timestamp = get_latest_checkpoint_timestamp(ledger, LOCKING_APP_ID)
+    box_index, array_index, _ = get_latest_total_powers_indexes(ledger, VAULT_APP_ID)
+    latest_checkpoint_timestamp = get_latest_checkpoint_timestamp(ledger, VAULT_APP_ID)
     latest_checkpoint_week_timestamp = get_start_timestamp_of_week(latest_checkpoint_timestamp)
     this_week_timestamp = get_start_timestamp_of_week(block_timestamp)
 
@@ -174,7 +174,7 @@ def prepare_create_checkpoints_txn_group(ledger, user_address, block_timestamp, 
             transaction.PaymentTxn(
                 sender=user_address,
                 sp=sp,
-                receiver=get_application_address(LOCKING_APP_ID),
+                receiver=get_application_address(VAULT_APP_ID),
                 amt=get_required_minimum_balance_of_box(new_total_powers_box_name, TOTAL_POWER_BOX_SIZE)
             )
         )
@@ -184,7 +184,7 @@ def prepare_create_checkpoints_txn_group(ledger, user_address, block_timestamp, 
             transaction.ApplicationNoOpTxn(
                 sender=user_address,
                 sp=sp,
-                index=LOCKING_APP_ID,
+                index=VAULT_APP_ID,
                 app_args=[
                     "create_checkpoints",
                 ],
@@ -194,13 +194,13 @@ def prepare_create_checkpoints_txn_group(ledger, user_address, block_timestamp, 
                     *slope_change_boxes,
                 ]
             ),
-            *[prepare_budget_increase_txn(user_address, sp=sp, index=LOCKING_APP_ID) for _ in range(increase_txn_count)],
+            *[prepare_budget_increase_txn(user_address, sp=sp, index=VAULT_APP_ID) for _ in range(increase_txn_count)],
         ]
     return txn_group
 
 def prepare_increase_lock_amount_txn_group(ledger, user_address, locked_amount, lock_end_timestamp, block_timestamp, sp):
-    total_powers_box_index, total_powers_array_index, _ = get_latest_total_powers_indexes(ledger, LOCKING_APP_ID)
-    account_power_box_index, account_power_array_index, account_power_is_full = get_latest_account_power_indexes(ledger, LOCKING_APP_ID, user_address)
+    total_powers_box_index, total_powers_array_index, _ = get_latest_total_powers_indexes(ledger, VAULT_APP_ID)
+    account_power_box_index, account_power_array_index, account_power_is_full = get_latest_account_power_indexes(ledger, VAULT_APP_ID, user_address)
 
     payment_amount = 0
     new_total_power_count = 1
@@ -218,7 +218,7 @@ def prepare_increase_lock_amount_txn_group(ledger, user_address, locked_amount, 
     ]
 
     # TODO: This logic assumes that the checkpoint/total_power is created at least week.
-    latest_checkpoint_timestamp = get_latest_checkpoint_timestamp(ledger, LOCKING_APP_ID)
+    latest_checkpoint_timestamp = get_latest_checkpoint_timestamp(ledger, VAULT_APP_ID)
     latest_checkpoint_week_timestamp = get_start_timestamp_of_week(latest_checkpoint_timestamp)
     start_timestamp_of_this_week = get_start_timestamp_of_week(block_timestamp)
     if latest_checkpoint_week_timestamp != start_timestamp_of_this_week:
@@ -238,20 +238,20 @@ def prepare_increase_lock_amount_txn_group(ledger, user_address, locked_amount, 
         transaction.AssetTransferTxn(
             index=TINY_ASSET_ID,
             sender=user_address,
-            receiver=get_application_address(LOCKING_APP_ID),
+            receiver=get_application_address(VAULT_APP_ID),
             amt=locked_amount,
             sp=sp,
         ),
         transaction.ApplicationNoOpTxn(
             sender=user_address,
             sp=sp,
-            index=LOCKING_APP_ID,
+            index=VAULT_APP_ID,
             app_args=[
                 "increase_lock_amount",
             ],
             boxes=boxes
         ),
-        prepare_budget_increase_txn(user_address, sp=sp, index=LOCKING_APP_ID),
+        prepare_budget_increase_txn(user_address, sp=sp, index=VAULT_APP_ID),
     ]
 
     if payment_amount:
@@ -259,7 +259,7 @@ def prepare_increase_lock_amount_txn_group(ledger, user_address, locked_amount, 
             transaction.PaymentTxn(
                 sender=user_address,
                 sp=sp,
-                receiver=get_application_address(LOCKING_APP_ID),
+                receiver=get_application_address(VAULT_APP_ID),
                 amt=payment_amount
             )
         ] + txn_group
@@ -267,8 +267,8 @@ def prepare_increase_lock_amount_txn_group(ledger, user_address, locked_amount, 
     return txn_group
 
 def prepare_extend_lock_end_time_txn_group(ledger, user_address, old_lock_end_timestamp, new_lock_end_timestamp, block_timestamp, sp):
-    total_powers_box_index, total_powers_array_index, _ = get_latest_total_powers_indexes(ledger, LOCKING_APP_ID)
-    account_power_box_index, account_power_array_index, account_power_is_full = get_latest_account_power_indexes(ledger, LOCKING_APP_ID, user_address)
+    total_powers_box_index, total_powers_array_index, _ = get_latest_total_powers_indexes(ledger, VAULT_APP_ID)
+    account_power_box_index, account_power_array_index, account_power_is_full = get_latest_account_power_indexes(ledger, VAULT_APP_ID, user_address)
 
     payment_amount = 0
     new_total_power_count = 1
@@ -288,7 +288,7 @@ def prepare_extend_lock_end_time_txn_group(ledger, user_address, old_lock_end_ti
         (0, new_account_slope_change_box_name),
     ]
 
-    latest_checkpoint_timestamp = get_latest_checkpoint_timestamp(ledger, LOCKING_APP_ID)
+    latest_checkpoint_timestamp = get_latest_checkpoint_timestamp(ledger, VAULT_APP_ID)
     latest_checkpoint_week_timestamp = get_start_timestamp_of_week(latest_checkpoint_timestamp)
     start_timestamp_of_this_week = get_start_timestamp_of_week(block_timestamp)
     if latest_checkpoint_week_timestamp != start_timestamp_of_this_week:
@@ -296,7 +296,7 @@ def prepare_extend_lock_end_time_txn_group(ledger, user_address, old_lock_end_ti
         weekly_slope_change_box_name = SLOPE_CHANGES + itob(start_timestamp_of_this_week)
         boxes.append((0, weekly_slope_change_box_name))
 
-    if new_account_slope_change_box_name not in ledger.boxes[LOCKING_APP_ID]:
+    if new_account_slope_change_box_name not in ledger.boxes[VAULT_APP_ID]:
         payment_amount += get_required_minimum_balance_of_box(new_account_slope_change_box_name, SLOPE_CHANGE_SIZE)
 
     if account_power_is_full:
@@ -311,14 +311,14 @@ def prepare_extend_lock_end_time_txn_group(ledger, user_address, old_lock_end_ti
         transaction.ApplicationNoOpTxn(
             sender=user_address,
             sp=sp,
-            index=LOCKING_APP_ID,
+            index=VAULT_APP_ID,
             app_args=[
                 "extend_lock_end_time",
                 new_lock_end_timestamp
             ],
             boxes=boxes,
         ),
-        prepare_budget_increase_txn(user_address, sp=sp, index=LOCKING_APP_ID),
+        prepare_budget_increase_txn(user_address, sp=sp, index=VAULT_APP_ID),
     ]
 
     if payment_amount:
@@ -326,7 +326,7 @@ def prepare_extend_lock_end_time_txn_group(ledger, user_address, old_lock_end_ti
             transaction.PaymentTxn(
                 sender=user_address,
                 sp=sp,
-                receiver=get_application_address(LOCKING_APP_ID),
+                receiver=get_application_address(VAULT_APP_ID),
                 amt=payment_amount
             )
         ] + txn_group
@@ -334,7 +334,7 @@ def prepare_extend_lock_end_time_txn_group(ledger, user_address, old_lock_end_ti
     return txn_group
 
 def prepare_withdraw_txn_group(ledger, user_address, sp):
-    account_power_box_index, account_power_array_index, account_power_is_full = get_latest_account_power_indexes(ledger, LOCKING_APP_ID, user_address)
+    account_power_box_index, account_power_array_index, account_power_is_full = get_latest_account_power_indexes(ledger, VAULT_APP_ID, user_address)
 
     account_state_box_name = decode_address(user_address)
     account_power_box_name = decode_address(user_address) + itob(account_power_box_index)
@@ -353,7 +353,7 @@ def prepare_withdraw_txn_group(ledger, user_address, sp):
         transaction.ApplicationNoOpTxn(
             sender=user_address,
             sp=sp,
-            index=LOCKING_APP_ID,
+            index=VAULT_APP_ID,
             app_args=["withdraw"],
             foreign_assets=[TINY_ASSET_ID],
             boxes=boxes
@@ -367,7 +367,7 @@ def prepare_get_tiny_power_of_txn_group(user_address, sp):
         transaction.ApplicationNoOpTxn(
             sender=user_address,
             sp=sp,
-            index=LOCKING_APP_ID,
+            index=VAULT_APP_ID,
             app_args=["get_tiny_power_of", decode_address(user_address)],
             boxes=[
                 (0, decode_address(user_address)),
@@ -377,7 +377,7 @@ def prepare_get_tiny_power_of_txn_group(user_address, sp):
     return txn_group
 
 def prepare_get_tiny_power_of_at_txn_group(ledger, user_address, timestamp, sp):
-    account_power_index = get_account_power_index_at(ledger, LOCKING_APP_ID, user_address, timestamp)
+    account_power_index = get_account_power_index_at(ledger, VAULT_APP_ID, user_address, timestamp)
     if account_power_index is None:
         account_power_index = 0
         account_power_box_index = 0
@@ -388,7 +388,7 @@ def prepare_get_tiny_power_of_at_txn_group(ledger, user_address, timestamp, sp):
         transaction.ApplicationNoOpTxn(
             sender=user_address,
             sp=sp,
-            index=LOCKING_APP_ID,
+            index=VAULT_APP_ID,
             app_args=["get_tiny_power_of_at", decode_address(user_address), timestamp, account_power_index],
             boxes=[
                 (0, decode_address(user_address)),
@@ -400,12 +400,12 @@ def prepare_get_tiny_power_of_at_txn_group(ledger, user_address, timestamp, sp):
     return txn_group
 
 def prepare_get_total_tiny_power_txn_group(ledger, user_address, sp):
-    total_powers_box_index, _, _ = get_latest_total_powers_indexes(ledger, LOCKING_APP_ID)
+    total_powers_box_index, _, _ = get_latest_total_powers_indexes(ledger, VAULT_APP_ID)
     txn_group = [
         transaction.ApplicationNoOpTxn(
             sender=user_address,
             sp=sp,
-            index=LOCKING_APP_ID,
+            index=VAULT_APP_ID,
             app_args=["get_total_tiny_power"],
             boxes=[
                 (0, TOTAL_POWERS + itob(total_powers_box_index)),
@@ -415,7 +415,7 @@ def prepare_get_total_tiny_power_txn_group(ledger, user_address, sp):
     return txn_group
 
 def prepare_get_total_tiny_power_of_at_txn_group(ledger, user_address, timestamp, sp):
-    total_power_index = get_total_power_index_at(ledger, LOCKING_APP_ID, timestamp)
+    total_power_index = get_total_power_index_at(ledger, VAULT_APP_ID, timestamp)
     if total_power_index is None:
         total_power_index = 0
         total_power_box_index = 0
@@ -426,7 +426,7 @@ def prepare_get_total_tiny_power_of_at_txn_group(ledger, user_address, timestamp
         transaction.ApplicationNoOpTxn(
             sender=user_address,
             sp=sp,
-            index=LOCKING_APP_ID,
+            index=VAULT_APP_ID,
             app_args=["get_total_tiny_power_at", timestamp, total_power_index],
             boxes=[
                 (0, TOTAL_POWERS + itob(total_power_box_index)),
@@ -437,7 +437,7 @@ def prepare_get_total_tiny_power_of_at_txn_group(ledger, user_address, timestamp
     return txn_group
 
 def prepare_get_total_cumulative_power_at_txn_group(ledger, user_address, timestamp, sp):
-    total_power_index = get_total_power_index_at(ledger, LOCKING_APP_ID, timestamp)
+    total_power_index = get_total_power_index_at(ledger, VAULT_APP_ID, timestamp)
     if total_power_index is None:
         total_power_index = 0
         total_power_box_index = 0
@@ -448,7 +448,7 @@ def prepare_get_total_cumulative_power_at_txn_group(ledger, user_address, timest
         transaction.ApplicationNoOpTxn(
             sender=user_address,
             sp=sp,
-            index=LOCKING_APP_ID,
+            index=VAULT_APP_ID,
             app_args=["get_total_cumulative_power_at", timestamp, total_power_index],
             boxes=[
                 (0, TOTAL_POWERS + itob(total_power_box_index)),
@@ -459,7 +459,7 @@ def prepare_get_total_cumulative_power_at_txn_group(ledger, user_address, timest
     return txn_group
 
 def prepare_get_cumulative_power_of_at_txn_group(ledger, user_address, timestamp, sp):
-    account_power_index = get_account_power_index_at(ledger, LOCKING_APP_ID, user_address, timestamp)
+    account_power_index = get_account_power_index_at(ledger, VAULT_APP_ID, user_address, timestamp)
     if account_power_index is None:
         account_power_index = 0
         account_power_box_index = 0
@@ -470,7 +470,7 @@ def prepare_get_cumulative_power_of_at_txn_group(ledger, user_address, timestamp
         transaction.ApplicationNoOpTxn(
             sender=user_address,
             sp=sp,
-            index=LOCKING_APP_ID,
+            index=VAULT_APP_ID,
             app_args=["get_cumulative_power_of_at", decode_address(user_address), timestamp, account_power_index],
             boxes=[
                 (0, decode_address(user_address)),
