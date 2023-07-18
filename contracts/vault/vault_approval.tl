@@ -182,6 +182,9 @@ block main:
         create_checkpoints(bias, slope, 1)
         update_or_create_slope_change(lock_end_time, slope)
         increase_total_locked_amount(amount)
+
+        # create_lock(address, locked_amount, lock_end_time)
+        log(concat(concat(method("create_lock(address,uint64,uint64)"), user_address), box_extract(user_address, 0, 16)))
         exit(1)
     end
 
@@ -229,6 +232,9 @@ block main:
         create_checkpoints(bias_delta, slope_delta, 1)
         update_or_create_slope_change(lock_end_time, slope_delta)
         increase_total_locked_amount(amount)
+
+        # increase_lock_amount(address, locked_amount, lock_end_time, amount_delta)
+        log(concat(concat(concat(method("increase_lock_amount(address,uint64,uint64,uint64)"), user_address), box_extract(user_address, 0, 16)), itob(amount)))
         exit(1)
     end
 
@@ -269,6 +275,9 @@ block main:
         create_checkpoints(bias_delta, bzero(16), 1)
         revert_slope_change(current_lock_end_time, slope)
         update_or_create_slope_change(new_lock_end_time, slope)
+
+        # extend_lock_end_time(address, locked_amount, lock_end_time, lock_end_time_delta)
+        log(concat(concat(concat(method("extend_lock_end_time(address,uint64,uint64,uint64)"), user_address), box_extract(user_address, 0, 16)), itob(new_lock_end_time - current_lock_end_time)))
         exit(1)
     end
 
@@ -296,6 +305,9 @@ block main:
 
         account_state.locked_amount = 0
         account_state.lock_end_time = 0
+
+        # withdraw(user_address, amount)
+        log(concat(concat(method("withdraw(address,uint64)"), user_address), itob(locked_amount)))
         exit(1)
     end
 
@@ -317,7 +329,7 @@ block main:
             end
         end
 
-        log(itob(tiny_power))
+        log(concat(method("return"), itob(tiny_power)))
         exit(1)
     end
 
@@ -345,7 +357,7 @@ block main:
             tiny_power = get_power(account_power.bias, account_power.slope, (timestamp - account_power.timestamp))
         end
 
-        log(itob(tiny_power))
+        log(concat(method("return"), itob(tiny_power)))
         exit(1)
     end
 
@@ -355,7 +367,7 @@ block main:
         int account_power_index = btoi(Txn.ApplicationArgs[3])
 
         bytes cumulative_power =  get_cumulative_power_of_at(user_address, timestamp, account_power_index)
-        log(cumulative_power)
+        log(concat(method("return"), cumulative_power))
         exit(1)
     end
     
@@ -368,7 +380,7 @@ block main:
         assert((total_power.timestamp / WEEK) == (timestamp / WEEK))
 
         int tiny_power = get_power(total_power.bias, total_power.slope, (timestamp - total_power.timestamp))
-        log(itob(tiny_power))
+        log(concat(method("return"), itob(tiny_power)))
         exit(1)
     end
 
@@ -395,7 +407,7 @@ block main:
             assert(!total_power_index)
         end
 
-        log(itob(tiny_power))
+        log(concat(method("return"), itob(tiny_power)))
         exit(1)
     end
 
@@ -404,7 +416,7 @@ block main:
         int total_power_index = btoi(Txn.ApplicationArgs[2])
         bytes total_cumulative_power = get_total_cumulative_power_at(timestamp, total_power_index)
 
-        log(total_cumulative_power)
+        log(concat(method("return"), total_cumulative_power))
         exit(1)
     end
 
@@ -423,7 +435,7 @@ block main:
         bytes total_cumulative_power_1 = get_total_cumulative_power_at(timestamp_1, total_power_index_1)
         bytes total_cumulative_power_2 = get_total_cumulative_power_at(timestamp_2, total_power_index_2)
 
-        log(concat(concat(concat(cumulative_power_1, cumulative_power_2), total_cumulative_power_1), total_cumulative_power_2))
+        log(concat(method("return"), concat(concat(concat(cumulative_power_1, cumulative_power_2), total_cumulative_power_1), total_cumulative_power_2)))
         exit(1)
     end
 end
@@ -439,6 +451,8 @@ func save_account_power(address: bytes, index: int, data: bytes):
     bytes box_name = concat(address, itob(box_index))
     _ = box_create(box_name, ACCOUNT_POWER_BOX_SIZE)
     box_replace(box_name, (array_index * ACCOUNT_POWER_SIZE), data)
+
+    log(concat(concat(concat(method("account_power(address,uint64,uint64,uint64,byte[16],byte[16])"), address), itob(index)), data))
     return
 end
 
@@ -463,6 +477,7 @@ func save_total_power(data: bytes):
     _ = box_create(box_name, TOTAL_POWER_BOX_SIZE)
     box_replace(box_name, (array_index * TOTAL_POWER_SIZE), data)
 
+    log(concat(concat(method("total_power(uint64,uint64,uint64,byte[16],byte[16])"), itob(index)), data))
     app_global_put(TOTAL_POWER_COUNT_KEY, index + 1)
     return
 end
@@ -635,27 +650,22 @@ func get_slope(locked_amount: int) bytes:
 end
 
 func revert_slope_change(timestamp: int, slope: bytes):
-    # box<SlopeChange> slope_change = OpenBox(concat(SLOPE_CHANGES, itob(timestamp)))
-    # slope_change.slope_delta = bzero(16) b| (slope_change.slope_delta b- slope)
     bytes box_name = concat(SLOPE_CHANGES, itob(timestamp))
-    box_put(box_name, (bzero(16) b| (box_extract(box_name, 0, 16) b- slope)))
+    bytes new_slope = bzero(16) b| (box_extract(box_name, 0, 16) b- slope)
+    box_put(box_name, new_slope)
+
+    log(concat(concat(method("slope_change(uint64,byte[16])"), itob(timestamp)), new_slope))
     return
 end
 
 func update_or_create_slope_change(timestamp: int, slope: bytes):
     bytes box_name = concat(SLOPE_CHANGES, itob(timestamp))
-    # int exists
-    # exists, _ = box_len(box_name)
-    # if exists:
-    #     box<SlopeChange> slope_change = OpenBox(box_name)
-    #     slope_change.slope_delta = bzero(16) b| (slope_change.slope_delta b+ slope)
-    # else:
-    #     box<SlopeChange> new_slope_change = CreateBox(box_name)
-    #     new_slope_change.slope_delta = bzero(16) b| slope
-    # end
     bytes slope_delta
     _, slope_delta = box_get(box_name)
-    box_put(box_name, (bzero(16) b| (slope_delta b+ slope)))
+    bytes new_slope = bzero(16) b| (slope_delta b+ slope)
+    box_put(box_name, new_slope)
+
+    log(concat(concat(method("slope_change(uint64,byte[16])"), itob(timestamp)), new_slope))
     return
 end
 

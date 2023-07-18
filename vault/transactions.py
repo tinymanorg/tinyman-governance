@@ -124,6 +124,7 @@ def prepare_create_lock_txn_group(ledger, user_address, locked_amount, lock_end_
             ],
             boxes=boxes
         ),
+        prepare_budget_increase_txn(user_address, sp=sp, index=VAULT_APP_ID)
     ]
 
     if min_balance_increase:
@@ -136,14 +137,14 @@ def prepare_create_lock_txn_group(ledger, user_address, locked_amount, lock_end_
             )
         ] + txn_group
 
-    if account_state_box := ledger.boxes[VAULT_APP_ID].get(decode_address(user_address)):
-        account_state = parse_box_account_state(account_state_box)
-        power_count = account_state["power_count"]
-
-        if power_count:
-            txn_group.append(
-                prepare_budget_increase_txn(user_address, sp=sp, index=VAULT_APP_ID)
-            )
+    # if account_state_box := ledger.boxes[VAULT_APP_ID].get(decode_address(user_address)):
+    #     account_state = parse_box_account_state(account_state_box)
+    #     power_count = account_state["power_count"]
+    #
+    #     if power_count:
+    #         txn_group.append(
+    #             prepare_budget_increase_txn(user_address, sp=sp, index=VAULT_APP_ID)
+    #         )
     return txn_group
 
 def prepare_create_checkpoints_txn_group(ledger, user_address, block_timestamp, sp):

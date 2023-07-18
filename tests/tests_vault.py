@@ -9,8 +9,9 @@ from algosdk.encoding import decode_address
 from algosdk.logic import get_application_address
 
 from common.constants import vault_approval_program, vault_clear_state_program, TINY_ASSET_ID, WEEK, DAY, VAULT_APP_ID
+from common.event import decode_logs
 from common.utils import itob, sign_txns, parse_box_total_power, get_start_timestamp_of_week, parse_box_account_power, parse_box_account_state, parse_box_slope_change, get_slope, btoi, get_bias
-from vault.constants import TINY_ASSET_ID_KEY, TOTAL_LOCKED_AMOUNT_KEY, TOTAL_POWER_COUNT_KEY, CREATION_TIMESTAMP_KEY, TOTAL_POWERS, SLOPE_CHANGES, TWO_TO_THE_64, MAX_LOCK_TIME
+from vault.constants import TINY_ASSET_ID_KEY, TOTAL_LOCKED_AMOUNT_KEY, TOTAL_POWER_COUNT_KEY, CREATION_TIMESTAMP_KEY, TOTAL_POWERS, SLOPE_CHANGES, TWO_TO_THE_64, MAX_LOCK_TIME, vault_events
 from vault.transactions import prepare_create_lock_txn_group, prepare_withdraw_txn_group, prepare_increase_lock_amount_txn_group, prepare_extend_lock_end_time_txn_group, prepare_get_tiny_power_of_txn_group, prepare_get_tiny_power_of_at_txn_group, prepare_get_total_tiny_power_txn_group, prepare_get_total_tiny_power_of_at_txn_group, prepare_init_txn_group
 from tests.common import BaseTestCase, VaultAppMixin
 
@@ -127,7 +128,10 @@ class VaultTestCase(VaultAppMixin, BaseTestCase):
 
         transaction.assign_group_id(txn_group)
         signed_txns = sign_txns(txn_group, self.user_sk)
-        self.ledger.eval_transactions(signed_txns, block_timestamp=block_timestamp)
+        block = self.ledger.eval_transactions(signed_txns, block_timestamp=block_timestamp)
+
+        logs = block[b'txns'][2][b'dt'][b'lg']
+        decode_logs(logs, vault_events)
 
         slope = get_slope(amount)
         bias = get_bias(slope, (lock_end_timestamp - block_timestamp))
@@ -581,7 +585,7 @@ class VaultTestCase(VaultAppMixin, BaseTestCase):
         transaction.assign_group_id(txn_group)
         signed_txns = sign_txns(txn_group, self.user_sk)
         block = self.ledger.eval_transactions(signed_txns, block_timestamp=block_timestamp)
-        self.assertEqual(btoi(block[b'txns'][0][b'dt'][b'lg'][-1]), 0)
+        self.assertEqual(btoi(block[b'txns'][0][b'dt'][b'lg'][-1][4:]), 0)
 
         lock_end_timestamp = get_start_timestamp_of_week(block_timestamp) + 5 * WEEK
         amount = 20_000_000
@@ -603,27 +607,27 @@ class VaultTestCase(VaultAppMixin, BaseTestCase):
         transaction.assign_group_id(txn_group)
         signed_txns = sign_txns(txn_group, self.user_sk)
         block = self.ledger.eval_transactions(signed_txns, block_timestamp=block_timestamp)
-        self.assertEqual(btoi(block[b'txns'][0][b'dt'][b'lg'][-1]), bias)
+        self.assertEqual(btoi(block[b'txns'][0][b'dt'][b'lg'][-1][4:]), bias)
 
         block_timestamp += DAY
         bias = get_bias(slope, (lock_end_timestamp - block_timestamp))
 
         block = self.ledger.eval_transactions(signed_txns, block_timestamp=block_timestamp)
-        self.assertEqual(btoi(block[b'txns'][0][b'dt'][b'lg'][-1]), bias)
+        self.assertEqual(btoi(block[b'txns'][0][b'dt'][b'lg'][-1][4:]), bias)
 
         block_timestamp += WEEK
         bias = get_bias(slope, (lock_end_timestamp - block_timestamp))
 
         block = self.ledger.eval_transactions(signed_txns, block_timestamp=block_timestamp)
-        self.assertEqual(btoi(block[b'txns'][0][b'dt'][b'lg'][-1]), bias)
+        self.assertEqual(btoi(block[b'txns'][0][b'dt'][b'lg'][-1][4:]), bias)
 
         block_timestamp = lock_end_timestamp
         block = self.ledger.eval_transactions(signed_txns, block_timestamp=block_timestamp)
-        self.assertEqual(btoi(block[b'txns'][0][b'dt'][b'lg'][-1]), 0)
+        self.assertEqual(btoi(block[b'txns'][0][b'dt'][b'lg'][-1][4:]), 0)
 
         block_timestamp = lock_end_timestamp + 1
         block = self.ledger.eval_transactions(signed_txns, block_timestamp=block_timestamp)
-        self.assertEqual(btoi(block[b'txns'][0][b'dt'][b'lg'][-1]), 0)
+        self.assertEqual(btoi(block[b'txns'][0][b'dt'][b'lg'][-1][4:]), 0)
 
         txn_group = prepare_withdraw_txn_group(self.ledger, self.user_address, sp=self.sp)
         transaction.assign_group_id(txn_group)
@@ -633,7 +637,7 @@ class VaultTestCase(VaultAppMixin, BaseTestCase):
         txn_group = prepare_get_tiny_power_of_txn_group(self.user_address, sp=self.sp)
         signed_txns = sign_txns(txn_group, self.user_sk)
         block = self.ledger.eval_transactions(signed_txns, block_timestamp=block_timestamp)
-        self.assertEqual(btoi(block[b'txns'][0][b'dt'][b'lg'][-1]), 0)
+        self.assertEqual(btoi(block[b'txns'][0][b'dt'][b'lg'][-1][4:]), 0)
 
     def test_get_tiny_power_of_at(self):
         # 1. Get Power, there is no lock
@@ -657,14 +661,14 @@ class VaultTestCase(VaultAppMixin, BaseTestCase):
         transaction.assign_group_id(txn_group)
         signed_txns = sign_txns(txn_group, self.user_sk)
         block = self.ledger.eval_transactions(signed_txns, block_timestamp=block_timestamp)
-        self.assertEqual(btoi(block[b'txns'][0][b'dt'][b'lg'][-1]), 0)
+        self.assertEqual(btoi(block[b'txns'][0][b'dt'][b'lg'][-1][4:]), 0)
 
         power_at_timestamp = block_timestamp
         txn_group = prepare_get_tiny_power_of_at_txn_group(self.ledger, self.user_address, power_at_timestamp, sp=self.sp)
         transaction.assign_group_id(txn_group)
         signed_txns = sign_txns(txn_group, self.user_sk)
         block = self.ledger.eval_transactions(signed_txns, block_timestamp=block_timestamp)
-        self.assertEqual(btoi(block[b'txns'][0][b'dt'][b'lg'][-1]), 0)
+        self.assertEqual(btoi(block[b'txns'][0][b'dt'][b'lg'][-1][4:]), 0)
 
         lock_start_timestamp = block_timestamp
         lock_end_timestamp = get_start_timestamp_of_week(block_timestamp) + 5 * WEEK
@@ -690,13 +694,13 @@ class VaultTestCase(VaultAppMixin, BaseTestCase):
         transaction.assign_group_id(txn_group)
         signed_txns = sign_txns(txn_group, self.user_sk)
         block = self.ledger.eval_transactions(signed_txns, block_timestamp=block_timestamp)
-        self.assertEqual(btoi(block[b'txns'][0][b'dt'][b'lg'][-1]), bias)
+        self.assertEqual(btoi(block[b'txns'][0][b'dt'][b'lg'][-1][4:]), bias)
 
         txn_group = prepare_get_tiny_power_of_at_txn_group(self.ledger, self.user_address, power_at_timestamp, sp=self.sp)
         transaction.assign_group_id(txn_group)
         signed_txns = sign_txns(txn_group, self.user_sk)
         block = self.ledger.eval_transactions(signed_txns, block_timestamp=block_timestamp)
-        self.assertEqual(btoi(block[b'txns'][0][b'dt'][b'lg'][-1]), bias)
+        self.assertEqual(btoi(block[b'txns'][0][b'dt'][b'lg'][-1][4:]), bias)
 
         power_at_timestamp += DAY
         bias_delta = get_bias(slope, power_at_timestamp - lock_start_timestamp)
@@ -704,7 +708,7 @@ class VaultTestCase(VaultAppMixin, BaseTestCase):
         transaction.assign_group_id(txn_group)
         signed_txns = sign_txns(txn_group, self.user_sk)
         block = self.ledger.eval_transactions(signed_txns, block_timestamp=block_timestamp)
-        self.assertEqual(btoi(block[b'txns'][0][b'dt'][b'lg'][-1]), bias - bias_delta)
+        self.assertEqual(btoi(block[b'txns'][0][b'dt'][b'lg'][-1][4:]), bias - bias_delta)
 
         power_at_timestamp += WEEK
         bias_delta = get_bias(slope, power_at_timestamp - lock_start_timestamp)
@@ -712,21 +716,21 @@ class VaultTestCase(VaultAppMixin, BaseTestCase):
         transaction.assign_group_id(txn_group)
         signed_txns = sign_txns(txn_group, self.user_sk)
         block = self.ledger.eval_transactions(signed_txns, block_timestamp=block_timestamp)
-        self.assertEqual(btoi(block[b'txns'][0][b'dt'][b'lg'][-1]), bias - bias_delta)
+        self.assertEqual(btoi(block[b'txns'][0][b'dt'][b'lg'][-1][4:]), bias - bias_delta)
 
         power_at_timestamp = lock_end_timestamp
         txn_group = prepare_get_tiny_power_of_at_txn_group(self.ledger, self.user_address, power_at_timestamp, sp=self.sp)
         transaction.assign_group_id(txn_group)
         signed_txns = sign_txns(txn_group, self.user_sk)
         block = self.ledger.eval_transactions(signed_txns, block_timestamp=block_timestamp)
-        self.assertEqual(btoi(block[b'txns'][0][b'dt'][b'lg'][-1]), 0)
+        self.assertEqual(btoi(block[b'txns'][0][b'dt'][b'lg'][-1][4:]), 0)
 
         block_timestamp = lock_end_timestamp + 1
         txn_group = prepare_get_tiny_power_of_at_txn_group(self.ledger, self.user_address, power_at_timestamp, sp=self.sp)
         transaction.assign_group_id(txn_group)
         signed_txns = sign_txns(txn_group, self.user_sk)
         block = self.ledger.eval_transactions(signed_txns, block_timestamp=block_timestamp)
-        self.assertEqual(btoi(block[b'txns'][0][b'dt'][b'lg'][-1]), 0)
+        self.assertEqual(btoi(block[b'txns'][0][b'dt'][b'lg'][-1][4:]), 0)
 
     def test_get_total_tiny_power(self):
         # 1. Get total power, there is no lock
@@ -749,7 +753,7 @@ class VaultTestCase(VaultAppMixin, BaseTestCase):
         transaction.assign_group_id(txn_group)
         signed_txns = sign_txns(txn_group, self.user_sk)
         block = self.ledger.eval_transactions(signed_txns, block_timestamp=block_timestamp)
-        self.assertEqual(btoi(block[b'txns'][0][b'dt'][b'lg'][-1]), 0)
+        self.assertEqual(btoi(block[b'txns'][0][b'dt'][b'lg'][-1][4:]), 0)
 
         lock_start_timestamp = block_timestamp
         lock_end_timestamp = get_start_timestamp_of_week(block_timestamp) + 5 * WEEK
@@ -772,27 +776,27 @@ class VaultTestCase(VaultAppMixin, BaseTestCase):
         transaction.assign_group_id(txn_group)
         signed_txns = sign_txns(txn_group, self.user_sk)
         block = self.ledger.eval_transactions(signed_txns, block_timestamp=block_timestamp)
-        self.assertEqual(btoi(block[b'txns'][0][b'dt'][b'lg'][-1]), bias)
+        self.assertEqual(btoi(block[b'txns'][0][b'dt'][b'lg'][-1][4:]), bias)
 
         block_timestamp += DAY
         bias_delta = get_bias(slope, block_timestamp - lock_start_timestamp)
         block = self.ledger.eval_transactions(signed_txns, block_timestamp=block_timestamp)
-        self.assertAlmostEqual(btoi(block[b'txns'][0][b'dt'][b'lg'][-1]), bias - bias_delta, delta=(block_timestamp - lock_start_timestamp) // DAY)
+        self.assertAlmostEqual(btoi(block[b'txns'][0][b'dt'][b'lg'][-1][4:]), bias - bias_delta, delta=(block_timestamp - lock_start_timestamp) // DAY)
 
         block_timestamp += WEEK
         self.create_checkpoints(self.user_address, self.user_sk, block_timestamp)
         bias_delta = get_bias(slope, block_timestamp - lock_start_timestamp)
         block = self.ledger.eval_transactions(signed_txns, block_timestamp=block_timestamp)
-        self.assertAlmostEqual(btoi(block[b'txns'][0][b'dt'][b'lg'][-1]), bias - bias_delta, delta=(block_timestamp - lock_start_timestamp) // DAY)
+        self.assertAlmostEqual(btoi(block[b'txns'][0][b'dt'][b'lg'][-1][4:]), bias - bias_delta, delta=(block_timestamp - lock_start_timestamp) // DAY)
 
         block_timestamp = lock_end_timestamp
         self.create_checkpoints(self.user_address, self.user_sk, block_timestamp)
         block = self.ledger.eval_transactions(signed_txns, block_timestamp=block_timestamp)
-        self.assertEqual(btoi(block[b'txns'][0][b'dt'][b'lg'][-1]), 0)
+        self.assertEqual(btoi(block[b'txns'][0][b'dt'][b'lg'][-1][4:]), 0)
 
         block_timestamp = lock_end_timestamp + 1
         block = self.ledger.eval_transactions(signed_txns, block_timestamp=block_timestamp)
-        self.assertEqual(btoi(block[b'txns'][0][b'dt'][b'lg'][-1]), 0)
+        self.assertEqual(btoi(block[b'txns'][0][b'dt'][b'lg'][-1][4:]), 0)
 
         # Withdraw
         txn_group = prepare_withdraw_txn_group(self.ledger, self.user_address, sp=self.sp)
@@ -804,7 +808,7 @@ class VaultTestCase(VaultAppMixin, BaseTestCase):
         transaction.assign_group_id(txn_group)
         signed_txns = sign_txns(txn_group, self.user_sk)
         block = self.ledger.eval_transactions(signed_txns, block_timestamp=block_timestamp)
-        self.assertEqual(btoi(block[b'txns'][0][b'dt'][b'lg'][-1]), 0)
+        self.assertEqual(btoi(block[b'txns'][0][b'dt'][b'lg'][-1][4:]), 0)
 
     def test_get_total_tiny_power_at(self):
         # 1. User 1 create lock, end datetime A
@@ -822,7 +826,7 @@ class VaultTestCase(VaultAppMixin, BaseTestCase):
         transaction.assign_group_id(txn_group)
         signed_txns = sign_txns(txn_group, self.user_sk)
         block = self.ledger.eval_transactions(signed_txns, block_timestamp=block_timestamp)
-        self.assertEqual(btoi(block[b'txns'][0][b'dt'][b'lg'][-1]), 0)
+        self.assertEqual(btoi(block[b'txns'][0][b'dt'][b'lg'][-1][4:]), 0)
 
         # User 1
         amount_1 = 200_000_000
@@ -878,28 +882,28 @@ class VaultTestCase(VaultAppMixin, BaseTestCase):
         transaction.assign_group_id(txn_group)
         signed_txns = sign_txns(txn_group, self.user_sk)
         block = self.ledger.eval_transactions(signed_txns, block_timestamp=block_timestamp)
-        self.assertEqual(btoi(block[b'txns'][0][b'dt'][b'lg'][-1]), 2397263)
+        self.assertEqual(btoi(block[b'txns'][0][b'dt'][b'lg'][-1][4:]), 2397263)
 
         power_at += DAY
         txn_group = prepare_get_total_tiny_power_of_at_txn_group(self.ledger, self.user_address, power_at, sp=self.sp)
         transaction.assign_group_id(txn_group)
         signed_txns = sign_txns(txn_group, self.user_sk)
         block = self.ledger.eval_transactions(signed_txns, block_timestamp=block_timestamp)
-        self.assertEqual(btoi(block[b'txns'][0][b'dt'][b'lg'][-1]), 2054798)
+        self.assertEqual(btoi(block[b'txns'][0][b'dt'][b'lg'][-1][4:]), 2054798)
 
         power_at = lock_end_timestamp_2
         txn_group = prepare_get_total_tiny_power_of_at_txn_group(self.ledger, self.user_address, power_at, sp=self.sp)
         transaction.assign_group_id(txn_group)
         signed_txns = sign_txns(txn_group, self.user_sk)
         block = self.ledger.eval_transactions(signed_txns, block_timestamp=block_timestamp)
-        self.assertEqual(btoi(block[b'txns'][0][b'dt'][b'lg'][-1]), 0)
+        self.assertEqual(btoi(block[b'txns'][0][b'dt'][b'lg'][-1][4:]), 0)
 
         power_at += 1
         txn_group = prepare_get_total_tiny_power_of_at_txn_group(self.ledger, self.user_address, power_at, sp=self.sp)
         transaction.assign_group_id(txn_group)
         signed_txns = sign_txns(txn_group, self.user_sk)
         block = self.ledger.eval_transactions(signed_txns, block_timestamp=block_timestamp)
-        self.assertEqual(btoi(block[b'txns'][0][b'dt'][b'lg'][-1]), 0)
+        self.assertEqual(btoi(block[b'txns'][0][b'dt'][b'lg'][-1][4:]), 0)
 
     def test_multiple_increase_lock_amount(self):
         # 1. Create lock

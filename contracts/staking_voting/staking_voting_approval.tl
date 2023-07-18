@@ -213,7 +213,7 @@ func get_account_voting_power(address: bytes, snapshot_timestamp: int, account_p
         ApplicationArgs[3]: account_power_index
         Fee: 0
     end
-    int voting_power = extract_uint64(Itxn.LastLog, 0)
+    int voting_power = extract_uint64(Itxn.LastLog, 4)
     return voting_power
 end
 
