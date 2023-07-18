@@ -5,10 +5,10 @@ from zoneinfo import ZoneInfo
 from algosdk.encoding import encode_address, decode_address
 
 from common.constants import DAY, WEEK
-from vault.constants import ACCOUNT_POWER_SIZE, TOTAL_POWER_SIZE, TOTAL_POWERS, SLOPE_CHANGES, TOTAL_POWER_COUNT_KEY, TOTAL_POWER_BOX_ARRAY_LEN, ACCOUNT_POWER_BOX_ARRAY_LEN, TWO_TO_THE_64, MAX_LOCK_TIME
 from proposal_voting.constants import PROPOSAL_BOX_PREFIX, ATTENDANCE_BOX_PREFIX
 from rewards.constants import REWARD_HISTORY_SIZE, REWARD_HISTORY_BOX_ARRAY_LEN, REWARD_HISTORY
 from staking_voting.constants import VOTE_BOX_PREFIX
+from vault.constants import ACCOUNT_POWER_SIZE, TOTAL_POWER_SIZE, TOTAL_POWERS, SLOPE_CHANGES, TOTAL_POWER_COUNT_KEY, TOTAL_POWER_BOX_ARRAY_LEN, ACCOUNT_POWER_BOX_ARRAY_LEN, TWO_TO_THE_64, MAX_LOCK_TIME
 
 
 def itob(value, length=8):

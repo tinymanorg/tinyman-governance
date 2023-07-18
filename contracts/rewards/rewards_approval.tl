@@ -175,7 +175,7 @@ func get_account_cumulative_power_at(address: bytes, snapshot_time: int, account
         Fee: 0
     end
 
-    bytes cumulative_power = Itxn.LastLog
+    bytes cumulative_power = extract(4, 16, Itxn.LastLog)
     return cumulative_power
 end
 
@@ -189,7 +189,7 @@ func get_total_cumulative_power_at(snapshot_time: int, total_power_index: bytes)
         Fee: 0
     end
 
-    bytes cumulative_power = Itxn.LastLog
+    bytes cumulative_power = extract(4, 16, Itxn.LastLog)
     return cumulative_power
 end
 
@@ -208,7 +208,7 @@ func get_cumulative_powers_for_rewards(address: bytes, timestamp_1: int, timesta
         Fee: 0
     end
 
-    return extract(0, 16, Itxn.LastLog), extract(16, 16, Itxn.LastLog), extract(32, 16, Itxn.LastLog), extract(48, 16, Itxn.LastLog)
+    return extract(4, 16, Itxn.LastLog), extract(20, 16, Itxn.LastLog), extract(36, 16, Itxn.LastLog), extract(52, 16, Itxn.LastLog)
 end
 
 func get_reward_amount(timestamp: int, index: int) int:

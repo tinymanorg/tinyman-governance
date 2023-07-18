@@ -297,7 +297,7 @@ func get_account_voting_power(address: bytes) int:
         ApplicationArgs[1]: address
         Fee: 0
     end
-    int voting_power = extract_uint64(Itxn.LastLog, 0)
+    int voting_power = extract_uint64(Itxn.LastLog, 4)
     return voting_power
 end
 
@@ -311,7 +311,7 @@ func get_account_voting_power_at(address: bytes, snapshot_timestamp: int, accoun
         ApplicationArgs[3]: account_power_index
         Fee: 0
     end
-    int voting_power = extract_uint64(Itxn.LastLog, 0)
+    int voting_power = extract_uint64(Itxn.LastLog, 4)
     return voting_power
 end
 
@@ -322,6 +322,6 @@ func get_total_voting_power() int:
         ApplicationArgs[0]: "get_total_tiny_power"
         Fee: 0
     end
-    int voting_power = extract_uint64(Itxn.LastLog, 0)
+    int voting_power = extract_uint64(Itxn.LastLog, 4)
     return voting_power
 end
