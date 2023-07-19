@@ -9,7 +9,7 @@ from algosdk.logic import get_application_address
 
 from common.constants import TINY_ASSET_ID, WEEK, DAY
 from common.constants import VAULT_APP_ID, PROPOSAL_VOTING_APP_ID
-from common.utils import get_start_timestamp_of_week, itob, sign_txns, parse_box_proposal, get_start_time_of_day, get_bias, get_slope
+from common.utils import get_start_timestamp_of_week, itob, sign_txns, parse_box_proposal, get_start_time_of_day, get_bias, get_slope, parse_box_account_power
 from proposal_voting.constants import PROPOSAL_BOX_PREFIX
 from proposal_voting.transactions import prepare_create_proposal_txn_group, prepare_cast_vote_txn_group, prepare_get_proposal_txn_group, prepare_cancel_proposal_txn_group, prepare_execute_proposal_txn_group, prepare_has_voted_txn_group
 from tests.common import BaseTestCase, VaultAppMixin, ProposalVotingAppMixin
@@ -89,6 +89,7 @@ class ProposalVotingTestCase(VaultAppMixin, ProposalVotingAppMixin, BaseTestCase
             {
                 b'vault_app_id': VAULT_APP_ID,
                 b'manager': decode_address(self.app_creator_address),
+                b'proposal_manager': decode_address(self.app_creator_address),
                 b'proposal_id_counter': 1,
                 b'proposal_threshold': 10,  # %10
                 b'quorum_numerator': 50,
@@ -232,7 +233,7 @@ class ProposalVotingTestCase(VaultAppMixin, ProposalVotingAppMixin, BaseTestCase
         self.create_proposal_voting_app(self.app_creator_address)
         self.ledger.set_account_balance(get_application_address(PROPOSAL_VOTING_APP_ID), 1_000_000)
 
-        block_timestamp = self.locking_app_creation_timestamp + 2 * WEEK
+        block_timestamp = self.vault_app_creation_timestamp + 2 * WEEK
         self.create_checkpoints(user_address, user_sk, block_timestamp)
 
         # Create lock
@@ -284,7 +285,7 @@ class ProposalVotingTestCase(VaultAppMixin, ProposalVotingAppMixin, BaseTestCase
         self.create_proposal_voting_app(self.app_creator_address)
         self.ledger.set_account_balance(get_application_address(PROPOSAL_VOTING_APP_ID), 1_000_000)
 
-        block_timestamp = self.locking_app_creation_timestamp + 2 * WEEK
+        block_timestamp = self.vault_app_creation_timestamp + 2 * WEEK
         self.create_checkpoints(user_address, user_sk, block_timestamp)
 
         # Create lock
@@ -332,12 +333,12 @@ class ProposalVotingTestCase(VaultAppMixin, ProposalVotingAppMixin, BaseTestCase
         signed_txns = sign_txns(txn_group, user_sk)
         self.ledger.eval_transactions(signed_txns, block_timestamp=block_timestamp)
 
-        slope = get_slope(150_000_000)
-        bias = get_bias(slope, (lock_end_timestamp - block_timestamp))
+        account_powers = parse_box_account_power(self.ledger.boxes[VAULT_APP_ID][decode_address(user_address) + itob(0)])
+        account_power = account_powers[-1]
+        voting_power = account_power["bias"] - get_bias(account_power["slope"], (block_timestamp -  account_power["timestamp"]))
 
         proposal_box_name = PROPOSAL_BOX_PREFIX + proposal_id
-        # TODO Calculation error (it is giving +1 result)
-        self.assertEqual(parse_box_proposal(self.ledger.boxes[PROPOSAL_VOTING_APP_ID][proposal_box_name])["for_vote_amount"], bias)
+        self.assertEqual(parse_box_proposal(self.ledger.boxes[PROPOSAL_VOTING_APP_ID][proposal_box_name])["for_vote_amount"], voting_power)
 
     def test_get_proposal(self):
         user_sk, user_address = generate_account()
@@ -348,7 +349,7 @@ class ProposalVotingTestCase(VaultAppMixin, ProposalVotingAppMixin, BaseTestCase
         self.create_proposal_voting_app(self.app_creator_address)
         self.ledger.set_account_balance(get_application_address(PROPOSAL_VOTING_APP_ID), 1_000_000)
 
-        block_timestamp = self.locking_app_creation_timestamp + 2 * WEEK
+        block_timestamp = self.vault_app_creation_timestamp + 2 * WEEK
         self.create_checkpoints(user_address, user_sk, block_timestamp)
 
         # Create lock
@@ -388,7 +389,7 @@ class ProposalVotingTestCase(VaultAppMixin, ProposalVotingAppMixin, BaseTestCase
         self.create_proposal_voting_app(self.app_creator_address)
         self.ledger.set_account_balance(get_application_address(PROPOSAL_VOTING_APP_ID), 1_000_000)
 
-        block_timestamp = self.locking_app_creation_timestamp + 2 * WEEK
+        block_timestamp = self.vault_app_creation_timestamp + 2 * WEEK
         self.create_checkpoints(user_address, user_sk, block_timestamp)
 
         # Create lock
@@ -428,7 +429,7 @@ class ProposalVotingTestCase(VaultAppMixin, ProposalVotingAppMixin, BaseTestCase
         self.create_proposal_voting_app(self.app_creator_address)
         self.ledger.set_account_balance(get_application_address(PROPOSAL_VOTING_APP_ID), 1_000_000)
 
-        block_timestamp = self.locking_app_creation_timestamp + 2 * WEEK
+        block_timestamp = self.vault_app_creation_timestamp + 2 * WEEK
         self.create_checkpoints(user_address, user_sk, block_timestamp)
 
         # Create lock
@@ -475,7 +476,7 @@ class ProposalVotingTestCase(VaultAppMixin, ProposalVotingAppMixin, BaseTestCase
         signed_txns = sign_txns(txn_group, user_sk)
         with self.assertRaises(LogicEvalError) as e:
             self.ledger.eval_transactions(signed_txns, block_timestamp=block_timestamp)
-        self.assertEqual(e.exception.source['line'], 'assert(proposal.is_cancelled == BIT_ZERO)')
+        self.assertEqual(e.exception.source['line'], 'assert(proposal.is_cancelled == BYTES_ZERO)')
 
     def test_execute_proposal(self):
         user_sk, user_address = generate_account()
@@ -486,7 +487,7 @@ class ProposalVotingTestCase(VaultAppMixin, ProposalVotingAppMixin, BaseTestCase
         self.create_proposal_voting_app(self.app_creator_address)
         self.ledger.set_account_balance(get_application_address(PROPOSAL_VOTING_APP_ID), 1_000_000)
 
-        block_timestamp = self.locking_app_creation_timestamp + 2 * WEEK
+        block_timestamp = self.vault_app_creation_timestamp + 2 * WEEK
         self.create_checkpoints(user_address, user_sk, block_timestamp)
 
         # Create lock
@@ -521,6 +522,12 @@ class ProposalVotingTestCase(VaultAppMixin, ProposalVotingAppMixin, BaseTestCase
         txn_group = prepare_execute_proposal_txn_group(proposal_manager_address, proposal_id, self.sp)
         transaction.assign_group_id(txn_group)
         signed_txns = sign_txns(txn_group, proposal_manager_sk)
+        proposal_data = parse_box_proposal(self.ledger.boxes[PROPOSAL_VOTING_APP_ID][proposal_box_name])
+        with self.assertRaises(LogicEvalError) as e:
+            self.ledger.eval_transactions(signed_txns, block_timestamp=block_timestamp)
+        self.assertEqual(e.exception.source['line'], "assert(proposal.voting_end_timestamp < Global.LatestTimestamp)")
+
+        block_timestamp = proposal_data["voting_end_timestamp"] + 1
         self.ledger.eval_transactions(signed_txns, block_timestamp=block_timestamp)
         self.assertEqual(parse_box_proposal(self.ledger.boxes[PROPOSAL_VOTING_APP_ID][proposal_box_name])["is_executed"], 1)
 
@@ -534,4 +541,4 @@ class ProposalVotingTestCase(VaultAppMixin, ProposalVotingAppMixin, BaseTestCase
         with self.assertRaises(LogicEvalError) as e:
             self.ledger.eval_transactions(signed_txns, block_timestamp=block_timestamp)
         # TODO missing check for execution
-        self.assertEqual(e.exception.source['line'], 'ssert(proposal.is_executed == BIT_ZERO)')
+        self.assertEqual(e.exception.source['line'], 'assert(proposal.is_executed == BYTES_ZERO)')

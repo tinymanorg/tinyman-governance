@@ -4,10 +4,11 @@ from zoneinfo import ZoneInfo
 from algojig import LogicEvalError
 from algosdk import transaction
 from algosdk.account import generate_account
+from algosdk.encoding import decode_address
 from algosdk.logic import get_application_address
 
-from common.constants import WEEK, TINY_ASSET_ID, DAY, STAKING_VOTING_APP_ID
-from common.utils import get_start_timestamp_of_week, itob, btoi, sign_txns, get_bias, get_slope, parse_box_staking_proposal
+from common.constants import WEEK, TINY_ASSET_ID, DAY, STAKING_VOTING_APP_ID, VAULT_APP_ID
+from common.utils import get_start_timestamp_of_week, itob, btoi, sign_txns, get_bias, get_slope, parse_box_staking_proposal, parse_box_account_power
 from staking_voting.constants import PROPOSAL_BOX_PREFIX, VOTE_BOX_PREFIX
 from staking_voting.transactions import prepare_create_proposal_txn_group, prepare_cast_vote_txn_group, prepare_cancel_proposal_txn_group
 from tests.common import BaseTestCase, VaultAppMixin, StakingVotingAppMixin
@@ -144,7 +145,7 @@ class StakingVotingTestCase(VaultAppMixin, StakingVotingAppMixin, BaseTestCase):
         self.create_staking_voting_app(self.app_creator_address)
         self.ledger.set_account_balance(get_application_address(STAKING_VOTING_APP_ID), 1_000_000)
 
-        block_timestamp = self.locking_app_creation_timestamp + 2 * WEEK
+        block_timestamp = self.vault_app_creation_timestamp + 2 * WEEK
         self.create_checkpoints(user_address, user_sk, block_timestamp)
 
         # Create lock 1
@@ -194,8 +195,9 @@ class StakingVotingTestCase(VaultAppMixin, StakingVotingAppMixin, BaseTestCase):
         self.ledger.eval_transactions(signed_txns, block_timestamp=block_timestamp)
 
         # Check if all the votes are correct
-        slope = get_slope(150_000_000)
-        bias = get_bias(slope, (lock_end_timestamp - block_timestamp))
+        account_powers = parse_box_account_power(self.ledger.boxes[VAULT_APP_ID][decode_address(user_address) + itob(0)])
+        account_power = account_powers[-1]
+        voting_power = account_power["bias"] - get_bias(account_power["slope"], (block_timestamp -  account_power["timestamp"]))
 
         proposal_box_name = PROPOSAL_BOX_PREFIX + proposal_id
         proposal_index = parse_box_staking_proposal(self.ledger.boxes[STAKING_VOTING_APP_ID][proposal_box_name])["index"]
@@ -208,7 +210,7 @@ class StakingVotingTestCase(VaultAppMixin, StakingVotingAppMixin, BaseTestCase):
             vote_box_name = VOTE_BOX_PREFIX + itob(proposal_index) + itob(asset_id)
             vote_box_amount = btoi(self.ledger.boxes[STAKING_VOTING_APP_ID][vote_box_name])
 
-            self.assertEqual(vote_box_amount, int((bias // 100) * vote_as_percentage))
+            self.assertEqual(vote_box_amount, int((voting_power // 100) * vote_as_percentage))
 
     def test_cancel_proposal(self):
         user_sk, user_address = generate_account()
@@ -219,7 +221,7 @@ class StakingVotingTestCase(VaultAppMixin, StakingVotingAppMixin, BaseTestCase):
         self.create_staking_voting_app(self.app_creator_address)
         self.ledger.set_account_balance(get_application_address(STAKING_VOTING_APP_ID), 1_000_000)
 
-        block_timestamp = self.locking_app_creation_timestamp + 2 * WEEK
+        block_timestamp = self.vault_app_creation_timestamp + 2 * WEEK
         self.create_checkpoints(user_address, user_sk, block_timestamp)
 
         # Create lock 1
@@ -266,4 +268,4 @@ class StakingVotingTestCase(VaultAppMixin, StakingVotingAppMixin, BaseTestCase):
         signed_txns = sign_txns(txn_group, user_sk)
         with self.assertRaises(LogicEvalError) as e:
             self.ledger.eval_transactions(signed_txns, block_timestamp=block_timestamp)
-        self.assertEqual(e.exception.source['line'], 'assert(proposal.is_cancelled == BIT_ZERO)')
+        self.assertEqual(e.exception.source['line'], 'assert(proposal.is_cancelled == BYTES_ZERO)')

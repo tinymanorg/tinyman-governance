@@ -110,8 +110,7 @@ def prepare_set_manager_txn_group(user_address, new_manager_address, sp):
             sender=user_address,
             sp=sp,
             index=STAKING_VOTING_APP_ID,
-            app_args=["set_manager"],
-            accounts=[new_manager_address],
+            app_args=["set_manager", decode_address(new_manager_address)],
         ),
     ]
 
@@ -124,8 +123,7 @@ def prepare_set_proposal_manager_txn_group(user_address, new_manager_address, sp
             sender=user_address,
             sp=sp,
             index=STAKING_VOTING_APP_ID,
-            app_args=["set_proposal_manager"],
-            accounts=[new_manager_address],
+            app_args=["set_proposal_manager", decode_address(new_manager_address)],
         ),
     ]
 

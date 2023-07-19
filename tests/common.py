@@ -235,5 +235,6 @@ class ProposalVotingAppMixin:
                 b'voting_duration': 7,
                 b'quorum_numerator': 50,
                 b'manager': decode_address(app_creator_address),
+                b'proposal_manager': decode_address(app_creator_address)
             }
         )
