@@ -10,11 +10,12 @@ from algosdk.logic import get_application_address
 
 from common.constants import TINY_ASSET_ID, rewards_approval_program, rewards_clear_state_program, WEEK, VAULT_APP_ID, REWARDS_APP_ID
 from common.utils import get_start_timestamp_of_week, itob, sign_txns, parse_box_reward_history
-from vault.constants import TOTAL_LOCKED_AMOUNT_KEY
-from vault.transactions import prepare_create_lock_txn_group, prepare_withdraw_txn_group
-from rewards.constants import CREATION_TIMESTAMP_KEY, TINY_ASSET_ID_KEY, VAULT_APP_ID_KEY, MANAGER_KEY, REWARD_HISTORY_COUNT_KEY, REWARD_HISTORY, REWARDS_APP_MINIMUM_BALANCE_REQUIREMENT, ATTENDANCE_BOX_PREFIX
+from rewards.constants import CREATION_TIMESTAMP_KEY, TINY_ASSET_ID_KEY, VAULT_APP_ID_KEY, MANAGER_KEY, REWARD_HISTORY_COUNT_KEY, REWARD_HISTORY_BOX_PREFIX, REWARDS_APP_MINIMUM_BALANCE_REQUIREMENT
 from rewards.transactions import prepare_claim_rewards_txn_group
 from tests.common import BaseTestCase, VaultAppMixin, RewardsAppMixin
+from vault.constants import TOTAL_LOCKED_AMOUNT_KEY
+from vault.transactions import prepare_create_lock_txn_group, prepare_withdraw_txn_group
+
 
 class RewardsTestCase(VaultAppMixin, RewardsAppMixin, BaseTestCase):
 
@@ -72,7 +73,7 @@ class RewardsTestCase(VaultAppMixin, RewardsAppMixin, BaseTestCase):
         )
 
         reward_amount = 1_000_000
-        reward_histories_box_name = REWARD_HISTORY + itob(0)
+        reward_histories_box_name = REWARD_HISTORY_BOX_PREFIX + itob(0)
         txn_group = [
             transaction.PaymentTxn(
                 sender=self.app_creator_address,

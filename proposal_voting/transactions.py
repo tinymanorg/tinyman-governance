@@ -80,3 +80,117 @@ def prepare_cast_vote_txn_group(ledger, user_address, proposal_id, vote, proposa
             )
         ] + txn_group
     return txn_group
+
+
+def prepare_get_proposal_txn_group(user_address, proposal_id, sp):
+    proposal_box_name = PROPOSAL_BOX_PREFIX + proposal_id
+
+    boxes = [
+        (PROPOSAL_VOTING_APP_ID, proposal_box_name),
+    ]
+
+    txn_group = [
+        transaction.ApplicationNoOpTxn(
+            sender=user_address,
+            sp=sp,
+            index=PROPOSAL_VOTING_APP_ID,
+            app_args=["get_proposal", proposal_id],
+            boxes=boxes
+        ),
+    ]
+
+    return txn_group
+
+
+def prepare_has_voted_txn_group(ledger, user_address, proposal_id, sp):
+    proposal_box_name = PROPOSAL_BOX_PREFIX + proposal_id
+
+    proposal_index = parse_box_staking_proposal(ledger.boxes[PROPOSAL_VOTING_APP_ID][proposal_box_name])["index"]
+    account_attendance_box_index = proposal_index // 1024
+    account_attendance_box_name = ATTENDANCE_BOX_PREFIX + decode_address(user_address) + itob(account_attendance_box_index)
+
+    boxes = [
+        (PROPOSAL_VOTING_APP_ID, proposal_box_name),
+        (PROPOSAL_VOTING_APP_ID, account_attendance_box_name),
+    ]
+
+    txn_group = [
+        transaction.ApplicationNoOpTxn(
+            sender=user_address,
+            sp=sp,
+            index=PROPOSAL_VOTING_APP_ID,
+            app_args=["has_voted", proposal_id],
+            accounts=[user_address],
+            boxes=boxes
+        ),
+    ]
+
+    return txn_group
+
+
+def prepare_cancel_proposal_txn_group(user_address, proposal_id, sp):
+    proposal_box_name = PROPOSAL_BOX_PREFIX + proposal_id
+
+    boxes = [
+        (PROPOSAL_VOTING_APP_ID, proposal_box_name),
+    ]
+
+    txn_group = [
+        transaction.ApplicationNoOpTxn(
+            sender=user_address,
+            sp=sp,
+            index=PROPOSAL_VOTING_APP_ID,
+            app_args=["cancel_proposal", proposal_id],
+            boxes=boxes
+        ),
+    ]
+
+    return txn_group
+
+
+def prepare_execute_proposal_txn_group(user_address, proposal_id, sp):
+    proposal_box_name = PROPOSAL_BOX_PREFIX + proposal_id
+
+    boxes = [
+        (PROPOSAL_VOTING_APP_ID, proposal_box_name),
+    ]
+
+    txn_group = [
+        transaction.ApplicationNoOpTxn(
+            sender=user_address,
+            sp=sp,
+            index=PROPOSAL_VOTING_APP_ID,
+            app_args=["cancel_proposal", proposal_id],
+            boxes=boxes
+        ),
+    ]
+
+    return txn_group
+
+
+def prepare_set_manager_txn_group(user_address, new_manager_address, sp):
+    txn_group = [
+        transaction.ApplicationNoOpTxn(
+            sender=user_address,
+            sp=sp,
+            index=PROPOSAL_VOTING_APP_ID,
+            app_args=["set_manager"],
+            accounts=[new_manager_address],
+        ),
+    ]
+
+    return txn_group
+
+
+def prepare_set_proposal_manager_txn_group(user_address, new_manager_address, sp):
+    txn_group = [
+        transaction.ApplicationNoOpTxn(
+            sender=user_address,
+            sp=sp,
+            index=PROPOSAL_VOTING_APP_ID,
+            app_args=["set_proposal_manager"],
+            accounts=[new_manager_address],
+        ),
+    ]
+
+    return txn_group
