@@ -62,6 +62,7 @@ const int TOTAL_POWER_BOX_ARRAY_LEN = 21
 const bytes TINY_ASSET_ID_KEY = "tiny_asset_id"
 const bytes TOTAL_LOCKED_AMOUNT_KEY = "total_locked_amount"
 const bytes TOTAL_POWER_COUNT_KEY = "total_power_count"
+const bytes LAST_TOTAL_POWER_TIMESTAMP = "last_total_power_timestamp"
 const bytes CREATION_TIMESTAMP_KEY = "creation_timestamp"
 
 if !Txn.ApplicationID:
@@ -85,6 +86,7 @@ block create_app:
     app_global_put(TOTAL_LOCKED_AMOUNT_KEY, 0)
     app_global_put(TOTAL_POWER_COUNT_KEY, 0)
     app_global_put(CREATION_TIMESTAMP_KEY, Global.LatestTimestamp)
+    app_global_put(LAST_TOTAL_POWER_TIMESTAMP, 0)
     exit(1)
 end
 
@@ -124,6 +126,7 @@ block main:
 
     block create_checkpoints:
         create_checkpoints(0, bzero(16), 0)
+        log(itob(Global.OpcodeBudget))
         exit(1)
     end
 
@@ -473,6 +476,7 @@ func save_total_power(data: bytes):
 
     log(concat(concat(method("total_power(uint64,uint64,uint64,byte[16],byte[16])"), itob(index)), data))
     app_global_put(TOTAL_POWER_COUNT_KEY, index + 1)
+    app_global_put(LAST_TOTAL_POWER_TIMESTAMP, extract_uint64(data, 8))
     return
 end
 
@@ -559,7 +563,6 @@ end
 func create_checkpoints(account_bias_delta: int, account_slope_delta: bytes, has_account_event: int):
     # https://github.com/curvefi/curve-dao-contracts/blob/master/contracts/VotingEscrow.vy#L234
 
-    # int has_account_event = account_bias_delta || (account_slope_delta != bzero(16))
     TotalPower last_total_power = get_total_power(app_global_get(TOTAL_POWER_COUNT_KEY) - 1)
 
     int bias = last_total_power.bias
@@ -573,7 +576,7 @@ func create_checkpoints(account_bias_delta: int, account_slope_delta: bytes, has
     int time_delta
 
     int i = 0
-    int stop = 6
+    int stop = 9
     while i < stop:
         t_i = t_i + WEEK
         d_slope = itob(0)

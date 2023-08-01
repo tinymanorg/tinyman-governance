@@ -164,20 +164,20 @@ block main:
     end
 end
 
-func get_account_cumulative_power_at(address: bytes, snapshot_time: int, account_power_index: bytes) bytes:
-    inner_txn:
-        TypeEnum: Appl
-        ApplicationID: app_global_get(VAULT_APP_ID_KEY)
-        ApplicationArgs[0]: "get_cumulative_power_of_at"
-        ApplicationArgs[1]: address
-        ApplicationArgs[2]: itob(snapshot_time)
-        ApplicationArgs[3]: account_power_index
-        Fee: 0
-    end
+# func get_account_cumulative_power_at(address: bytes, snapshot_time: int, account_power_index: bytes) bytes:
+#     inner_txn:
+#         TypeEnum: Appl
+#         ApplicationID: app_global_get(VAULT_APP_ID_KEY)
+#         ApplicationArgs[0]: "get_cumulative_power_of_at"
+#         ApplicationArgs[1]: address
+#         ApplicationArgs[2]: itob(snapshot_time)
+#         ApplicationArgs[3]: account_power_index
+#         Fee: 0
+#     end
 
-    bytes cumulative_power = extract(4, 16, Itxn.LastLog)
-    return cumulative_power
-end
+#     bytes cumulative_power = extract(4, 16, Itxn.LastLog)
+#     return cumulative_power
+# end
 
 func get_total_cumulative_power_at(snapshot_time: int, total_power_index: bytes) bytes:
     inner_txn:

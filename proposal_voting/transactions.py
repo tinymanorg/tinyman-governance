@@ -1,17 +1,19 @@
 from algosdk import transaction
 from algosdk.encoding import decode_address
 from algosdk.logic import get_application_address
+from tinyman.utils import int_to_bytes
 
-from common.utils import itob, get_latest_total_powers_indexes, parse_box_staking_proposal, get_account_power_index_at, get_required_minimum_balance_of_box
-from vault.constants import TOTAL_POWERS, ACCOUNT_POWER_BOX_ARRAY_LEN
+from common.utils import get_latest_total_powers_indexes, parse_box_staking_proposal, get_account_power_index_at, get_required_minimum_balance_of_box
+from tinyman.governance.vault.constants import TOTAL_POWERS, ACCOUNT_POWER_BOX_ARRAY_LEN
 from proposal_voting.constants import PROPOSAL_BOX_PREFIX, ATTENDANCE_BOX_PREFIX
 from common.constants import PROPOSAL_VOTING_APP_ID, VAULT_APP_ID
 
-def prepare_create_proposal_txn_group(ledger, user_address, proposal_id, sp):
+
+def prepare_create_proposal_transactions(ledger, user_address, proposal_id, sp):
     proposal_box_name = PROPOSAL_BOX_PREFIX + proposal_id
     account_state_box_name = decode_address(user_address)
     latest_total_powers_box_index, _, _ = get_latest_total_powers_indexes(ledger, VAULT_APP_ID)
-    latest_total_powers_box_name = TOTAL_POWERS + itob(latest_total_powers_box_index)
+    latest_total_powers_box_name = TOTAL_POWERS + int_to_bytes(latest_total_powers_box_index)
 
     txn_group = [
         transaction.ApplicationNoOpTxn(
@@ -31,7 +33,8 @@ def prepare_create_proposal_txn_group(ledger, user_address, proposal_id, sp):
     txn_group[0].fee *= 3
     return txn_group
 
-def prepare_cast_vote_txn_group(ledger, user_address, proposal_id, vote, proposal_creation_timestamp, sp):
+
+def prepare_cast_vote_transactions(ledger, user_address, proposal_id, vote, proposal_creation_timestamp, sp):
     assert vote in [0, 1, 2]
 
     account_power_index = get_account_power_index_at(ledger, VAULT_APP_ID, user_address, proposal_creation_timestamp)
@@ -41,17 +44,17 @@ def prepare_cast_vote_txn_group(ledger, user_address, proposal_id, vote, proposa
     proposal_box_name = PROPOSAL_BOX_PREFIX + proposal_id
     proposal_index = parse_box_staking_proposal(ledger.boxes[PROPOSAL_VOTING_APP_ID][proposal_box_name])["index"]
     account_attendance_box_index = proposal_index // (1024 * 8)
-    account_attendance_box_name = ATTENDANCE_BOX_PREFIX + decode_address(user_address) + itob(account_attendance_box_index)
+    account_attendance_box_name = ATTENDANCE_BOX_PREFIX + decode_address(user_address) + int_to_bytes(account_attendance_box_index)
 
     boxes = [
         (PROPOSAL_VOTING_APP_ID, proposal_box_name),
         (PROPOSAL_VOTING_APP_ID, account_attendance_box_name),
         (VAULT_APP_ID, decode_address(user_address)),
-        (VAULT_APP_ID, decode_address(user_address) + itob(account_power_box_index)),
+        (VAULT_APP_ID, decode_address(user_address) + int_to_bytes(account_power_box_index)),
     ]
     if not (account_power_index + 1) % ACCOUNT_POWER_BOX_ARRAY_LEN:
         boxes.append(
-            (VAULT_APP_ID, decode_address(user_address) + itob(account_power_box_index + 1)),
+            (VAULT_APP_ID, decode_address(user_address) + int_to_bytes(account_power_box_index + 1)),
         )
 
     txn_group = [
@@ -82,7 +85,7 @@ def prepare_cast_vote_txn_group(ledger, user_address, proposal_id, vote, proposa
     return txn_group
 
 
-def prepare_get_proposal_txn_group(user_address, proposal_id, sp):
+def prepare_get_proposal_transactions(user_address, proposal_id, sp):
     proposal_box_name = PROPOSAL_BOX_PREFIX + proposal_id
 
     boxes = [
@@ -102,12 +105,12 @@ def prepare_get_proposal_txn_group(user_address, proposal_id, sp):
     return txn_group
 
 
-def prepare_has_voted_txn_group(ledger, user_address, proposal_id, sp):
+def prepare_has_voted_transactions(ledger, user_address, proposal_id, sp):
     proposal_box_name = PROPOSAL_BOX_PREFIX + proposal_id
 
     proposal_index = parse_box_staking_proposal(ledger.boxes[PROPOSAL_VOTING_APP_ID][proposal_box_name])["index"]
     account_attendance_box_index = proposal_index // (1024 * 8)
-    account_attendance_box_name = ATTENDANCE_BOX_PREFIX + decode_address(user_address) + itob(account_attendance_box_index)
+    account_attendance_box_name = ATTENDANCE_BOX_PREFIX + decode_address(user_address) + int_to_bytes(account_attendance_box_index)
 
     boxes = [
         (PROPOSAL_VOTING_APP_ID, proposal_box_name),
@@ -127,7 +130,7 @@ def prepare_has_voted_txn_group(ledger, user_address, proposal_id, sp):
     return txn_group
 
 
-def prepare_cancel_proposal_txn_group(user_address, proposal_id, sp):
+def prepare_cancel_proposal_transactions(user_address, proposal_id, sp):
     proposal_box_name = PROPOSAL_BOX_PREFIX + proposal_id
 
     boxes = [
@@ -147,7 +150,7 @@ def prepare_cancel_proposal_txn_group(user_address, proposal_id, sp):
     return txn_group
 
 
-def prepare_execute_proposal_txn_group(user_address, proposal_id, sp):
+def prepare_execute_proposal_transactions(user_address, proposal_id, sp):
     proposal_box_name = PROPOSAL_BOX_PREFIX + proposal_id
 
     boxes = [
@@ -167,7 +170,7 @@ def prepare_execute_proposal_txn_group(user_address, proposal_id, sp):
     return txn_group
 
 
-def prepare_set_manager_txn_group(user_address, new_manager_address, sp):
+def prepare_set_manager_transactions(user_address, new_manager_address, sp):
     txn_group = [
         transaction.ApplicationNoOpTxn(
             sender=user_address,
@@ -180,7 +183,7 @@ def prepare_set_manager_txn_group(user_address, new_manager_address, sp):
     return txn_group
 
 
-def prepare_set_proposal_manager_txn_group(user_address, new_manager_address, sp):
+def prepare_set_proposal_manager_transactions(user_address, new_manager_address, sp):
     txn_group = [
         transaction.ApplicationNoOpTxn(
             sender=user_address,
