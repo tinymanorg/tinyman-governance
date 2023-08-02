@@ -2,6 +2,7 @@ from algosdk import transaction
 from algosdk.encoding import decode_address
 from algosdk.logic import get_application_address
 from tinyman.governance.constants import WEEK
+from tinyman.governance.transactions import prepare_budget_increase_txn
 from tinyman.utils import int_to_bytes
 
 from common.constants import VAULT_APP_ID, REWARDS_APP_ID, TINY_ASSET_ID
@@ -9,7 +10,6 @@ from common.utils import get_account_power_index_at, get_total_power_index_at, g
 from rewards.constants import ATTENDANCE_BOX_PREFIX, REWARD_SHEET_BOX_SIZE
 from rewards.constants import REWARD_HISTORY_BOX_SIZE, REWARD_HISTORY_BOX_PREFIX, REWARDS_APP_MINIMUM_BALANCE_REQUIREMENT
 from tinyman.governance.vault.constants import ACCOUNT_POWER_BOX_ARRAY_LEN, TOTAL_POWERS, TOTAL_POWER_BOX_ARRAY_LEN
-from vault.transactions import prepare_budget_increase_txn
 
 
 def prepare_init_transactions(ledger, user_address, reward_amount: int, sp):

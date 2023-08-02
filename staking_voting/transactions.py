@@ -1,12 +1,12 @@
 from algosdk import transaction
 from algosdk.encoding import decode_address
 from algosdk.logic import get_application_address
+from tinyman.governance.transactions import prepare_budget_increase_txn
 from tinyman.utils import int_to_bytes
 
 from common.constants import STAKING_VOTING_APP_ID, VAULT_APP_ID
 from common.utils import get_account_power_index_at, parse_box_staking_proposal, get_required_minimum_balance_of_box
 from tinyman.governance.vault.constants import ACCOUNT_POWER_BOX_ARRAY_LEN
-from vault.transactions import prepare_budget_increase_txn
 from staking_voting.constants import PROPOSAL_BOX_PREFIX, ATTENDANCE_BOX_PREFIX
 
 

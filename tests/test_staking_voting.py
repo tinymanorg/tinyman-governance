@@ -221,7 +221,6 @@ class StakingVotingTestCase(VaultAppMixin, StakingVotingAppMixin, BaseTestCase):
                 tiny_asset_id=TINY_ASSET_ID,
                 sender=user_address,
                 locked_amount=amount,
-                current_lock_end_time=lock_end_timestamp,
                 vault_app_global_state=get_vault_app_global_state(self.ledger),
                 account_state=get_account_state(self.ledger, user_address),
                 suggested_params=self.sp,
