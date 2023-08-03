@@ -21,13 +21,13 @@ const bytes REWARD_HISTORY_COUNT_KEY = "reward_history_count"
 const bytes MANAGER_KEY = "manager"
 
 # Boxes
-const bytes REWARD_HISTORY_BOX_PREFIX = "rh"
-const int REWARD_SHEET_BOX_SIZE = 1024
+const bytes REWARD_HISTORY_BOX_PREFIX = "r"
+const int REWARD_CLAIM_SHEET_BOX_SIZE = 1024
 const int REWARD_HISTORY_SIZE = 16
 const int REWARD_HISTORY_BOX_SIZE = 256
 const int REWARD_HISTORY_BOX_ARRAY_LEN = 16
 
-const bytes ATTENDANCE_BOX_PREFIX = "a"
+const bytes REWARD_CLAIM_SHEET_BOX_PREFIX = "c"
 
 if !Txn.ApplicationID:
     jump create_app
@@ -226,12 +226,12 @@ func get_reward_amount(timestamp: int, index: int) int:
 end
 
 func check_and_save_claimed_reward(address: bytes, period_index: int):
-    int box_index = period_index / (REWARD_SHEET_BOX_SIZE * 8)
-    int array_index = period_index % (REWARD_SHEET_BOX_SIZE * 8)
-    bytes box_name = concat(ATTENDANCE_BOX_PREFIX, concat(address, itob(box_index)))
+    int box_index = period_index / (REWARD_CLAIM_SHEET_BOX_SIZE * 8)
+    int array_index = period_index % (REWARD_CLAIM_SHEET_BOX_SIZE * 8)
+    bytes box_name = concat(REWARD_CLAIM_SHEET_BOX_PREFIX, concat(address, itob(box_index)))
 
     bytes sheet
-    _ = box_create(box_name, REWARD_SHEET_BOX_SIZE)
+    _ = box_create(box_name, REWARD_CLAIM_SHEET_BOX_SIZE)
     _, sheet = box_get(box_name)
     assert(!getbit(sheet, array_index))
     sheet = setbit(sheet, array_index, 1)
