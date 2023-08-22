@@ -92,6 +92,7 @@ end
 
 block main:
     switch Txn.ApplicationArgs[0]:
+        "increase_budget": increase_budget
         "create_lock": create_lock
         "increase_lock_amount": increase_lock_amount
         "extend_lock_end_time": extend_lock_end_time
@@ -102,8 +103,8 @@ block main:
         "get_total_tiny_power": get_total_tiny_power
         "get_total_tiny_power_at": get_total_tiny_power_at
         "get_total_cumulative_power_at": get_total_cumulative_power_at
-        "get_cumulative_powers_for_rewards": get_cumulative_powers_for_rewards
-        "increase_budget": increase_budget
+        "get_account_cumulative_power_delta": get_account_cumulative_power_delta
+        "get_total_cumulative_power_delta": get_total_cumulative_power_delta
         "withdraw": withdraw
         "init": init
     end
@@ -326,7 +327,7 @@ block main:
             end
         end
 
-        log(concat(method("return"), itob(tiny_power)))
+        log(concat(method("return"), (bzero(8) b| itob(tiny_power))))
         exit(1)
     end
 
@@ -354,7 +355,7 @@ block main:
             tiny_power = get_power(account_power.bias, account_power.slope, (timestamp - account_power.timestamp))
         end
 
-        log(concat(method("return"), itob(tiny_power)))
+        log(concat(method("return"), (bzero(8) b|itob(tiny_power))))
         exit(1)
     end
 
@@ -377,7 +378,7 @@ block main:
         assert((total_power.timestamp / WEEK) == (timestamp / WEEK))
 
         int tiny_power = get_power(total_power.bias, total_power.slope, (timestamp - total_power.timestamp))
-        log(concat(method("return"), itob(tiny_power)))
+        log(concat(method("return"), (bzero(8) b| itob(tiny_power))))
         exit(1)
     end
 
@@ -404,7 +405,7 @@ block main:
             assert(!total_power_index)
         end
 
-        log(concat(method("return"), itob(tiny_power)))
+        log(concat(method("return"), (bzero(16) b| itob(tiny_power))))
         exit(1)
     end
 
@@ -417,22 +418,32 @@ block main:
         exit(1)
     end
 
-    block get_cumulative_powers_for_rewards:
+    block get_account_cumulative_power_delta:
         bytes user_address = Txn.ApplicationArgs[1]
         int timestamp_1 = btoi(Txn.ApplicationArgs[2])
         int timestamp_2 = btoi(Txn.ApplicationArgs[3])
         int account_power_index_1 = btoi(Txn.ApplicationArgs[4])
         int account_power_index_2 = btoi(Txn.ApplicationArgs[5])
-        int total_power_index_1 = btoi(Txn.ApplicationArgs[6])
-        int total_power_index_2 = btoi(Txn.ApplicationArgs[7])
 
-        bytes cumulative_power_1 = get_cumulative_power_of_at(user_address, timestamp_1, account_power_index_1)
-        bytes cumulative_power_2 = get_cumulative_power_of_at(user_address, timestamp_2, account_power_index_2)
+        bytes account_cumulative_power_1 = get_cumulative_power_of_at(user_address, timestamp_1, account_power_index_1)
+        bytes account_cumulative_power_2 = get_cumulative_power_of_at(user_address, timestamp_2, account_power_index_2)
+        bytes cumulative_power_delta = account_cumulative_power_2 b- account_cumulative_power_1
+
+        log(concat(method("return"), (bzero(16) b| cumulative_power_delta)))
+        exit(1)
+    end
+
+    block get_total_cumulative_power_delta:
+        int timestamp_1 = btoi(Txn.ApplicationArgs[1])
+        int timestamp_2 = btoi(Txn.ApplicationArgs[2])
+        int total_power_index_1 = btoi(Txn.ApplicationArgs[3])
+        int total_power_index_2 = btoi(Txn.ApplicationArgs[4])
 
         bytes total_cumulative_power_1 = get_total_cumulative_power_at(timestamp_1, total_power_index_1)
         bytes total_cumulative_power_2 = get_total_cumulative_power_at(timestamp_2, total_power_index_2)
+        bytes cumulative_power_delta = total_cumulative_power_2 b- total_cumulative_power_1
 
-        log(concat(method("return"), concat(concat(concat(cumulative_power_1, cumulative_power_2), total_cumulative_power_1), total_cumulative_power_2)))
+        log(concat(method("return"), (bzero(16) b| cumulative_power_delta)))
         exit(1)
     end
 end
@@ -449,7 +460,7 @@ func save_account_power(address: bytes, index: int, data: bytes):
     _ = box_create(box_name, ACCOUNT_POWER_BOX_SIZE)
     box_replace(box_name, (array_index * ACCOUNT_POWER_SIZE), data)
 
-    log(concat(concat(concat(method("account_power(address,uint64,uint64,uint64,byte[16],byte[16])"), address), itob(index)), data))
+    log(concat(concat(concat(method("account_power(address,uint64,uint64,uint64,uint128,uint128)"), address), itob(index)), data))
     return
 end
 
@@ -474,7 +485,7 @@ func save_total_power(data: bytes):
     _ = box_create(box_name, TOTAL_POWER_BOX_SIZE)
     box_replace(box_name, (array_index * TOTAL_POWER_SIZE), data)
 
-    log(concat(concat(method("total_power(uint64,uint64,uint64,byte[16],byte[16])"), itob(index)), data))
+    log(concat(concat(method("total_power(uint64,uint64,uint64,uint128,uint128)"), itob(index)), data))
     app_global_put(TOTAL_POWER_COUNT_KEY, index + 1)
     app_global_put(LAST_TOTAL_POWER_TIMESTAMP, extract_uint64(data, 8))
     return
@@ -533,14 +544,15 @@ func get_total_cumulative_power_at(timestamp: int, total_power_index: int) bytes
 
     bytes cumulative_power_delta
     TotalPower total_power = get_total_power(total_power_index)
-    # Ensure that the latest checkpoint belongs to the same week so the slope is not changed.
-    assert((total_power.timestamp / WEEK) == (timestamp / WEEK))
 
     if total_power.timestamp <= timestamp:
         if (total_power_index + 1) < app_global_get(TOTAL_POWER_COUNT_KEY):
             TotalPower next_total_power = get_total_power(total_power_index + 1)
             assert(timestamp < next_total_power.timestamp)
         end
+
+        # Ensure that the latest checkpoint belongs to the same week so the slope is not changed.
+        assert((total_power.timestamp / WEEK) == (timestamp / WEEK))
 
         int time_delta = timestamp - total_power.timestamp
         int bias_delta = get_bias(total_power.slope, time_delta)
@@ -651,7 +663,7 @@ func revert_slope_change(timestamp: int, slope: bytes):
     bytes new_slope = bzero(16) b| (box_extract(box_name, 0, 16) b- slope)
     box_put(box_name, new_slope)
 
-    log(concat(concat(method("slope_change(uint64,byte[16])"), itob(timestamp)), new_slope))
+    log(concat(concat(method("slope_change(uint64,uint128)"), itob(timestamp)), new_slope))
     return
 end
 
@@ -662,7 +674,7 @@ func update_or_create_slope_change(timestamp: int, slope: bytes):
     bytes new_slope = bzero(16) b| (slope_delta b+ slope)
     box_put(box_name, new_slope)
 
-    log(concat(concat(method("slope_change(uint64,byte[16])"), itob(timestamp)), new_slope))
+    log(concat(concat(method("slope_change(uint64,uint128)"), itob(timestamp)), new_slope))
     return
 end
 

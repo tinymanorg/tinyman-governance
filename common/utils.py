@@ -3,12 +3,13 @@ from pprint import pprint
 from zoneinfo import ZoneInfo
 
 from algosdk.encoding import encode_address, decode_address
+from tinyman.governance.rewards.storage import parse_box_reward_period
 from tinyman.governance.vault.constants import TOTAL_POWERS, SLOPE_CHANGES, TOTAL_POWER_COUNT_KEY, TOTAL_POWER_BOX_ARRAY_LEN, ACCOUNT_POWER_BOX_ARRAY_LEN
 from tinyman.governance.vault.storage import parse_box_total_power, parse_box_slope_change, parse_box_account_power, parse_box_account_state
 from tinyman.utils import bytes_to_int, int_to_bytes
 
 from proposal_voting.constants import PROPOSAL_BOX_PREFIX, ATTENDANCE_BOX_PREFIX
-from rewards.constants import REWARD_HISTORY_SIZE, REWARD_HISTORY_BOX_ARRAY_LEN, REWARD_HISTORY_BOX_PREFIX
+from tinyman.governance.rewards.constants import REWARD_HISTORY_SIZE, REWARD_HISTORY_BOX_ARRAY_LEN, REWARD_HISTORY_BOX_PREFIX, REWARD_PERIOD_BOX_PREFIX
 from staking_voting.constants import VOTE_BOX_PREFIX
 
 
@@ -121,6 +122,14 @@ def print_boxes(boxes):
             box_index = bytes_to_int(key[33:])
             attendance_array = [check_nth_bit_from_left(value, i) for i in range(0, (len(value) * 8))]
             print(f"ATTENDANCE {address}:{box_index}", attendance_array)
+
+        elif key.startswith(REWARD_PERIOD_BOX_PREFIX) and len(key) == 10:
+            box_index = bytes_to_int(key[2:])
+            print("RewardPeriod" + f"_{box_index}")
+            reward_periods = parse_box_reward_period(value)
+            for i, reward_period in enumerate(reward_periods):
+                print("-", i, reward_period)
+
         elif len(value) == 1008:
             powers = parse_box_account_power(value)
             print(encode_address(key[:32]) + f"_{bytes_to_int(key[32:])}")

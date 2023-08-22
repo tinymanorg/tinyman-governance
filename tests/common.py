@@ -5,12 +5,13 @@ from algojig.gojig import run
 from algosdk.account import generate_account
 from algosdk.encoding import decode_address
 from algosdk.logic import get_application_address
-from tinyman.governance.vault.constants import TINY_ASSET_ID_KEY, TOTAL_LOCKED_AMOUNT_KEY, TOTAL_POWER_COUNT_KEY, CREATION_TIMESTAMP_KEY, VAULT_APP_MINIMUM_BALANCE_REQUIREMENT, TOTAL_POWER_BOX_ARRAY_LEN, TOTAL_POWERS, TOTAL_POWER_BOX_SIZE, TOTAL_POWER_SIZE, LAST_TOTAL_POWER_TIMESTAMP_KEY
+from tinyman.governance.constants import TINY_ASSET_ID_KEY, VAULT_APP_ID_KEY, WEEK
+from tinyman.governance.vault.constants import TOTAL_LOCKED_AMOUNT_KEY, TOTAL_POWER_COUNT_KEY, CREATION_TIMESTAMP_KEY, VAULT_APP_MINIMUM_BALANCE_REQUIREMENT, TOTAL_POWER_BOX_ARRAY_LEN, TOTAL_POWERS, TOTAL_POWER_BOX_SIZE, TOTAL_POWER_SIZE, LAST_TOTAL_POWER_TIMESTAMP_KEY
 from tinyman.governance.vault.transactions import prepare_create_checkpoints_transactions
 from tinyman.utils import int_to_bytes
 
 from common.constants import staking_voting_approval_program, rewards_approval_program, vault_approval_program, proposal_voting_approval_program, TINY_ASSET_ID, VAULT_APP_ID, PROPOSAL_VOTING_APP_ID, REWARDS_APP_ID, STAKING_VOTING_APP_ID
-from rewards.constants import REWARD_HISTORY_BOX_ARRAY_LEN, REWARD_HISTORY_BOX_SIZE, REWARD_HISTORY_SIZE, REWARD_HISTORY_BOX_PREFIX, REWARDS_APP_MINIMUM_BALANCE_REQUIREMENT
+from tinyman.governance.rewards.constants import REWARD_HISTORY_BOX_ARRAY_LEN, REWARD_HISTORY_BOX_SIZE, REWARD_HISTORY_SIZE, REWARD_HISTORY_BOX_PREFIX, REWARDS_APP_MINIMUM_BALANCE_REQUIREMENT, REWARD_PERIOD_COUNT_KEY, REWARD_HISTORY_COUNT_KEY, MANAGER_KEY, FIRST_PERIOD_TIMESTAMP
 from vault.utils import get_vault_app_global_state
 
 
@@ -144,22 +145,26 @@ class RewardsAppMixin:
             REWARDS_APP_ID,
             {
                 TINY_ASSET_ID_KEY: TINY_ASSET_ID,
-                b'vault_app_id': VAULT_APP_ID,
-                CREATION_TIMESTAMP_KEY: creation_timestamp
+                VAULT_APP_ID_KEY: VAULT_APP_ID,
+                REWARD_PERIOD_COUNT_KEY: 0,
+                FIRST_PERIOD_TIMESTAMP: 0,
+                MANAGER_KEY: decode_address(app_creator_address),
             }
         )
 
-    def init_rewards_app(self, timestamp, reward_amount=100_000_000):
+    def init_rewards_app(self, first_period_timestamp, reward_amount=100_000_000):
+        assert first_period_timestamp % WEEK == 0
         # Min balance requirement
         self.ledger.set_account_balance(get_application_address(REWARDS_APP_ID), REWARDS_APP_MINIMUM_BALANCE_REQUIREMENT)
         # Opt-in
         self.ledger.set_account_balance(get_application_address(REWARDS_APP_ID), 0, asset_id=TINY_ASSET_ID)
-        self.set_box_reward_history(index=0, timestamp=timestamp, reward_amount=reward_amount)
+        self.set_box_reward_history(index=0, timestamp=first_period_timestamp, reward_amount=reward_amount)
 
         self.ledger.update_global_state(
             REWARDS_APP_ID,
             {
-                b'reward_history_count': 1,
+                FIRST_PERIOD_TIMESTAMP: first_period_timestamp,
+                REWARD_HISTORY_COUNT_KEY: 1,
             }
         )
 
