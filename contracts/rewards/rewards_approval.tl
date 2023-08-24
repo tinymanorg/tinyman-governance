@@ -15,9 +15,6 @@ struct RewardHistory:
     reward_amount: int
 end
 
-# 2^64 - 1
-# const int MAX_UINT64 = 18446744073709551615
-# 7 * DAY
 const int WEEK = 604800
 
 # Global states
@@ -27,8 +24,11 @@ const bytes FIRST_PERIOD_TIMESTAMP = "first_period_timestamp"
 const bytes REWARD_PERIOD_COUNT_KEY = "reward_period_count"
 const bytes REWARD_HISTORY_COUNT_KEY = "reward_history_count"
 const bytes MANAGER_KEY = "manager"
+const bytes REWARDS_MANAGER_KEY = "rewards_manager"
 
 # Boxes
+const bytes REWARD_CLAIM_SHEET_BOX_PREFIX = "c"
+# Boolean (1024 * 8 bits)
 const int REWARD_CLAIM_SHEET_BOX_SIZE = 1024
 
 const bytes REWARD_PERIOD_BOX_PREFIX = "rp"
@@ -41,7 +41,6 @@ const int REWARD_HISTORY_SIZE = 16
 const int REWARD_HISTORY_BOX_SIZE = 256
 const int REWARD_HISTORY_BOX_ARRAY_LEN = 16
 
-const bytes REWARD_CLAIM_SHEET_BOX_PREFIX = "c"
 
 if !Txn.ApplicationID:
     jump create_app
@@ -65,8 +64,8 @@ block create_app:
     app_global_put(REWARD_PERIOD_COUNT_KEY, 0)
     app_global_put(REWARD_HISTORY_COUNT_KEY, 0)
     app_global_put(FIRST_PERIOD_TIMESTAMP, 0)
-
     app_global_put(MANAGER_KEY, Txn.Sender)
+    app_global_put(REWARDS_MANAGER_KEY, Txn.Sender)
     exit(1)
 end
 
@@ -83,6 +82,7 @@ block main:
         "create_reward_period": create_reward_period
         "set_reward_amount": set_reward_amount
         "set_manager": set_manager
+        "set_rewards_manager": set_rewards_manager
         "init": init
     end
 
@@ -136,7 +136,6 @@ block main:
         
         bytes reward_amounts = ""
         for i in 0:period_count:
-            # TODO: Make sure the reward is not send previously
             period_index = period_index_start + i
             check_and_save_claimed_reward(user_address, period_index)
 
@@ -167,7 +166,7 @@ block main:
 
     block init:
         bytes user_address = Txn.Sender
-        assert(user_address == app_global_get(MANAGER_KEY))
+        assert(user_address == app_global_get(REWARDS_MANAGER_KEY))
         assert(!app_global_get(REWARD_HISTORY_COUNT_KEY))
 
         int first_period_timestamp = ((Global.LatestTimestamp / WEEK) * WEEK) + WEEK
@@ -184,7 +183,7 @@ block main:
     
     block set_reward_amount:
         bytes user_address = Txn.Sender
-        assert(user_address == app_global_get(MANAGER_KEY))
+        assert(user_address == app_global_get(REWARDS_MANAGER_KEY))
 
         # Ensure that the app is initialized.
         assert(app_global_get(REWARD_HISTORY_COUNT_KEY))
@@ -200,6 +199,14 @@ block main:
         assert(user_address == app_global_get(MANAGER_KEY))
 
         app_global_put(MANAGER_KEY, Txn.ApplicationArgs[1])
+        exit(1)
+    end
+    
+    block set_rewards_manager:
+        bytes user_address = Txn.Sender
+        assert(user_address == app_global_get(MANAGER_KEY))
+
+        app_global_put(REWARDS_MANAGER_KEY, Txn.ApplicationArgs[1])
         exit(1)
     end
 end

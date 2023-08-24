@@ -11,7 +11,7 @@ from tinyman.governance.vault.transactions import prepare_create_checkpoints_tra
 from tinyman.utils import int_to_bytes
 
 from common.constants import staking_voting_approval_program, rewards_approval_program, vault_approval_program, proposal_voting_approval_program, TINY_ASSET_ID, VAULT_APP_ID, PROPOSAL_VOTING_APP_ID, REWARDS_APP_ID, STAKING_VOTING_APP_ID
-from tinyman.governance.rewards.constants import REWARD_HISTORY_BOX_ARRAY_LEN, REWARD_HISTORY_BOX_SIZE, REWARD_HISTORY_SIZE, REWARD_HISTORY_BOX_PREFIX, REWARDS_APP_MINIMUM_BALANCE_REQUIREMENT, REWARD_PERIOD_COUNT_KEY, REWARD_HISTORY_COUNT_KEY, MANAGER_KEY, FIRST_PERIOD_TIMESTAMP
+from tinyman.governance.rewards.constants import REWARD_HISTORY_BOX_ARRAY_LEN, REWARD_HISTORY_BOX_SIZE, REWARD_HISTORY_SIZE, REWARD_HISTORY_BOX_PREFIX, REWARDS_APP_MINIMUM_BALANCE_REQUIREMENT, REWARD_PERIOD_COUNT_KEY, REWARD_HISTORY_COUNT_KEY, MANAGER_KEY, FIRST_PERIOD_TIMESTAMP, REWARDS_MANAGER_KEY
 from vault.utils import get_vault_app_global_state
 
 
@@ -149,6 +149,7 @@ class RewardsAppMixin:
                 REWARD_PERIOD_COUNT_KEY: 0,
                 FIRST_PERIOD_TIMESTAMP: 0,
                 MANAGER_KEY: decode_address(app_creator_address),
+                REWARDS_MANAGER_KEY: decode_address(app_creator_address),
             }
         )
 
