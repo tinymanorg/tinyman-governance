@@ -112,6 +112,7 @@ block main:
 
         bytes reward_period = construct_reward_period(total_reward_amount, cumulative_power_delta)
         save_reward_period(reward_period)
+        log(concat(concat(concat(method("create_reward_period(uint64,uint64,uint128)"), itob(period_index)), itob(total_reward_amount)), cumulative_power_delta))
         exit(1)
     end
 
@@ -178,6 +179,7 @@ block main:
 
         # opt-in to TINY
         transfer(app_global_get(TINY_ASSET_ID_KEY), 0, Global.CurrentApplicationAddress, Global.CurrentApplicationAddress)
+        log(concat(concat(method("init(uint64,uint64)"), itob(first_period_timestamp)), itob(reward_amount)))
         exit(1)
     end
     
@@ -191,6 +193,7 @@ block main:
         int reward_amount = btoi(Txn.ApplicationArgs[1])
         bytes reward_history = construct_reward_history(Global.LatestTimestamp, reward_amount)
         save_reward_history(reward_history)
+        log(concat(concat(method("set_reward_amount(uint64,uint64)"), itob(Global.LatestTimestamp)), itob(reward_amount)))
         exit(1)
     end
 
@@ -199,6 +202,7 @@ block main:
         assert(user_address == app_global_get(MANAGER_KEY))
 
         app_global_put(MANAGER_KEY, Txn.ApplicationArgs[1])
+        log(concat(method("set_manager(address)"), Txn.ApplicationArgs[1]))
         exit(1)
     end
     
@@ -207,6 +211,7 @@ block main:
         assert(user_address == app_global_get(MANAGER_KEY))
 
         app_global_put(REWARDS_MANAGER_KEY, Txn.ApplicationArgs[1])
+        log(concat(method("set_rewards_manager(address)"), Txn.ApplicationArgs[1]))
         exit(1)
     end
 end

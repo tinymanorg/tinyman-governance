@@ -40,7 +40,7 @@ class RewardsTestCase(VaultAppMixin, RewardsAppMixin, BaseTestCase):
         super().setUp()
         self.ledger.set_account_balance(self.app_creator_address, 1_000_000)
 
-        self.create_vault_app(self.app_creator_address, self.vault_app_creation_timestamp)
+        self.create_vault_app(self.app_creator_address)
         self.init_vault_app(self.vault_app_creation_timestamp + 30)
 
         self.ledger.set_account_balance(self.user_address, 100_000_000)
@@ -125,7 +125,7 @@ class RewardsTestCase(VaultAppMixin, RewardsAppMixin, BaseTestCase):
         block_timestamp = int(block_datetime.timestamp())
 
         reward_amount = 1_000_000
-        self.create_rewards_app(self.app_creator_address, self.vault_app_creation_timestamp)
+        self.create_rewards_app(self.app_creator_address)
         first_period_start_timestamp = get_start_timestamp_of_week(self.vault_app_creation_timestamp) + WEEK
         self.init_rewards_app(first_period_start_timestamp, reward_amount)
         self.ledger.move(

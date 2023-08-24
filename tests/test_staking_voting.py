@@ -31,7 +31,7 @@ class StakingVotingTestCase(VaultAppMixin, StakingVotingAppMixin, BaseTestCase):
     def setUp(self):
         super().setUp()
         self.ledger.set_account_balance(self.app_creator_address, 1_000_000)
-        self.create_vault_app(self.app_creator_address, self.vault_app_creation_timestamp)
+        self.create_vault_app(self.app_creator_address)
         self.init_vault_app(self.vault_app_creation_timestamp + 30)
 
     def test_create_proposal(self):

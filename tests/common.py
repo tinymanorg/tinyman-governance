@@ -6,7 +6,7 @@ from algosdk.account import generate_account
 from algosdk.encoding import decode_address
 from algosdk.logic import get_application_address
 from tinyman.governance.constants import TINY_ASSET_ID_KEY, VAULT_APP_ID_KEY, WEEK
-from tinyman.governance.vault.constants import TOTAL_LOCKED_AMOUNT_KEY, TOTAL_POWER_COUNT_KEY, CREATION_TIMESTAMP_KEY, VAULT_APP_MINIMUM_BALANCE_REQUIREMENT, TOTAL_POWER_BOX_ARRAY_LEN, TOTAL_POWERS, TOTAL_POWER_BOX_SIZE, TOTAL_POWER_SIZE, LAST_TOTAL_POWER_TIMESTAMP_KEY
+from tinyman.governance.vault.constants import TOTAL_LOCKED_AMOUNT_KEY, TOTAL_POWER_COUNT_KEY, VAULT_APP_MINIMUM_BALANCE_REQUIREMENT, TOTAL_POWER_BOX_ARRAY_LEN, TOTAL_POWERS, TOTAL_POWER_BOX_SIZE, TOTAL_POWER_SIZE, LAST_TOTAL_POWER_TIMESTAMP_KEY
 from tinyman.governance.vault.transactions import prepare_create_checkpoints_transactions
 from tinyman.utils import int_to_bytes
 
@@ -50,7 +50,7 @@ class BaseTestCase(unittest.TestCase):
 
 class VaultAppMixin:
 
-    def create_vault_app(self, app_creator_address, creation_timestamp):
+    def create_vault_app(self, app_creator_address):
         if app_creator_address not in self.ledger.accounts:
             self.ledger.set_account_balance(app_creator_address, 1_000_000)
 
@@ -71,7 +71,6 @@ class VaultAppMixin:
                 TINY_ASSET_ID_KEY: TINY_ASSET_ID,
                 TOTAL_LOCKED_AMOUNT_KEY: 0,
                 TOTAL_POWER_COUNT_KEY: 0,
-                CREATION_TIMESTAMP_KEY: creation_timestamp,
                 LAST_TOTAL_POWER_TIMESTAMP_KEY: 0
             }
         )
@@ -124,7 +123,7 @@ class VaultAppMixin:
 
 
 class RewardsAppMixin:
-    def create_rewards_app(self, app_creator_address, creation_timestamp):
+    def create_rewards_app(self, app_creator_address):
         if app_creator_address not in self.ledger.accounts:
             self.ledger.set_account_balance(app_creator_address, 1_000_000)
 

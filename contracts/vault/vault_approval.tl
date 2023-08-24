@@ -19,7 +19,7 @@ struct AccountPower:
 end
 
 # Name: tp<box_index><array_index>
-# Size: 48 bytes (8+8+16+16). 1 Box(1008) = 21
+# Size: 48 bytes (8+8+16+16). 1 Box(1008) = 21 TotalPower
 struct TotalPower:
     bias: int
     timestamp: int
@@ -33,10 +33,6 @@ struct SlopeChange:
     slope_delta: bytes[16]
 end
 
-# 2^64 - 1
-# const int MAX_UINT64 = 18446744073709551615
-# 24 * 60 * 60
-# const int DAY = 86400
 # 7 * DAY
 const int WEEK = 604800
 # 4 * 365 * DAY
@@ -44,26 +40,27 @@ const int MAX_LOCK_TIME = 126144000
 const int MIN_LOCK_AMOUNT = 10000000
 const int MIN_LOCK_AMOUNT_INCREMENT = 10000000
 const bytes TWO_TO_THE_64 = "\x01\x00\x00\x00\x00\x00\x00\x00\x00"
-const bytes TOTAL_POWERS = "tp"
-const bytes SLOPE_CHANGES = "sc"
+
+# Boxes
+const bytes TOTAL_POWER_BOX_PREFIX = "tp"
+const int TOTAL_POWER_SIZE = 48
+const int TOTAL_POWER_BOX_SIZE = 1008
+const int TOTAL_POWER_BOX_ARRAY_LEN = 21
 
 const int ACCOUNT_STATE_SIZE = 24
-const int SLOPE_CHANGE_SIZE = 16
 
 const int ACCOUNT_POWER_SIZE = 48
 const int ACCOUNT_POWER_BOX_SIZE = 1008
 const int ACCOUNT_POWER_BOX_ARRAY_LEN = 21
 
-const int TOTAL_POWER_SIZE = 48
-const int TOTAL_POWER_BOX_SIZE = 1008
-const int TOTAL_POWER_BOX_ARRAY_LEN = 21
+const bytes SLOPE_CHANGE_BOX_PREFIX = "sc"
+const int SLOPE_CHANGE_SIZE = 16
 
 # Keys
 const bytes TINY_ASSET_ID_KEY = "tiny_asset_id"
 const bytes TOTAL_LOCKED_AMOUNT_KEY = "total_locked_amount"
 const bytes TOTAL_POWER_COUNT_KEY = "total_power_count"
 const bytes LAST_TOTAL_POWER_TIMESTAMP = "last_total_power_timestamp"
-const bytes CREATION_TIMESTAMP_KEY = "creation_timestamp"
 
 if !Txn.ApplicationID:
     jump create_app
@@ -85,7 +82,6 @@ block create_app:
     app_global_put(TINY_ASSET_ID_KEY, btoi(Txn.ApplicationArgs[0]))
     app_global_put(TOTAL_LOCKED_AMOUNT_KEY, 0)
     app_global_put(TOTAL_POWER_COUNT_KEY, 0)
-    app_global_put(CREATION_TIMESTAMP_KEY, Global.LatestTimestamp)
     app_global_put(LAST_TOTAL_POWER_TIMESTAMP, 0)
     exit(1)
 end
@@ -122,12 +118,13 @@ block main:
 
         # opt-in to TINY
         transfer(app_global_get(TINY_ASSET_ID_KEY), 0, Global.CurrentApplicationAddress, Global.CurrentApplicationAddress)
+        log(method("init()"))
         exit(1)
     end
 
     block create_checkpoints:
         create_checkpoints(0, bzero(16), 0)
-        log(itob(Global.OpcodeBudget))
+        log(method("create_checkpoints()"))
         exit(1)
     end
 
@@ -327,7 +324,7 @@ block main:
             end
         end
 
-        log(concat(method("return"), (bzero(8) b| itob(tiny_power))))
+        log(concat(method("return"), itob(tiny_power)))
         exit(1)
     end
 
@@ -355,7 +352,7 @@ block main:
             tiny_power = get_power(account_power.bias, account_power.slope, (timestamp - account_power.timestamp))
         end
 
-        log(concat(method("return"), (bzero(8) b|itob(tiny_power))))
+        log(concat(method("return"), itob(tiny_power)))
         exit(1)
     end
 
@@ -378,7 +375,7 @@ block main:
         assert((total_power.timestamp / WEEK) == (timestamp / WEEK))
 
         int tiny_power = get_power(total_power.bias, total_power.slope, (timestamp - total_power.timestamp))
-        log(concat(method("return"), (bzero(8) b| itob(tiny_power))))
+        log(concat(method("return"), itob(tiny_power)))
         exit(1)
     end
 
@@ -405,7 +402,7 @@ block main:
             assert(!total_power_index)
         end
 
-        log(concat(method("return"), (bzero(16) b| itob(tiny_power))))
+        log(concat(method("return"), itob(tiny_power)))
         exit(1)
     end
 
@@ -481,7 +478,7 @@ func save_total_power(data: bytes):
     assert(len(data) == TOTAL_POWER_SIZE)
     int box_index = index / TOTAL_POWER_BOX_ARRAY_LEN
     int array_index = index % TOTAL_POWER_BOX_ARRAY_LEN
-    bytes box_name = concat(TOTAL_POWERS, itob(box_index))
+    bytes box_name = concat(TOTAL_POWER_BOX_PREFIX, itob(box_index))
     _ = box_create(box_name, TOTAL_POWER_BOX_SIZE)
     box_replace(box_name, (array_index * TOTAL_POWER_SIZE), data)
 
@@ -494,7 +491,7 @@ end
 func get_total_power(index: int) bytes:
     int box_index = index / TOTAL_POWER_BOX_ARRAY_LEN
     int array_index = index % TOTAL_POWER_BOX_ARRAY_LEN
-    bytes box_name = concat(TOTAL_POWERS, itob(box_index))
+    bytes box_name = concat(TOTAL_POWER_BOX_PREFIX, itob(box_index))
     return box_extract(box_name, (array_index * TOTAL_POWER_SIZE), TOTAL_POWER_SIZE)
 end
 
@@ -597,7 +594,7 @@ func create_checkpoints(account_bias_delta: int, account_slope_delta: bytes, has
             t_i = Global.LatestTimestamp
         end
         if !(t_i % WEEK):
-            _, d_slope = box_get(concat(SLOPE_CHANGES, itob(t_i)))
+            _, d_slope = box_get(concat(SLOPE_CHANGE_BOX_PREFIX, itob(t_i)))
         end
 
         time_delta = t_i - last_checkpoint
@@ -659,7 +656,7 @@ func get_slope(locked_amount: int) bytes:
 end
 
 func revert_slope_change(timestamp: int, slope: bytes):
-    bytes box_name = concat(SLOPE_CHANGES, itob(timestamp))
+    bytes box_name = concat(SLOPE_CHANGE_BOX_PREFIX, itob(timestamp))
     bytes new_slope = bzero(16) b| (box_extract(box_name, 0, 16) b- slope)
     box_put(box_name, new_slope)
 
@@ -668,7 +665,7 @@ func revert_slope_change(timestamp: int, slope: bytes):
 end
 
 func update_or_create_slope_change(timestamp: int, slope: bytes):
-    bytes box_name = concat(SLOPE_CHANGES, itob(timestamp))
+    bytes box_name = concat(SLOPE_CHANGE_BOX_PREFIX, itob(timestamp))
     bytes slope_delta
     _, slope_delta = box_get(box_name)
     bytes new_slope = bzero(16) b| (slope_delta b+ slope)
