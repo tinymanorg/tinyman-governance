@@ -1,5 +1,6 @@
 import unittest.mock
 from datetime import timedelta, datetime
+from typing import Union, Optional
 from unittest.mock import ANY
 from zoneinfo import ZoneInfo
 
@@ -8,15 +9,16 @@ from algosdk import transaction
 from algosdk.account import generate_account
 from algosdk.encoding import decode_address
 from algosdk.logic import get_application_address
+from algosdk.transaction import SuggestedParams
 from tinyman.governance.constants import WEEK, DAY
 from tinyman.governance.event import decode_logs
 from tinyman.governance.constants import TINY_ASSET_ID_KEY
 from tinyman.governance.vault.constants import TOTAL_LOCKED_AMOUNT_KEY, TOTAL_POWER_COUNT_KEY, TOTAL_POWERS, SLOPE_CHANGES, TWO_TO_THE_64, MAX_LOCK_TIME, LAST_TOTAL_POWER_TIMESTAMP_KEY
 from tinyman.governance.vault.events import vault_events
-from tinyman.governance.vault.storage import parse_box_total_power, parse_box_account_state, parse_box_account_power, parse_box_slope_change, TotalPower, AccountState, AccountPower, SlopeChange
-from tinyman.governance.vault.transactions import prepare_init_transactions, prepare_create_lock_transactions, prepare_withdraw_transactions, prepare_get_tiny_power_of_transactions, prepare_get_total_tiny_power_of_at_transactions, prepare_extend_lock_end_time_transactions, prepare_increase_lock_amount_transactions, prepare_get_tiny_power_of_at_transactions, prepare_get_total_tiny_power_transactions
+from tinyman.governance.vault.storage import parse_box_total_power, parse_box_account_state, parse_box_account_power, parse_box_slope_change, TotalPower, AccountState, AccountPower, SlopeChange, get_account_state_box_name
+from tinyman.governance.vault.transactions import prepare_init_transactions, prepare_create_lock_transactions, prepare_withdraw_transactions, prepare_get_tiny_power_of_transactions, prepare_get_total_tiny_power_of_at_transactions, prepare_extend_lock_end_time_transactions, prepare_increase_lock_amount_transactions, prepare_get_tiny_power_of_at_transactions, prepare_get_total_tiny_power_transactions, prepare_delete_account_state_transactions, prepare_delete_account_power_boxes_transactions
 from tinyman.governance.vault.utils import get_start_timestamp_of_week, get_slope, get_bias
-from tinyman.utils import int_to_bytes, bytes_to_int
+from tinyman.utils import int_to_bytes, bytes_to_int, TransactionGroup
 
 from common.constants import vault_approval_program, vault_clear_state_program, TINY_ASSET_ID, VAULT_APP_ID
 from common.utils import sign_txns
@@ -56,7 +58,7 @@ class VaultTestCase(VaultAppMixin, BaseTestCase):
                 clear_program=vault_clear_state_program.bytecode,
                 global_schema=transaction.StateSchema(num_uints=5, num_byte_slices=0),
                 local_schema=transaction.StateSchema(num_uints=0, num_byte_slices=0),
-                extra_pages=1,
+                extra_pages=2,
                 app_args=[TINY_ASSET_ID],
             )
         ]
@@ -179,6 +181,7 @@ class VaultTestCase(VaultAppMixin, BaseTestCase):
                 locked_amount=amount,
                 lock_end_time=lock_end_timestamp,
                 power_count=1,
+                deleted_power_count=0,
             )
         )
         self.assertEqual(
@@ -502,6 +505,7 @@ class VaultTestCase(VaultAppMixin, BaseTestCase):
                 locked_amount=0,
                 lock_end_time=0,
                 power_count=2,
+                deleted_power_count=0,
             )
         )
 
@@ -1382,3 +1386,200 @@ class VaultTestCase(VaultAppMixin, BaseTestCase):
         #
         # block_timestamp = get_start_timestamp_of_week(block_timestamp) + 6 * WEEK
         # self.create_checkpoints(self.user_address, self.user_sk, block_timestamp)
+
+    def test_delete_boxes(self):
+        block_datetime = datetime(year=2022, month=3, day=1, hour=1, tzinfo=ZoneInfo("UTC"))
+        block_timestamp = int(block_datetime.timestamp())
+        last_checkpoint_timestamp = block_timestamp - 10
+
+        self.create_vault_app(self.app_creator_address)
+        self.init_vault_app(timestamp=last_checkpoint_timestamp)
+
+        # Create lock
+        lock_end_timestamp = get_start_timestamp_of_week(block_timestamp) + 6 * WEEK
+        amount = 10_000_000
+        self.ledger.move(
+            amount * 200,
+            asset_id=TINY_ASSET_ID,
+            sender=self.ledger.assets[TINY_ASSET_ID]["creator"],
+            receiver=self.user_address
+        )
+
+        with unittest.mock.patch("time.time", return_value=block_timestamp):
+            txn_group = prepare_create_lock_transactions(
+                vault_app_id=VAULT_APP_ID,
+                tiny_asset_id=TINY_ASSET_ID,
+                sender=self.user_address,
+                locked_amount=amount,
+                lock_end_time=lock_end_timestamp,
+                vault_app_global_state=get_vault_app_global_state(self.ledger),
+                account_state=get_account_state(self.ledger, self.user_address),
+                slope_change_at_lock_end_time=get_slope_change_at(self.ledger, lock_end_timestamp),
+                suggested_params=self.sp,
+            )
+            txn_group.sign_with_private_key(self.user_address, self.user_sk)
+            self.ledger.eval_transactions(txn_group.signed_transactions, block_timestamp=block_timestamp)
+            self.assertEqual(self.ledger.global_states[VAULT_APP_ID][TOTAL_LOCKED_AMOUNT_KEY], amount)
+
+        while True:
+            print()
+            block_timestamp += (WEEK // 7)
+            if block_timestamp > lock_end_timestamp:
+                break
+
+            with unittest.mock.patch("time.time", return_value=block_timestamp):
+                self.create_checkpoints(self.user_address, self.user_sk, block_timestamp)
+
+                txn_group = prepare_increase_lock_amount_transactions(
+                    vault_app_id=VAULT_APP_ID,
+                    tiny_asset_id=TINY_ASSET_ID,
+                    sender=self.user_address,
+                    locked_amount=amount,
+                    vault_app_global_state=get_vault_app_global_state(self.ledger),
+                    account_state=get_account_state(self.ledger, self.user_address),
+                    suggested_params=self.sp,
+                    app_call_note=None,
+                )
+                txn_group.sign_with_private_key(self.user_address, self.user_sk)
+                block = self.ledger.eval_transactions(txn_group.signed_transactions, block_timestamp=block_timestamp)
+
+                for txn in block[b'txns']:
+                    if txn[b'txn'][b'type'] == b'appl':
+                        if dt := txn.get(b'dt'):
+                            if logs := dt.get(b'lg'):
+                                for e in decode_logs(logs, events=vault_events):
+                                    print(e)
+
+        txn_group = prepare_withdraw_transactions(
+            vault_app_id=VAULT_APP_ID,
+            tiny_asset_id=TINY_ASSET_ID,
+            sender=self.user_address,
+            account_state=get_account_state(self.ledger, self.user_address),
+            suggested_params=self.sp,
+            app_call_note=None,
+        )
+        txn_group.sign_with_private_key(self.user_address, self.user_sk)
+        self.ledger.eval_transactions(txn_group.signed_transactions, block_timestamp=block_timestamp)
+        self.assertEqual(self.ledger.global_states[VAULT_APP_ID][TOTAL_LOCKED_AMOUNT_KEY], 0)
+
+        for txn in block[b'txns']:
+            if txn[b'txn'][b'type'] == b'appl':
+                if dt := txn.get(b'dt'):
+                    if logs := dt.get(b'lg'):
+                        for e in decode_logs(logs, events=vault_events):
+                            print(e)
+
+        # delete account powers
+        txn_group = prepare_delete_account_power_boxes_transactions(
+            vault_app_id=VAULT_APP_ID,
+            sender=self.user_address,
+            account_state=get_account_state(self.ledger, self.user_address),
+            box_count=1,
+            suggested_params=self.sp,
+        )
+        txn_group.sign_with_private_key(self.user_address, self.user_sk)
+        block = self.ledger.eval_transactions(txn_group.signed_transactions, block_timestamp=block_timestamp)
+        print()
+        for txn in block[b'txns']:
+            if txn[b'txn'][b'type'] == b'appl':
+                if dt := txn.get(b'dt'):
+                    if logs := dt.get(b'lg'):
+                        for e in decode_logs(logs, events=vault_events):
+                            print(e)
+        print(block)
+
+        # Delete all
+        txn_group = prepare_delete_account_state_transactions(
+            vault_app_id=VAULT_APP_ID,
+            sender=self.user_address,
+            account_state=get_account_state(self.ledger, self.user_address),
+            suggested_params=self.sp,
+        )
+        txn_group.sign_with_private_key(self.user_address, self.user_sk)
+        block = self.ledger.eval_transactions(txn_group.signed_transactions, block_timestamp=block_timestamp)
+        print()
+        for txn in block[b'txns']:
+            if txn[b'txn'][b'type'] == b'appl':
+                if dt := txn.get(b'dt'):
+                    if logs := dt.get(b'lg'):
+                        for e in decode_logs(logs, events=vault_events):
+                            print(e)
+        print(block)
+
+
+    def test_get_box(self):
+        def prepare_get_box_transaction(
+                *,
+                vault_app_id: int,
+                sender: str,
+                box_name: Union[bytes, bytearray, str, int],
+                suggested_params: SuggestedParams,
+                app_call_note: Optional[str] = None,
+        ) -> TransactionGroup:
+            return TransactionGroup([
+                transaction.ApplicationNoOpTxn(
+                    sender=sender,
+                    sp=suggested_params,
+                    index=vault_app_id,
+                    app_args=[
+                        "get_box",
+                        box_name
+                    ],
+                    boxes=[
+                        (vault_app_id, box_name),
+                    ],
+                    note=app_call_note,
+                )
+            ])
+
+        block_datetime = datetime(year=2022, month=3, day=1, hour=1, tzinfo=ZoneInfo("UTC"))
+        block_timestamp = int(block_datetime.timestamp())
+        last_checkpoint_timestamp = block_timestamp - 10
+
+        self.create_vault_app(self.app_creator_address)
+        self.init_vault_app(timestamp=last_checkpoint_timestamp)
+
+        # Create lock
+        lock_end_timestamp = get_start_timestamp_of_week(block_timestamp) + 6 * WEEK
+        amount = 10_000_000
+        self.ledger.move(
+            amount * 200,
+            asset_id=TINY_ASSET_ID,
+            sender=self.ledger.assets[TINY_ASSET_ID]["creator"],
+            receiver=self.user_address
+        )
+
+        with unittest.mock.patch("time.time", return_value=block_timestamp):
+            txn_group = prepare_create_lock_transactions(
+                vault_app_id=VAULT_APP_ID,
+                tiny_asset_id=TINY_ASSET_ID,
+                sender=self.user_address,
+                locked_amount=amount,
+                lock_end_time=lock_end_timestamp,
+                vault_app_global_state=get_vault_app_global_state(self.ledger),
+                account_state=get_account_state(self.ledger, self.user_address),
+                slope_change_at_lock_end_time=get_slope_change_at(self.ledger, lock_end_timestamp),
+                suggested_params=self.sp,
+            )
+            txn_group.sign_with_private_key(self.user_address, self.user_sk)
+            self.ledger.eval_transactions(txn_group.signed_transactions, block_timestamp=block_timestamp)
+
+        account_state_box_name = get_account_state_box_name(address=self.user_address)
+        txn_group = prepare_get_box_transaction(
+            vault_app_id=VAULT_APP_ID,
+            sender=self.user_address,
+            box_name=account_state_box_name,
+            suggested_params=self.sp,
+        )
+        txn_group.sign_with_private_key(self.user_address, self.user_sk)
+        block = self.ledger.eval_transactions(txn_group.signed_transactions, block_timestamp=block_timestamp)
+        return_value = block[b'txns'][0][b'dt'][b'lg'][-1]
+
+        exists = bytes_to_int(return_value[4:12])
+        box_data = return_value[12:]
+        
+        expected = get_account_state(self.ledger, self.user_address)
+        retrieved = parse_box_account_state(box_data)
+        print(expected)
+        print(exists, retrieved)
+        self.assertEqual(expected, retrieved)
