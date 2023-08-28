@@ -28,7 +28,7 @@ const bytes REWARDS_MANAGER_KEY = "rewards_manager"
 
 # Boxes
 const bytes REWARD_CLAIM_SHEET_BOX_PREFIX = "c"
-# Boolean (1018 * 8 bits)
+# Boolean (1012 * 8 bits)
 const int REWARD_CLAIM_SHEET_BOX_SIZE = 1012
 
 const bytes REWARD_PERIOD_BOX_PREFIX = "rp"
