@@ -122,6 +122,7 @@ block main:
         int period_index_start = btoi(Txn.ApplicationArgs[1])
         int period_count = btoi(Txn.ApplicationArgs[2])
         bytes account_power_indexes = Txn.ApplicationArgs[3]
+        assert(period_count)
 
         int period_index
         int period_start_timestamp

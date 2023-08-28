@@ -9,7 +9,7 @@ from tinyman.governance.vault.storage import parse_box_total_power, parse_box_sl
 from tinyman.utils import bytes_to_int, int_to_bytes
 
 from proposal_voting.constants import PROPOSAL_BOX_PREFIX, ATTENDANCE_BOX_PREFIX
-from tinyman.governance.rewards.constants import REWARD_HISTORY_SIZE, REWARD_HISTORY_BOX_ARRAY_LEN, REWARD_HISTORY_BOX_PREFIX, REWARD_PERIOD_BOX_PREFIX
+from tinyman.governance.rewards.constants import REWARD_HISTORY_SIZE, REWARD_HISTORY_BOX_ARRAY_LEN, REWARD_HISTORY_BOX_PREFIX, REWARD_PERIOD_BOX_PREFIX, REWARD_HISTORY_COUNT_KEY
 from staking_voting.constants import VOTE_BOX_PREFIX
 
 
@@ -197,7 +197,7 @@ def get_total_power_index_at(ledger, app_id, timestamp):
 
 def get_reward_history_index_at(ledger, app_id, timestamp):
     reward_history_index = None
-    reward_history_count = ledger.global_states[app_id][b'reward_history_count']
+    reward_history_count = ledger.global_states[app_id][REWARD_HISTORY_COUNT_KEY]
 
     box_count = reward_history_count // REWARD_HISTORY_BOX_ARRAY_LEN
     box_count += bool(reward_history_count % REWARD_HISTORY_BOX_ARRAY_LEN)
