@@ -60,8 +60,7 @@ class RewardsTestCase(VaultAppMixin, RewardsAppMixin, BaseTestCase):
                 global_schema=transaction.StateSchema(num_uints=5, num_byte_slices=2),
                 local_schema=transaction.StateSchema(num_uints=0, num_byte_slices=0),
                 extra_pages=1,
-                app_args=[TINY_ASSET_ID],
-                foreign_apps=[VAULT_APP_ID],
+                app_args=[TINY_ASSET_ID, VAULT_APP_ID],
             )
         ]
 
