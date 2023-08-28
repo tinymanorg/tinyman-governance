@@ -28,7 +28,7 @@ const bytes REWARDS_MANAGER_KEY = "rewards_manager"
 
 # Boxes
 const bytes REWARD_CLAIM_SHEET_BOX_PREFIX = "c"
-# Boolean (1018 * 8 bits)
+# Boolean (1012 * 8 bits)
 const int REWARD_CLAIM_SHEET_BOX_SIZE = 1012
 
 const bytes REWARD_PERIOD_BOX_PREFIX = "rp"
@@ -60,7 +60,7 @@ end
 
 block create_app:
     app_global_put(TINY_ASSET_ID_KEY, btoi(Txn.ApplicationArgs[0]))
-    app_global_put(VAULT_APP_ID_KEY, Txn.Applications[1])
+    app_global_put(VAULT_APP_ID_KEY, btoi(Txn.ApplicationArgs[1]))
     app_global_put(REWARD_PERIOD_COUNT_KEY, 0)
     app_global_put(REWARD_HISTORY_COUNT_KEY, 0)
     app_global_put(FIRST_PERIOD_TIMESTAMP, 0)
