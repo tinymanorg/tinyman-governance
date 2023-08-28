@@ -13,9 +13,6 @@ proposal_voting_clear_state_program = TealishProgram('contracts/proposal_voting/
 rewards_approval_program = TealishProgram('contracts/rewards/rewards_approval.tl')
 rewards_clear_state_program = TealishProgram('contracts/rewards/rewards_clear_state.tl')
 
-HOUR = 60 * 60
-DAY = 24 * HOUR
-WEEK = 7 * DAY
 
 TINY_ASSET_ID = 12345
 

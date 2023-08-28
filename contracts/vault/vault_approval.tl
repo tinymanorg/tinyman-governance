@@ -2,11 +2,12 @@
 #tealish version git+https://github.com/Hipo/tealish.git@483cb7a30912747814c5ee0ee0dd7a7b1684c5f5
 
 # Name: <address>
-# Size: 24 bytes
+# Size: 32 bytes
 struct AccountState:
     locked_amount: int
     lock_end_time: int
     power_count: int
+    deleted_power_count: int
 end
 
 # Name: <address><box_index><array_index>
@@ -19,7 +20,7 @@ struct AccountPower:
 end
 
 # Name: tp<box_index><array_index>
-# Size: 48 bytes (8+8+16+16). 1 Box(1008) = 21
+# Size: 48 bytes (8+8+16+16). 1 Box(1008) = 21 TotalPower
 struct TotalPower:
     bias: int
     timestamp: int
@@ -33,10 +34,6 @@ struct SlopeChange:
     slope_delta: bytes[16]
 end
 
-# 2^64 - 1
-# const int MAX_UINT64 = 18446744073709551615
-# 24 * 60 * 60
-# const int DAY = 86400
 # 7 * DAY
 const int WEEK = 604800
 # 4 * 365 * DAY
@@ -44,25 +41,27 @@ const int MAX_LOCK_TIME = 126144000
 const int MIN_LOCK_AMOUNT = 10000000
 const int MIN_LOCK_AMOUNT_INCREMENT = 10000000
 const bytes TWO_TO_THE_64 = "\x01\x00\x00\x00\x00\x00\x00\x00\x00"
-const bytes TOTAL_POWERS = "tp"
-const bytes SLOPE_CHANGES = "sc"
 
-const int ACCOUNT_STATE_SIZE = 24
-const int SLOPE_CHANGE_SIZE = 16
+# Boxes
+const bytes TOTAL_POWER_BOX_PREFIX = "tp"
+const int TOTAL_POWER_SIZE = 48
+const int TOTAL_POWER_BOX_SIZE = 1008
+const int TOTAL_POWER_BOX_ARRAY_LEN = 21
+
+const int ACCOUNT_STATE_SIZE = 32
 
 const int ACCOUNT_POWER_SIZE = 48
 const int ACCOUNT_POWER_BOX_SIZE = 1008
 const int ACCOUNT_POWER_BOX_ARRAY_LEN = 21
 
-const int TOTAL_POWER_SIZE = 48
-const int TOTAL_POWER_BOX_SIZE = 1008
-const int TOTAL_POWER_BOX_ARRAY_LEN = 21
+const bytes SLOPE_CHANGE_BOX_PREFIX = "sc"
+const int SLOPE_CHANGE_SIZE = 16
 
 # Keys
 const bytes TINY_ASSET_ID_KEY = "tiny_asset_id"
 const bytes TOTAL_LOCKED_AMOUNT_KEY = "total_locked_amount"
 const bytes TOTAL_POWER_COUNT_KEY = "total_power_count"
-const bytes CREATION_TIMESTAMP_KEY = "creation_timestamp"
+const bytes LAST_TOTAL_POWER_TIMESTAMP = "last_total_power_timestamp"
 
 if !Txn.ApplicationID:
     jump create_app
@@ -90,12 +89,13 @@ block create_app:
     app_global_put(TINY_ASSET_ID_KEY, btoi(Txn.ApplicationArgs[0]))
     app_global_put(TOTAL_LOCKED_AMOUNT_KEY, 0)
     app_global_put(TOTAL_POWER_COUNT_KEY, 0)
-    app_global_put(CREATION_TIMESTAMP_KEY, Global.LatestTimestamp)
+    app_global_put(LAST_TOTAL_POWER_TIMESTAMP, 0)
     exit(1)
 end
 
 block main:
     switch Txn.ApplicationArgs[0]:
+        "increase_budget": increase_budget
         "create_lock": create_lock
         "increase_lock_amount": increase_lock_amount
         "extend_lock_end_time": extend_lock_end_time
@@ -106,9 +106,12 @@ block main:
         "get_total_tiny_power": get_total_tiny_power
         "get_total_tiny_power_at": get_total_tiny_power_at
         "get_total_cumulative_power_at": get_total_cumulative_power_at
-        "get_cumulative_powers_for_rewards": get_cumulative_powers_for_rewards
-        "increase_budget": increase_budget
+        "get_account_cumulative_power_delta": get_account_cumulative_power_delta
+        "get_total_cumulative_power_delta": get_total_cumulative_power_delta
         "withdraw": withdraw
+        "get_box": get_box
+        "delete_account_power_boxes": delete_account_power_boxes
+        "delete_account_state": delete_account_state
         "init": init
     end
 
@@ -125,11 +128,13 @@ block main:
 
         # opt-in to TINY
         transfer(app_global_get(TINY_ASSET_ID_KEY), 0, Global.CurrentApplicationAddress, Global.CurrentApplicationAddress)
+        log(method("init()"))
         exit(1)
     end
 
     block create_checkpoints:
         create_checkpoints(0, bzero(16), 0)
+        log(method("create_checkpoints()"))
         exit(1)
     end
 
@@ -420,22 +425,103 @@ block main:
         exit(1)
     end
 
-    block get_cumulative_powers_for_rewards:
+    block get_account_cumulative_power_delta:
         bytes user_address = Txn.ApplicationArgs[1]
         int timestamp_1 = btoi(Txn.ApplicationArgs[2])
         int timestamp_2 = btoi(Txn.ApplicationArgs[3])
         int account_power_index_1 = btoi(Txn.ApplicationArgs[4])
         int account_power_index_2 = btoi(Txn.ApplicationArgs[5])
-        int total_power_index_1 = btoi(Txn.ApplicationArgs[6])
-        int total_power_index_2 = btoi(Txn.ApplicationArgs[7])
 
-        bytes cumulative_power_1 = get_cumulative_power_of_at(user_address, timestamp_1, account_power_index_1)
-        bytes cumulative_power_2 = get_cumulative_power_of_at(user_address, timestamp_2, account_power_index_2)
+        bytes account_cumulative_power_1 = get_cumulative_power_of_at(user_address, timestamp_1, account_power_index_1)
+        bytes account_cumulative_power_2 = get_cumulative_power_of_at(user_address, timestamp_2, account_power_index_2)
+        bytes cumulative_power_delta = account_cumulative_power_2 b- account_cumulative_power_1
+
+        log(concat(method("return"), (bzero(16) b| cumulative_power_delta)))
+        exit(1)
+    end
+
+    block get_total_cumulative_power_delta:
+        int timestamp_1 = btoi(Txn.ApplicationArgs[1])
+        int timestamp_2 = btoi(Txn.ApplicationArgs[2])
+        int total_power_index_1 = btoi(Txn.ApplicationArgs[3])
+        int total_power_index_2 = btoi(Txn.ApplicationArgs[4])
 
         bytes total_cumulative_power_1 = get_total_cumulative_power_at(timestamp_1, total_power_index_1)
         bytes total_cumulative_power_2 = get_total_cumulative_power_at(timestamp_2, total_power_index_2)
+        bytes cumulative_power_delta = total_cumulative_power_2 b- total_cumulative_power_1
 
-        log(concat(method("return"), concat(concat(concat(cumulative_power_1, cumulative_power_2), total_cumulative_power_1), total_cumulative_power_2)))
+        log(concat(method("return"), (bzero(16) b| cumulative_power_delta)))
+        exit(1)
+    end
+
+    block get_box:
+        
+        bytes box_name = Txn.ApplicationArgs[1]
+
+        int exists
+        bytes data
+        exists, data = box_get(box_name)
+
+        log(concat(concat(method("return"), itob(exists)), data))
+        exit(1)
+    end
+
+    block delete_account_power_boxes:
+        bytes user_address = Txn.Sender
+        int box_count = btoi(Txn.ApplicationArgs[1])
+
+        box<AccountState> account_state = Box(user_address)
+        int account_power_count = account_state.power_count
+        int deleted_account_power_count = account_state.deleted_power_count
+        int account_power_count_to_delete = box_count * ACCOUNT_POWER_BOX_ARRAY_LEN
+
+        # keep at least 1 account power to able to track cumulative power delta
+        assert(account_power_count > (deleted_account_power_count + account_power_count_to_delete))
+        account_state.deleted_power_count = deleted_account_power_count + account_power_count_to_delete
+
+        int box_index_start = deleted_account_power_count / ACCOUNT_POWER_BOX_ARRAY_LEN
+        int box_index_end = box_index_start + box_count
+
+        int min_balance_delta = 0
+        for i in box_index_start:box_index_end:
+            min_balance_delta = min_balance_delta + delete_box(concat(user_address, itob(i)))
+        end
+        transfer(0, min_balance_delta, Global.CurrentApplicationAddress, user_address)
+
+        # address, box_index_start, box_count
+        log(concat(concat(concat(method("delete_account_power_boxes(address,uint64,uint64)"), user_address), itob(box_index_start)), itob(box_count)))
+        exit(1)
+    end
+    
+    block delete_account_state:
+        bytes user_address = Txn.Sender
+        # int box_count = itob(Txn.ApplicationArgs[1])
+
+        box<AccountState> account_state = Box(user_address)
+        int account_power_count = account_state.power_count
+        # check the lock
+        assert(!account_state.lock_end_time)
+
+        int deleted_account_power_count = account_state.deleted_power_count
+        int box_index = deleted_account_power_count / ACCOUNT_POWER_BOX_ARRAY_LEN
+        int box_count = 0
+
+        int min_balance_delta = 0
+        while account_power_count > deleted_account_power_count:
+            # delete account power
+            min_balance_delta = min_balance_delta + delete_box(concat(user_address, itob(box_index)))
+            
+            box_count = box_count + 1
+            box_index = box_index + 1
+            deleted_account_power_count = deleted_account_power_count + ACCOUNT_POWER_BOX_ARRAY_LEN
+        end
+
+        # delete account state
+        min_balance_delta = min_balance_delta + delete_box(user_address)
+        transfer(0, min_balance_delta, Global.CurrentApplicationAddress, user_address)
+        
+        # address, box_index_start, box_count
+        log(concat(concat(concat(method("delete_account_state(address,uint64,uint64)"), user_address), itob((box_index + 1) - box_count)), itob(box_count)))
         exit(1)
     end
 end
@@ -452,7 +538,7 @@ func save_account_power(address: bytes, index: int, data: bytes):
     _ = box_create(box_name, ACCOUNT_POWER_BOX_SIZE)
     box_replace(box_name, (array_index * ACCOUNT_POWER_SIZE), data)
 
-    log(concat(concat(concat(method("account_power(address,uint64,uint64,uint64,byte[16],byte[16])"), address), itob(index)), data))
+    log(concat(concat(concat(method("account_power(address,uint64,uint64,uint64,uint128,uint128)"), address), itob(index)), data))
     return
 end
 
@@ -473,19 +559,20 @@ func save_total_power(data: bytes):
     assert(len(data) == TOTAL_POWER_SIZE)
     int box_index = index / TOTAL_POWER_BOX_ARRAY_LEN
     int array_index = index % TOTAL_POWER_BOX_ARRAY_LEN
-    bytes box_name = concat(TOTAL_POWERS, itob(box_index))
+    bytes box_name = concat(TOTAL_POWER_BOX_PREFIX, itob(box_index))
     _ = box_create(box_name, TOTAL_POWER_BOX_SIZE)
     box_replace(box_name, (array_index * TOTAL_POWER_SIZE), data)
 
-    log(concat(concat(method("total_power(uint64,uint64,uint64,byte[16],byte[16])"), itob(index)), data))
+    log(concat(concat(method("total_power(uint64,uint64,uint64,uint128,uint128)"), itob(index)), data))
     app_global_put(TOTAL_POWER_COUNT_KEY, index + 1)
+    app_global_put(LAST_TOTAL_POWER_TIMESTAMP, extract_uint64(data, 8))
     return
 end
 
 func get_total_power(index: int) bytes:
     int box_index = index / TOTAL_POWER_BOX_ARRAY_LEN
     int array_index = index % TOTAL_POWER_BOX_ARRAY_LEN
-    bytes box_name = concat(TOTAL_POWERS, itob(box_index))
+    bytes box_name = concat(TOTAL_POWER_BOX_PREFIX, itob(box_index))
     return box_extract(box_name, (array_index * TOTAL_POWER_SIZE), TOTAL_POWER_SIZE)
 end
 
@@ -535,14 +622,15 @@ func get_total_cumulative_power_at(timestamp: int, total_power_index: int) bytes
 
     bytes cumulative_power_delta
     TotalPower total_power = get_total_power(total_power_index)
-    # Ensure that the latest checkpoint belongs to the same week so the slope is not changed.
-    assert((total_power.timestamp / WEEK) == (timestamp / WEEK))
 
     if total_power.timestamp <= timestamp:
         if (total_power_index + 1) < app_global_get(TOTAL_POWER_COUNT_KEY):
             TotalPower next_total_power = get_total_power(total_power_index + 1)
             assert(timestamp < next_total_power.timestamp)
         end
+
+        # Ensure that the latest checkpoint belongs to the same week so the slope is not changed.
+        assert((total_power.timestamp / WEEK) == (timestamp / WEEK))
 
         int time_delta = timestamp - total_power.timestamp
         int bias_delta = get_bias(total_power.slope, time_delta)
@@ -565,7 +653,6 @@ end
 func create_checkpoints(account_bias_delta: int, account_slope_delta: bytes, has_account_event: int):
     # https://github.com/curvefi/curve-dao-contracts/blob/master/contracts/VotingEscrow.vy#L234
 
-    # int has_account_event = account_bias_delta || (account_slope_delta != bzero(16))
     TotalPower last_total_power = get_total_power(app_global_get(TOTAL_POWER_COUNT_KEY) - 1)
 
     int bias = last_total_power.bias
@@ -579,7 +666,7 @@ func create_checkpoints(account_bias_delta: int, account_slope_delta: bytes, has
     int time_delta
 
     int i = 0
-    int stop = 6
+    int stop = 9
     while i < stop:
         t_i = t_i + WEEK
         d_slope = itob(0)
@@ -588,7 +675,7 @@ func create_checkpoints(account_bias_delta: int, account_slope_delta: bytes, has
             t_i = Global.LatestTimestamp
         end
         if !(t_i % WEEK):
-            _, d_slope = box_get(concat(SLOPE_CHANGES, itob(t_i)))
+            _, d_slope = box_get(concat(SLOPE_CHANGE_BOX_PREFIX, itob(t_i)))
         end
 
         time_delta = t_i - last_checkpoint
@@ -650,22 +737,22 @@ func get_slope(locked_amount: int) bytes:
 end
 
 func revert_slope_change(timestamp: int, slope: bytes):
-    bytes box_name = concat(SLOPE_CHANGES, itob(timestamp))
+    bytes box_name = concat(SLOPE_CHANGE_BOX_PREFIX, itob(timestamp))
     bytes new_slope = bzero(16) b| (box_extract(box_name, 0, 16) b- slope)
     box_put(box_name, new_slope)
 
-    log(concat(concat(method("slope_change(uint64,byte[16])"), itob(timestamp)), new_slope))
+    log(concat(concat(method("slope_change(uint64,uint128)"), itob(timestamp)), new_slope))
     return
 end
 
 func update_or_create_slope_change(timestamp: int, slope: bytes):
-    bytes box_name = concat(SLOPE_CHANGES, itob(timestamp))
+    bytes box_name = concat(SLOPE_CHANGE_BOX_PREFIX, itob(timestamp))
     bytes slope_delta
     _, slope_delta = box_get(box_name)
     bytes new_slope = bzero(16) b| (slope_delta b+ slope)
     box_put(box_name, new_slope)
 
-    log(concat(concat(method("slope_change(uint64,byte[16])"), itob(timestamp)), new_slope))
+    log(concat(concat(method("slope_change(uint64,uint128)"), itob(timestamp)), new_slope))
     return
 end
 
@@ -698,6 +785,16 @@ func get_received_tiny_amount() int:
     assert(Gtxn[input_txn_index].AssetReceiver == Global.CurrentApplicationAddress)
     assert(Gtxn[input_txn_index].XferAsset == app_global_get(TINY_ASSET_ID_KEY))
     return Gtxn[input_txn_index].AssetAmount
+end
+
+func delete_box(box_name: bytes) int:
+    int initial_min_balance = min_balance(Global.CurrentApplicationAddress)
+    assert(box_del(box_name))
+    int final_min_balance = min_balance(Global.CurrentApplicationAddress)
+    int min_balance_delta = initial_min_balance - final_min_balance
+
+    log(concat(method("box_del(byte[])"), concat(extract(6, 2, itob(len(box_name))), box_name)))
+    return min_balance_delta
 end
 
 func transfer(asset_id: int, amount: int, sender: bytes, receiver: bytes):

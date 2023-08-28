@@ -1,15 +1,16 @@
 from algosdk import transaction
 from algosdk.encoding import decode_address
 from algosdk.logic import get_application_address
+from tinyman.governance.transactions import prepare_budget_increase_txn
+from tinyman.utils import int_to_bytes
 
 from common.constants import STAKING_VOTING_APP_ID, VAULT_APP_ID
-from common.utils import itob, get_account_power_index_at, parse_box_staking_proposal, get_required_minimum_balance_of_box
-from vault.constants import ACCOUNT_POWER_BOX_ARRAY_LEN
-from vault.transactions import prepare_budget_increase_txn
+from common.utils import get_account_power_index_at, parse_box_staking_proposal, get_required_minimum_balance_of_box
+from tinyman.governance.vault.constants import ACCOUNT_POWER_BOX_ARRAY_LEN
 from staking_voting.constants import PROPOSAL_BOX_PREFIX, ATTENDANCE_BOX_PREFIX
 
 
-def prepare_create_proposal_txn_group(user_address, proposal_id, sp):
+def prepare_create_proposal_transactions(user_address, proposal_id, sp):
     proposal_box_name = PROPOSAL_BOX_PREFIX + proposal_id
     txn_group = [
         transaction.ApplicationNoOpTxn(
@@ -25,10 +26,26 @@ def prepare_create_proposal_txn_group(user_address, proposal_id, sp):
     return txn_group
 
 
-def prepare_cast_vote_txn_group(ledger, user_address, proposal_id, votes, asset_ids, proposal_creation_timestamp, sp):
+def prepare_cancel_proposal_transactions(user_address, proposal_id, sp):
+    proposal_box_name = PROPOSAL_BOX_PREFIX + proposal_id
+    txn_group = [
+        transaction.ApplicationNoOpTxn(
+            sender=user_address,
+            sp=sp,
+            index=STAKING_VOTING_APP_ID,
+            app_args=["cancel_proposal", proposal_id],
+            boxes=[
+                (0, proposal_box_name),
+            ]
+        )
+    ]
+    return txn_group
+
+
+def prepare_cast_vote_transactions(ledger, user_address, proposal_id, votes, asset_ids, proposal_creation_timestamp, sp):
     assert (len(votes) == len(asset_ids))
-    arg_votes = b"".join([itob(vote) for vote in votes])
-    arg_asset_ids = b"".join([itob(asset_id) for asset_id in asset_ids])
+    arg_votes = b"".join([int_to_bytes(vote) for vote in votes])
+    arg_asset_ids = b"".join([int_to_bytes(asset_id) for asset_id in asset_ids])
 
     account_power_index = get_account_power_index_at(ledger, VAULT_APP_ID, user_address, proposal_creation_timestamp)
     # assert account_power_index is not None
@@ -37,14 +54,14 @@ def prepare_cast_vote_txn_group(ledger, user_address, proposal_id, votes, asset_
     proposal_box_name = PROPOSAL_BOX_PREFIX + proposal_id
     proposal_index = parse_box_staking_proposal(ledger.boxes[STAKING_VOTING_APP_ID][proposal_box_name])["index"]
     account_attendance_box_index = proposal_index // (1024 * 8)
-    account_attendance_box_name = ATTENDANCE_BOX_PREFIX + decode_address(user_address) + itob(account_attendance_box_index)
+    account_attendance_box_name = ATTENDANCE_BOX_PREFIX + decode_address(user_address) + int_to_bytes(account_attendance_box_index)
     boxes = [
         (STAKING_VOTING_APP_ID, proposal_box_name),
         (STAKING_VOTING_APP_ID, account_attendance_box_name),
-        *[(STAKING_VOTING_APP_ID, b"v" + itob(proposal_index) + itob(asset_id)) for asset_id in asset_ids],
+        *[(STAKING_VOTING_APP_ID, b"v" + int_to_bytes(proposal_index) + int_to_bytes(asset_id)) for asset_id in asset_ids],
         (VAULT_APP_ID, decode_address(user_address)),
-        (VAULT_APP_ID, decode_address(user_address) + itob(account_power_box_index)),
-        (VAULT_APP_ID, decode_address(user_address) + itob(account_power_box_index + 1)),
+        (VAULT_APP_ID, decode_address(user_address) + int_to_bytes(account_power_box_index)),
+        (VAULT_APP_ID, decode_address(user_address) + int_to_bytes(account_power_box_index + 1)),
     ]
     txn_group = [
         transaction.ApplicationNoOpTxn(
@@ -72,7 +89,7 @@ def prepare_cast_vote_txn_group(ledger, user_address, proposal_id, votes, asset_
         payment_amount += get_required_minimum_balance_of_box(account_attendance_box_name, 24)
 
     for asset_id in asset_ids:
-        box_name = itob(proposal_index) + itob(asset_id)
+        box_name = int_to_bytes(proposal_index) + int_to_bytes(asset_id)
         if box_name not in ledger.boxes[STAKING_VOTING_APP_ID]:
             payment_amount += get_required_minimum_balance_of_box(box_name, 8)
 
@@ -85,4 +102,30 @@ def prepare_cast_vote_txn_group(ledger, user_address, proposal_id, votes, asset_
                 amt=payment_amount,
             )
         ] + txn_group
+    return txn_group
+
+
+def prepare_set_manager_transactions(user_address, new_manager_address, sp):
+    txn_group = [
+        transaction.ApplicationNoOpTxn(
+            sender=user_address,
+            sp=sp,
+            index=STAKING_VOTING_APP_ID,
+            app_args=["set_manager", decode_address(new_manager_address)],
+        ),
+    ]
+
+    return txn_group
+
+
+def prepare_set_proposal_manager_transactions(user_address, new_manager_address, sp):
+    txn_group = [
+        transaction.ApplicationNoOpTxn(
+            sender=user_address,
+            sp=sp,
+            index=STAKING_VOTING_APP_ID,
+            app_args=["set_proposal_manager", decode_address(new_manager_address)],
+        ),
+    ]
+
     return txn_group
