@@ -11,9 +11,9 @@ struct Proposal:
     snapshot_total_voting_power: int
     vote_count: int
     quorum_numerator: int
-    against_vote_amount: int
-    for_vote_amount: int
-    abstain_vote_amount: int
+    against_voting_power: int
+    for_voting_power: int
+    abstain_voting_power: int
     is_cancelled: bytes[1]
     is_executed: bytes[1]
     is_quorum_reached: bytes[1]
@@ -57,7 +57,7 @@ block fail:
 end
 
 block create_app:
-    app_global_put(VAULT_APP_ID_KEY, Txn.ApplicationArgs[0])
+    app_global_put(VAULT_APP_ID_KEY, btoi(Txn.ApplicationArgs[0]))
     app_global_put(PROPOSAL_ID_COUNTER_KEY, 0)
 
     # voting starts at the N'th midnight after creation time
@@ -213,16 +213,16 @@ block main:
 
         # Count Vote
         if vote == 0:
-            proposal.against_vote_amount = proposal.against_vote_amount + account_voting_power
+            proposal.against_voting_power = proposal.against_voting_power + account_voting_power
         elif vote == 1:
-            proposal.for_vote_amount = proposal.for_vote_amount + account_voting_power
+            proposal.for_voting_power = proposal.for_voting_power + account_voting_power
         elif vote == 2:
-            proposal.abstain_vote_amount = proposal.abstain_vote_amount + account_voting_power
+            proposal.abstain_voting_power = proposal.abstain_voting_power + account_voting_power
         else:
             error()
         end
         
-        if (itob(proposal.snapshot_total_voting_power) b* itob(proposal.quorum_numerator)) b<= (itob(proposal.for_vote_amount + proposal.abstain_vote_amount) b* itob(100)):
+        if (itob(proposal.snapshot_total_voting_power) b* itob(proposal.quorum_numerator)) b<= (itob(proposal.for_voting_power + proposal.abstain_voting_power) b* itob(100)):
             proposal.is_quorum_reached = BYTES_ONE
         end
 

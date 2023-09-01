@@ -46,7 +46,7 @@ def parse_box_staking_proposal(raw_box):
         voting_end_timestamp=bytes_to_int(raw_box[24:32]),
         voting_power=bytes_to_int(raw_box[32:40]),
         vote_count=bytes_to_int(raw_box[40:48]),
-        is_cancelled=bytes_to_int(raw_box[48:49]),
+        is_cancelled=bool(bytes_to_int(raw_box[48:49])),
     )
     return data
 
@@ -63,9 +63,9 @@ def parse_box_proposal(raw_box):
         against_vote_amount=bytes_to_int(raw_box[56:64]),
         for_vote_amount=bytes_to_int(raw_box[64:72]),
         abstain_vote_amount=bytes_to_int(raw_box[72:80]),
-        is_cancelled=bytes_to_int(raw_box[80:81]),
-        is_executed=bytes_to_int(raw_box[81:82]),
-        is_quorum_reached=bytes_to_int(raw_box[82:83]),
+        is_cancelled=bool(bytes_to_int(raw_box[80:81])),
+        is_executed=bool(bytes_to_int(raw_box[81:82])),
+        is_quorum_reached=bool(bytes_to_int(raw_box[82:83])),
         proposer=encode_address(raw_box[83:115]),
     )
     return data

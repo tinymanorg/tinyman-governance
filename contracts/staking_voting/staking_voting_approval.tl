@@ -16,8 +16,8 @@ end
 # 24 * 60 * 60
 const int DAY = 86400
 const int MAX_OPTION_COUNT = 16
-const bytes BYTES_ZERO = "\x00"
-const bytes BYTES_ONE = "\x01"
+const bytes BYTES_FALSE = "\x00"
+const bytes BYTES_TRUE = "\x80"
 
 # Global States
 const bytes VAULT_APP_ID_KEY = "vault_app_id"
@@ -52,7 +52,7 @@ block fail:
 end
 
 block create_app:
-    app_global_put(VAULT_APP_ID_KEY, Txn.ApplicationArgs[0])
+    app_global_put(VAULT_APP_ID_KEY, btoi(Txn.ApplicationArgs[0]))
     app_global_put(PROPOSAL_ID_COUNTER_KEY, 0)
 
     app_global_put(VOTING_DELAY_KEY, 2)
@@ -79,41 +79,6 @@ block main:
         "increase_budget": increase_budget
     end
 
-    block increase_budget:
-        # Box read budget and opcode budget will be incread using this method.
-        exit(1)
-    end
-
-    block set_manager:
-        bytes user_address = Txn.Sender
-        assert(user_address == app_global_get(MANAGER_KEY))
-
-        app_global_put(MANAGER_KEY, Txn.ApplicationArgs[1])
-        exit(1)
-    end
-
-    block set_proposal_manager:
-        bytes user_address = Txn.Sender
-        assert(user_address == app_global_get(MANAGER_KEY))
-
-        app_global_put(PROPOSAL_MANAGER_KEY, Txn.ApplicationArgs[1])
-        exit(1)
-    end
-
-    block cancel_proposal:
-        bytes user_address = Txn.Sender
-        assert(user_address == app_global_get(PROPOSAL_MANAGER_KEY))
-
-        bytes proposal_id = Txn.ApplicationArgs[1]
-        bytes proposal_box_name = concat(PROPOSAL_BOX_PREFIX, proposal_id)
-        box<Proposal> proposal = OpenBox(proposal_box_name)
-        assert(proposal.is_cancelled == BYTES_ZERO)
-        proposal.is_cancelled = BYTES_ONE
-
-        # TODO: Add event log
-        exit(1)
-    end
-
     block create_proposal:
         bytes user_address = Txn.Sender
         assert(user_address == app_global_get(PROPOSAL_MANAGER_KEY))
@@ -126,21 +91,37 @@ block main:
         int voting_start_timestamp = get_start_timestamp_of_day(Global.LatestTimestamp) + (app_global_get(VOTING_DELAY_KEY) * DAY)
         int voting_end_timestamp = voting_start_timestamp + (app_global_get(VOTING_DURATION_KEY) * DAY)
 
-        box<Proposal> proposal = CreateBox(concat(PROPOSAL_BOX_PREFIX, proposal_id))
+        bytes proposal_box_name = concat(PROPOSAL_BOX_PREFIX, proposal_id)
+        box<Proposal> proposal = CreateBox(proposal_box_name)
         proposal.index = app_global_get(PROPOSAL_ID_COUNTER_KEY)
         proposal.creation_timestamp = Global.LatestTimestamp
         proposal.voting_start_timestamp = voting_start_timestamp
         proposal.voting_end_timestamp = voting_end_timestamp
-        # creation_timestamp: int
-        # voting_start_timestamp: int
-        # voting_end_timestamp: int
-        # asa_count: int
-        # vote_count: int
-        # is_cancelled: int
-        
         app_global_put(PROPOSAL_ID_COUNTER_KEY, app_global_get(PROPOSAL_ID_COUNTER_KEY) + 1)
 
-        # TODO: Add event log.
+        bytes proposal_data
+        _, proposal_data = box_get(proposal_box_name)
+        log(concat(concat(method("proposal(byte[32],uint64,uint64,uint64,uint64,uint64,uint64,bool)"), proposal_id), proposal_data))
+        log(concat(concat(method("create_proposal(address,byte[32])"), user_address), proposal_id))
+        exit(1)
+    end
+    
+    block cancel_proposal:
+        bytes user_address = Txn.Sender
+        assert(user_address == app_global_get(PROPOSAL_MANAGER_KEY))
+
+        bytes proposal_id = Txn.ApplicationArgs[1]
+        bytes proposal_box_name = concat(PROPOSAL_BOX_PREFIX, proposal_id)
+        box<Proposal> proposal = OpenBox(proposal_box_name)
+
+        assert(Global.LatestTimestamp < proposal.voting_end_timestamp)
+        assert(proposal.is_cancelled == BYTES_FALSE)
+        proposal.is_cancelled = BYTES_TRUE
+
+        bytes proposal_data
+        _, proposal_data = box_get(proposal_box_name)
+        log(concat(concat(method("proposal(byte[32],uint64,uint64,uint64,uint64,uint64,uint64,bool)"), proposal_id), proposal_data))
+        log(concat(concat(method("cancel_proposal(address,byte[32])"), user_address), proposal_id))
         exit(1)
     end
 
@@ -158,7 +139,7 @@ block main:
         # proposal.voting_start_timestamp <= Global.LatestTimestamp < proposal.voting_end_timestamp
         assert(proposal.voting_start_timestamp <= Global.LatestTimestamp)
         assert(Global.LatestTimestamp < proposal.voting_end_timestamp)
-        assert(proposal.is_cancelled == BYTES_ZERO)
+        assert(proposal.is_cancelled == BYTES_FALSE)
 
         # vote count and asset count must be equal
         assert(len(votes_as_percentage))
@@ -194,27 +175,60 @@ block main:
             option_vote_amount = tmp_vote_percentage * (account_voting_power / 100)
             asset_id = extract_uint64(asset_ids, tmp_index)
             add_vote_amount(proposal_index, asset_id, option_vote_amount)
+
+            log(concat(concat(method("vote(uint64,uint64)"), itob(asset_id)), itob(option_vote_amount)))
         end
         assert(total_percentage == 100)
 
-        # TODO: Add event log.
-        log(itob(Global.OpcodeBudget))
+        bytes proposal_data
+        _, proposal_data = box_get(proposal_box_name)
+        log(concat(concat(method("proposal(byte[32],uint64,uint64,uint64,uint64,uint64,uint64,bool)"), proposal_id), proposal_data))
+        log(concat(concat(concat(method("cast_vote(address,byte[32],uint64)"), user_address), proposal_id), itob(account_voting_power)))
         exit(1)
     end
-end
 
-func get_account_voting_power(address: bytes, snapshot_timestamp: int, account_power_index: bytes) int:
-    inner_txn:
-        TypeEnum: Appl
-        ApplicationID: app_global_get(VAULT_APP_ID_KEY)
-        ApplicationArgs[0]: "get_tiny_power_of_at"
-        ApplicationArgs[1]: address
-        ApplicationArgs[2]: itob(snapshot_timestamp)
-        ApplicationArgs[3]: account_power_index
-        Fee: 0
+    block increase_budget:
+        # Box read budget and opcode budget will be incread using this method.
+        exit(1)
     end
-    int voting_power = extract_uint64(Itxn.LastLog, 4)
-    return voting_power
+
+    block update_setting:
+        bytes user_address = Txn.Sender
+        assert(user_address == app_global_get(PROPOSAL_MANAGER_KEY))
+
+        bytes key = Txn.ApplicationArgs[1]
+        bytes value = Txn.ApplicationArgs[2]
+        int type = btoi(Txn.ApplicationArgs[3])
+
+        if !type:
+            app_global_put(key, value)
+        else:
+            app_global_put(key, btoi(value))
+        end
+
+        bytes log_key = concat(extract(6, 2, itob(len(Txn.ApplicationArgs[1]))), Txn.ApplicationArgs[1])
+        bytes log_value = concat(extract(6, 2, itob(len(Txn.ApplicationArgs[2]))), Txn.ApplicationArgs[2])
+        log(concat(concat(concat(method("update_setting(byte[],byte[],uint64)"), log_key), log_value), itob(type)))
+        exit(1)
+    end
+
+    block set_manager:
+        bytes user_address = Txn.Sender
+        assert(user_address == app_global_get(MANAGER_KEY))
+
+        app_global_put(MANAGER_KEY, Txn.ApplicationArgs[1])
+        log(concat(method("set_manager(address)"), Txn.ApplicationArgs[1]))
+        exit(1)
+    end
+
+    block set_proposal_manager:
+        bytes user_address = Txn.Sender
+        assert(user_address == app_global_get(MANAGER_KEY))
+
+        app_global_put(PROPOSAL_MANAGER_KEY, Txn.ApplicationArgs[1])
+        log(concat(method("set_proposal_manager(address)"), Txn.ApplicationArgs[1]))
+        exit(1)
+    end
 end
 
 func proposal_exists(proposal_id: bytes) int:
@@ -249,4 +263,19 @@ end
 
 func get_start_timestamp_of_day(timestamp: int) int:
     return ((timestamp / DAY) * DAY)
+end
+
+# Inner Txns
+func get_account_voting_power(address: bytes, snapshot_timestamp: int, account_power_index: bytes) int:
+    inner_txn:
+        TypeEnum: Appl
+        ApplicationID: app_global_get(VAULT_APP_ID_KEY)
+        ApplicationArgs[0]: "get_tiny_power_of_at"
+        ApplicationArgs[1]: address
+        ApplicationArgs[2]: itob(snapshot_timestamp)
+        ApplicationArgs[3]: account_power_index
+        Fee: 0
+    end
+    int voting_power = extract_uint64(Itxn.LastLog, 4)
+    return voting_power
 end

@@ -8,6 +8,8 @@ from algosdk.account import generate_account
 from algosdk.encoding import decode_address
 from algosdk.logic import get_application_address
 from tinyman.governance.constants import WEEK, DAY
+from tinyman.governance.event import decode_logs
+from tinyman.governance.staking_voting.events import staking_voting_events
 from tinyman.governance.vault.transactions import prepare_create_lock_transactions, prepare_increase_lock_amount_transactions
 from tinyman.governance.vault.utils import get_slope, get_bias, get_start_timestamp_of_week
 from tinyman.utils import int_to_bytes, bytes_to_int
@@ -46,8 +48,12 @@ class StakingVotingTestCase(VaultAppMixin, StakingVotingAppMixin, BaseTestCase):
         txn_group = prepare_create_proposal_transactions(self.app_creator_address, proposal_id, self.sp)
         transaction.assign_group_id(txn_group)
         signed_txns = sign_txns(txn_group, self.app_creator_sk)
-        self.ledger.eval_transactions(signed_txns, block_timestamp=block_timestamp)
-        # print_boxes(self.ledger.boxes[STAKING_VOTING_APP_ID])
+        block = self.ledger.eval_transactions(signed_txns, block_timestamp=block_timestamp)
+        logs = block[b'txns'][0][b'dt'][b'lg']
+        events = decode_logs(logs, events=staking_voting_events)
+        for event in events:
+            print(event)
+        print()
 
     def test_cast_vote(self):
         user_sk, user_address = generate_account()
@@ -131,9 +137,12 @@ class StakingVotingTestCase(VaultAppMixin, StakingVotingAppMixin, BaseTestCase):
         signed_txns = sign_txns(txn_group, user_sk)
         # output = self.low_level_eval(signed_txns, block_timestamp=block_timestamp)
         # print(output)
-        self.ledger.eval_transactions(signed_txns, block_timestamp=block_timestamp)
-        # print(bytes_to_int(block[b'txns'][1][b'dt'][b'lg'][-1]))
-        # print_boxes(self.ledger.boxes[STAKING_VOTING_APP_ID])
+        block = self.ledger.eval_transactions(signed_txns, block_timestamp=block_timestamp)
+        logs = block[b'txns'][1][b'dt'][b'lg']
+        events = decode_logs(logs, events=staking_voting_events)
+        for event in events:
+            print(event)
+        print()
 
         # Check if all the votes are correct
         slope = get_slope(100_000_000)
@@ -157,9 +166,12 @@ class StakingVotingTestCase(VaultAppMixin, StakingVotingAppMixin, BaseTestCase):
         txn_group = prepare_cast_vote_transactions(self.ledger, user_2_address, proposal_id, votes, asset_ids, proposal_creation_timestamp, self.sp)
         transaction.assign_group_id(txn_group)
         signed_txns = sign_txns(txn_group, user_2_sk)
-        self.ledger.eval_transactions(signed_txns, block_timestamp=block_timestamp)
-        # print(bytes_to_int(block[b'txns'][1][b'dt'][b'lg'][-1]))
-        # print_boxes(self.ledger.boxes[STAKING_VOTING_APP_ID])
+        block = self.ledger.eval_transactions(signed_txns, block_timestamp=block_timestamp)
+        logs = block[b'txns'][1][b'dt'][b'lg']
+        events = decode_logs(logs, events=staking_voting_events)
+        for event in events:
+            print(event)
+        print()
 
     def test_cast_vote_after_increase_lock_amount(self):
         user_sk, user_address = generate_account()
@@ -237,7 +249,12 @@ class StakingVotingTestCase(VaultAppMixin, StakingVotingAppMixin, BaseTestCase):
         txn_group = prepare_cast_vote_transactions(self.ledger, user_address, proposal_id, votes, asset_ids, proposal_creation_timestamp, self.sp)
         transaction.assign_group_id(txn_group)
         signed_txns = sign_txns(txn_group, user_sk)
-        self.ledger.eval_transactions(signed_txns, block_timestamp=block_timestamp)
+        block = self.ledger.eval_transactions(signed_txns, block_timestamp=block_timestamp)
+        logs = block[b'txns'][1][b'dt'][b'lg']
+        events = decode_logs(logs, events=staking_voting_events)
+        for event in events:
+            print(event)
+        print()
 
         # Check if all the votes are correct
         account_powers = parse_box_account_power(self.ledger.boxes[VAULT_APP_ID][decode_address(user_address) + int_to_bytes(0)])
@@ -311,8 +328,13 @@ class StakingVotingTestCase(VaultAppMixin, StakingVotingAppMixin, BaseTestCase):
         txn_group = prepare_cancel_proposal_transactions(proposal_manager_address, proposal_id, self.sp)
         transaction.assign_group_id(txn_group)
         signed_txns = sign_txns(txn_group, proposal_manager_sk)
-        self.ledger.eval_transactions(signed_txns, block_timestamp=block_timestamp)
+        block = self.ledger.eval_transactions(signed_txns, block_timestamp=block_timestamp)
         self.assertEqual(parse_box_staking_proposal(self.ledger.boxes[STAKING_VOTING_APP_ID][proposal_box_name])["is_cancelled"], 1)
+        logs = block[b'txns'][0][b'dt'][b'lg']
+        events = decode_logs(logs, events=staking_voting_events)
+        for event in events:
+            print(event)
+        print()
 
         # Try to cast Vote
         block_timestamp = proposal_creation_timestamp + DAY
@@ -324,4 +346,4 @@ class StakingVotingTestCase(VaultAppMixin, StakingVotingAppMixin, BaseTestCase):
         signed_txns = sign_txns(txn_group, user_sk)
         with self.assertRaises(LogicEvalError) as e:
             self.ledger.eval_transactions(signed_txns, block_timestamp=block_timestamp)
-        self.assertEqual(e.exception.source['line'], 'assert(proposal.is_cancelled == BYTES_ZERO)')
+        self.assertEqual(e.exception.source['line'], 'assert(proposal.is_cancelled == BYTES_FALSE)')

@@ -608,7 +608,7 @@ class ProposalVotingTestCase(VaultAppMixin, ProposalVotingAppMixin, BaseTestCase
         signed_txns = sign_txns(txn_group, user_sk)
         with self.assertRaises(LogicEvalError) as e:
             self.ledger.eval_transactions(signed_txns, block_timestamp=block_timestamp)
-        self.assertEqual(e.exception.source['line'], 'assert(proposal.is_cancelled == BYTES_ZERO)')
+        self.assertEqual(e.exception.source['line'], 'assert(proposal.is_cancelled == BYTES_FALSE)')
 
     def test_execute_proposal(self):
         user_sk, user_address = generate_account()
@@ -684,4 +684,4 @@ class ProposalVotingTestCase(VaultAppMixin, ProposalVotingAppMixin, BaseTestCase
         with self.assertRaises(LogicEvalError) as e:
             self.ledger.eval_transactions(signed_txns, block_timestamp=block_timestamp)
         # TODO missing check for execution
-        self.assertEqual(e.exception.source['line'], 'assert(proposal.is_executed == BYTES_ZERO)')
+        self.assertEqual(e.exception.source['line'], 'assert(proposal.is_executed == BYTES_FALSE)')

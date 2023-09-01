@@ -449,7 +449,6 @@ block main:
     end
 
     block get_box:
-        
         bytes box_name = Txn.ApplicationArgs[1]
 
         int exists
