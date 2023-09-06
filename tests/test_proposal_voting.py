@@ -432,13 +432,15 @@ class ProposalVotingTestCase(VaultAppMixin, ProposalVotingAppMixin, BaseTestCase
         transaction.assign_group_id(txn_group)
         signed_txns = sign_txns(txn_group, user_sk)
         self.ledger.eval_transactions(signed_txns, block_timestamp=block_timestamp)
+        
+        proposal_box_name = PROPOSAL_BOX_PREFIX + proposal_id
+        proposal = parse_box_proposal(self.ledger.boxes[PROPOSAL_VOTING_APP_ID][proposal_box_name])
 
         account_powers = parse_box_account_power(self.ledger.boxes[VAULT_APP_ID][decode_address(user_address) + int_to_bytes(0)])
         account_power = account_powers[-1]
-        voting_power = account_power.bias - get_bias(account_power.slope, (block_timestamp - account_power.timestamp))
+        voting_power = account_power.bias - get_bias(account_power.slope, (proposal["creation_timestamp"] - account_power.timestamp))
 
-        proposal_box_name = PROPOSAL_BOX_PREFIX + proposal_id
-        self.assertEqual(parse_box_proposal(self.ledger.boxes[PROPOSAL_VOTING_APP_ID][proposal_box_name])["for_vote_amount"], voting_power)
+        self.assertEqual(proposal["for_vote_amount"], voting_power)
 
     def test_get_proposal(self):
         user_sk, user_address = generate_account()

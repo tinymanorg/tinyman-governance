@@ -209,7 +209,7 @@ block main:
         set_user_as_voted(user_address, proposal_index)
 
         # Get voting power
-        int account_voting_power = get_account_voting_power_at(user_address, Global.LatestTimestamp, account_power_index)
+        int account_voting_power = get_account_voting_power_at(user_address, proposal.creation_timestamp, account_power_index)
 
         # Count Vote
         if vote == 0:

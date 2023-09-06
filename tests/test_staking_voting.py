@@ -261,7 +261,7 @@ class StakingVotingTestCase(VaultAppMixin, StakingVotingAppMixin, BaseTestCase):
 
         # Check if all the votes are correct
         slope = get_slope(100_000_000)
-        bias = get_bias(slope, (lock_end_timestamp - block_timestamp))
+        bias = get_bias(slope, (lock_end_timestamp - proposal.creation_timestamp))
 
         proposal_box_name = get_staking_proposal_box_name(proposal_id)
         proposal = parse_box_staking_voting_proposal(self.ledger.boxes[STAKING_VOTING_APP_ID][proposal_box_name])
@@ -399,7 +399,7 @@ class StakingVotingTestCase(VaultAppMixin, StakingVotingAppMixin, BaseTestCase):
         # Check if all the votes are correct
         account_powers = parse_box_account_power(self.ledger.boxes[VAULT_APP_ID][decode_address(user_address) + int_to_bytes(0)])
         account_power = account_powers[-1]
-        voting_power = account_power.bias - get_bias(account_power.slope, (block_timestamp - account_power.timestamp))
+        voting_power = account_power.bias - get_bias(account_power.slope, (proposal.creation_timestamp - account_power.timestamp))
 
         proposal_box_name = get_staking_proposal_box_name(proposal_id)
         proposal = parse_box_staking_voting_proposal(self.ledger.boxes[STAKING_VOTING_APP_ID][proposal_box_name])

@@ -151,7 +151,7 @@ block main:
         int proposal_index = proposal.index
         set_user_as_voted(user_address, proposal_index)
 
-        int account_voting_power = get_account_voting_power(user_address, proposal.voting_start_timestamp, account_power_index)
+        int account_voting_power = get_account_voting_power_at(user_address, proposal.creation_timestamp, account_power_index)
 
         # Update proposal
         proposal.vote_count = proposal.vote_count + 1
@@ -266,7 +266,7 @@ func get_start_timestamp_of_day(timestamp: int) int:
 end
 
 # Inner Txns
-func get_account_voting_power(address: bytes, snapshot_timestamp: int, account_power_index: bytes) int:
+func get_account_voting_power_at(address: bytes, snapshot_timestamp: int, account_power_index: bytes) int:
     inner_txn:
         TypeEnum: Appl
         ApplicationID: app_global_get(VAULT_APP_ID_KEY)
