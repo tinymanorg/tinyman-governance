@@ -13,7 +13,7 @@ from tinyman.governance.constants import WEEK
 from tinyman.governance.event import decode_logs
 from tinyman.governance.rewards.constants import MANAGER_KEY, REWARD_HISTORY_COUNT_KEY, REWARD_PERIOD_COUNT_KEY, FIRST_PERIOD_TIMESTAMP, REWARDS_MANAGER_KEY
 from tinyman.governance.rewards.events import rewards_events
-from tinyman.governance.rewards.storage import get_reward_history_box_name, RewardClaimSheet, get_account_reward_claim_sheet_box_name
+from tinyman.governance.rewards.storage import get_reward_history_box_name, RewardClaimSheet, get_account_reward_claim_sheet_box_name, parse_box_reward_history, RewardHistory
 from tinyman.governance.rewards.transactions import prepare_claim_reward_transactions, prepare_init_transactions, prepare_create_reward_period_transactions, prepare_set_reward_amount_transactions
 from tinyman.governance.vault.constants import TOTAL_LOCKED_AMOUNT_KEY
 from tinyman.governance.vault.storage import get_power_index_at
@@ -22,7 +22,7 @@ from tinyman.governance.vault.utils import get_start_timestamp_of_week
 from tinyman.utils import bytes_to_int
 
 from common.constants import TINY_ASSET_ID, rewards_approval_program, rewards_clear_state_program, VAULT_APP_ID, REWARDS_APP_ID
-from common.utils import sign_txns, parse_box_reward_history, get_total_power_index_at, get_reward_history_index_at
+from common.utils import sign_txns, get_total_power_index_at, get_reward_history_index_at
 from rewards.utils import get_rewards_app_global_state
 from tests.common import BaseTestCase, VaultAppMixin, RewardsAppMixin
 from vault.utils import get_vault_app_global_state, get_account_state, get_slope_change_at, get_account_powers
@@ -112,12 +112,12 @@ class RewardsTestCase(VaultAppMixin, RewardsAppMixin, BaseTestCase):
         self.assertEqual(len(reward_histories), 1)
         reward_history = reward_histories[0]
         next_week_timestamp = get_start_timestamp_of_week(block_timestamp) + WEEK
-        self.assertDictEqual(
+        self.assertEqual(
             reward_history,
-            {
-                'timestamp': next_week_timestamp,
-                'reward_amount': reward_amount
-            }
+            RewardHistory(
+                timestamp=next_week_timestamp,
+                reward_amount=reward_amount
+            )
         )
 
     def test_claim_rewards(self):

@@ -4,6 +4,8 @@ from zoneinfo import ZoneInfo
 
 from algosdk.encoding import encode_address, decode_address
 from tinyman.governance.rewards.storage import parse_box_reward_period
+from tinyman.governance.staking_voting.storage import parse_box_staking_voting_proposal
+from tinyman.governance.utils import check_nth_bit_from_left
 from tinyman.governance.vault.constants import TOTAL_POWERS, SLOPE_CHANGES, TOTAL_POWER_COUNT_KEY, TOTAL_POWER_BOX_ARRAY_LEN, ACCOUNT_POWER_BOX_ARRAY_LEN
 from tinyman.governance.vault.storage import parse_box_total_power, parse_box_slope_change, parse_box_account_power, parse_box_account_state
 from tinyman.utils import bytes_to_int, int_to_bytes
@@ -13,31 +15,11 @@ from tinyman.governance.rewards.constants import REWARD_HISTORY_SIZE, REWARD_HIS
 from staking_voting.constants import VOTE_BOX_PREFIX
 
 
-def check_nth_bit_from_left(input_bytes, n):
-    # ensure n is within the range of the bytes
-    if n >= len(input_bytes) * 8:
-        raise ValueError(f"n should be less than {len(input_bytes) * 8}")
-
-    # convert bytes to int
-    num = int.from_bytes(input_bytes, 'big')
-
-    # calculate which bit to check from the left
-    bit_to_check = (len(input_bytes) * 8 - 1) - n
-
-    # create a number with nth bit set
-    nth_bit = 1 << bit_to_check
-
-    # if the nth bit is set in the given number, return 1. Otherwise, return 0
-    if num & nth_bit:
-        return 1
-    else:
-        return 0
-
-
 def sign_txns(txns, secret_key):
     return [txn.sign(secret_key) for txn in txns]
 
 
+# TODO: Remove
 def parse_box_staking_proposal(raw_box):
     data = dict(
         index=bytes_to_int(raw_box[:8]),
@@ -71,23 +53,6 @@ def parse_box_proposal(raw_box):
     return data
 
 
-def parse_box_reward_history(raw_box):
-    box_size = REWARD_HISTORY_SIZE
-    rows = [raw_box[i:i + box_size] for i in range(0, len(raw_box), box_size)]
-    reward_histories = []
-    for row in rows:
-        if row == (b'\x00' * box_size):
-            break
-
-        reward_histories.append(
-            dict(
-                timestamp=bytes_to_int(row[:8]),
-                reward_amount=bytes_to_int(row[8:16]),
-            )
-        )
-    return reward_histories
-
-
 def print_boxes(boxes):
     for key, value in sorted(list(boxes.items()), key=lambda box: box[0]):
         if TOTAL_POWERS in key:
@@ -105,7 +70,7 @@ def print_boxes(boxes):
             if len(value) == 49:
                 proposal_id = bytes_to_int(key[len(PROPOSAL_BOX_PREFIX):])
                 print(f"PROPOSALS {proposal_id}")
-                pprint(parse_box_staking_proposal(value))
+                pprint(parse_box_staking_voting_proposal(value))
             elif len(value) == 115:
                 proposal_id = bytes_to_int(key[len(PROPOSAL_BOX_PREFIX):])
                 print(f"PROPOSALS {proposal_id}")
@@ -194,6 +159,22 @@ def get_total_power_index_at(ledger, app_id, timestamp):
 
     return total_power_index
 
+
+def parse_box_reward_history(raw_box):
+    box_size = REWARD_HISTORY_SIZE
+    rows = [raw_box[i:i + box_size] for i in range(0, len(raw_box), box_size)]
+    reward_histories = []
+    for row in rows:
+        if row == (b'\x00' * box_size):
+            break
+
+        reward_histories.append(
+            dict(
+                timestamp=bytes_to_int(row[:8]),
+                reward_amount=bytes_to_int(row[8:16]),
+            )
+        )
+    return reward_histories
 
 def get_reward_history_index_at(ledger, app_id, timestamp):
     reward_history_index = None

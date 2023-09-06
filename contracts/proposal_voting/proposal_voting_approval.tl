@@ -22,8 +22,8 @@ end
 
 # 24 * 60 * 60
 const int DAY = 86400
-const bytes BYTES_ZERO = "\x00"
-const bytes BYTES_ONE = "\x01"
+const bytes BYTES_FALSE = "\x00"
+const bytes BYTES_TRUE = "\x80"
 
 # Global States
 const bytes VAULT_APP_ID_KEY = "vault_app_id"
@@ -124,9 +124,9 @@ block main:
         bytes proposal_id = Txn.ApplicationArgs[1]
         bytes proposal_box_name = concat(PROPOSAL_BOX_PREFIX, proposal_id)
         box<Proposal> proposal = OpenBox(proposal_box_name)
-        assert(proposal.is_cancelled == BYTES_ZERO)
-        assert(proposal.is_executed == BYTES_ZERO)
-        proposal.is_cancelled = BYTES_ONE
+        assert(proposal.is_cancelled == BYTES_FALSE)
+        assert(proposal.is_executed == BYTES_FALSE)
+        proposal.is_cancelled = BYTES_TRUE
 
         # TODO: Add event log
         exit(1)
@@ -140,9 +140,9 @@ block main:
         bytes proposal_box_name = concat(PROPOSAL_BOX_PREFIX, proposal_id)
         box<Proposal> proposal = OpenBox(proposal_box_name)
         assert(proposal.voting_end_timestamp < Global.LatestTimestamp)
-        assert(proposal.is_cancelled == BYTES_ZERO)
-        assert(proposal.is_executed == BYTES_ZERO)
-        proposal.is_executed = BYTES_ONE
+        assert(proposal.is_cancelled == BYTES_FALSE)
+        assert(proposal.is_executed == BYTES_FALSE)
+        proposal.is_executed = BYTES_TRUE
 
         # TODO: Add event log
         exit(1)
@@ -160,7 +160,7 @@ block main:
 
         # 2. Check proposal id
         # proposal id will be calculate off-chian. it is 32 bit hash of the proposal data.
-        assert(len(proposal_id) ==  32)
+        assert(len(proposal_id) == 32)
         bytes proposal_box_name = concat(PROPOSAL_BOX_PREFIX, proposal_id)
         exists, _ = box_len(proposal_box_name)
         assert(!exists)
@@ -201,8 +201,8 @@ block main:
         # proposal.voting_start_timestamp <= Global.LatestTimestamp < proposal.voting_end_timestamp
         assert(proposal.voting_start_timestamp <= Global.LatestTimestamp)
         assert(Global.LatestTimestamp < proposal.voting_end_timestamp)
-        assert(proposal.is_cancelled == BYTES_ZERO)
-        assert(proposal.is_executed == BYTES_ZERO)
+        assert(proposal.is_cancelled == BYTES_FALSE)
+        assert(proposal.is_executed == BYTES_FALSE)
 
         # Check attendance
         int proposal_index = proposal.index
@@ -223,7 +223,7 @@ block main:
         end
         
         if (itob(proposal.snapshot_total_voting_power) b* itob(proposal.quorum_numerator)) b<= (itob(proposal.for_voting_power + proposal.abstain_voting_power) b* itob(100)):
-            proposal.is_quorum_reached = BYTES_ONE
+            proposal.is_quorum_reached = BYTES_TRUE
         end
 
         # Update proposal

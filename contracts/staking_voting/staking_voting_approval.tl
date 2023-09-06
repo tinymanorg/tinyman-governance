@@ -2,7 +2,7 @@
 #tealish version git+https://github.com/Hipo/tealish.git@483cb7a30912747814c5ee0ee0dd7a7b1684c5f5
 
 # Name: <proposal_id>
-# Size: 64 bytes
+# Size: 49 bytes
 struct Proposal:
     index: int
     creation_timestamp: int
@@ -85,7 +85,7 @@ block main:
 
         # proposal id will be calculate off-chain. it is 32 bit hash of the proposal data.
         bytes proposal_id = Txn.ApplicationArgs[1]
-        assert(len(proposal_id) ==  32)
+        assert(len(proposal_id) == 32)
         assert(!proposal_exists(proposal_id))
 
         int voting_start_timestamp = get_start_timestamp_of_day(Global.LatestTimestamp) + (app_global_get(VOTING_DELAY_KEY) * DAY)
