@@ -77,6 +77,7 @@ block main:
         "set_manager": set_manager
         "set_proposal_manager": set_proposal_manager
         "increase_budget": increase_budget
+        "update_setting": update_setting
     end
 
     block create_proposal:

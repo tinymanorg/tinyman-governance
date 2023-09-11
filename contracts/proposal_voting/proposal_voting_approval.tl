@@ -90,6 +90,7 @@ block main:
         "increase_budget": increase_budget
         "get_proposal": get_proposal
         "has_voted": has_voted
+        "update_setting": update_setting
         "cancel_proposal": cancel_proposal
         "execute_proposal": execute_proposal
         "set_manager": set_manager
@@ -231,6 +232,26 @@ block main:
 
         # TODO: Add event log.
         log(itob(Global.OpcodeBudget))
+        exit(1)
+    end
+
+    block update_setting:
+        bytes user_address = Txn.Sender
+        assert(user_address == app_global_get(PROPOSAL_MANAGER_KEY))
+
+        bytes key = Txn.ApplicationArgs[1]
+        bytes value = Txn.ApplicationArgs[2]
+        int type = btoi(Txn.ApplicationArgs[3])
+
+        if !type:
+            app_global_put(key, value)
+        else:
+            app_global_put(key, btoi(value))
+        end
+
+        bytes log_key = concat(extract(6, 2, itob(len(Txn.ApplicationArgs[1]))), Txn.ApplicationArgs[1])
+        bytes log_value = concat(extract(6, 2, itob(len(Txn.ApplicationArgs[2]))), Txn.ApplicationArgs[2])
+        log(concat(concat(concat(method("update_setting(byte[],byte[],uint64)"), log_key), log_value), itob(type)))
         exit(1)
     end
 
