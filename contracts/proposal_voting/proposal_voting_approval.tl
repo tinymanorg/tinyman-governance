@@ -1,5 +1,5 @@
 #pragma version 8
-#tealish version git+https://github.com/Hipo/tealish.git@483cb7a30912747814c5ee0ee0dd7a7b1684c5f5
+#tealish version git+https://github.com/Hipo/tealish.git@e8d1b27620220bc4e520d7d3b6d62523e13a7723
 
 # Name: <proposal_id>
 # Size: 120 bytes
@@ -176,7 +176,7 @@ block main:
         proposal.voting_start_timestamp = voting_start_timestamp
         proposal.voting_end_timestamp = voting_end_timestamp
         proposal.snapshot_total_voting_power = total_voting_power
-        proposal.proposer = user_address
+        proposal.proposer = Cast(user_address, bytes[32])
         proposal.quorum_numerator = app_global_get(QUORUM_NUMERATOR_KEY)
 
         app_global_put(PROPOSAL_ID_COUNTER_KEY, app_global_get(PROPOSAL_ID_COUNTER_KEY) + 1)
@@ -219,7 +219,7 @@ block main:
         elif vote == 2:
             proposal.abstain_vote_amount = proposal.abstain_vote_amount + account_voting_power
         else:
-            error()
+            Error()
         end
         
         if (itob(proposal.snapshot_total_voting_power) b* itob(proposal.quorum_numerator)) b<= (itob(proposal.for_vote_amount + proposal.abstain_vote_amount) b* itob(100)):
@@ -254,7 +254,7 @@ block main:
         int exists
         bytes proposal_data
         exists, proposal_data = box_get(proposal_box_name)
-        Proposal proposal = proposal_data
+        Proposal proposal = Cast(proposal_data, Proposal)
 
         log(itob(has_voted(address, proposal.index)))
         exit(1)
