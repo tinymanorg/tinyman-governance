@@ -1,8 +1,8 @@
 #pragma version 8
-#tealish version git+https://github.com/Hipo/tealish.git@483cb7a30912747814c5ee0ee0dd7a7b1684c5f5
+#tealish version git+https://github.com/Hipo/tealish.git@e8d1b27620220bc4e520d7d3b6d62523e13a7723
 
 # Name: <proposal_id>
-# Size: 120 bytes
+# Size: 115 bytes
 struct Proposal:
     index: int
     creation_timestamp: int
@@ -99,14 +99,22 @@ block main:
 
     block increase_budget:
         # Box read budget and opcode budget will be incread using this method.
+        if Txn.NumAppArgs > 1:
+            int inner_app_call_count = btoi(Txn.ApplicationArgs[1])
+            for _ in 0:inner_app_call_count:
+                increase_budget()
+            end
+        end
         exit(1)
     end
 
     block set_manager:
         bytes user_address = Txn.Sender
         assert(user_address == app_global_get(MANAGER_KEY))
+        # TODO: type address
 
         app_global_put(MANAGER_KEY, Txn.ApplicationArgs[1])
+        log(Concat(method("set_manager(address)"), Txn.ApplicationArgs[1]))
         exit(1)
     end
 
@@ -115,6 +123,7 @@ block main:
         assert(user_address == app_global_get(MANAGER_KEY))
 
         app_global_put(PROPOSAL_MANAGER_KEY, Txn.ApplicationArgs[1])
+        log(Concat(method("set_proposal_manager(address)"), Txn.ApplicationArgs[1]))
         exit(1)
     end
 
@@ -123,13 +132,16 @@ block main:
         assert(user_address == app_global_get(PROPOSAL_MANAGER_KEY))
 
         bytes proposal_id = Txn.ApplicationArgs[1]
-        bytes proposal_box_name = concat(PROPOSAL_BOX_PREFIX, proposal_id)
+        bytes proposal_box_name = Concat(PROPOSAL_BOX_PREFIX, proposal_id)
         box<Proposal> proposal = OpenBox(proposal_box_name)
         assert(proposal.is_cancelled == BYTES_FALSE)
         assert(proposal.is_executed == BYTES_FALSE)
         proposal.is_cancelled = BYTES_TRUE
-
-        # TODO: Add event log
+        
+        bytes proposal_data
+        _, proposal_data = box_get(proposal_box_name)
+        log(Concat(method("proposal(byte[32],uint64,uint64,uint64,uint64,uint64,uint64,uint64,uint64,uint64,uint64,bool,bool,bool,byte[32])"), proposal_id, proposal_data))
+        log(Concat(method("cancel_proposal(address,byte[32])"), user_address, proposal_id))
         exit(1)
     end
 
@@ -138,14 +150,17 @@ block main:
         assert(user_address == app_global_get(PROPOSAL_MANAGER_KEY))
 
         bytes proposal_id = Txn.ApplicationArgs[1]
-        bytes proposal_box_name = concat(PROPOSAL_BOX_PREFIX, proposal_id)
+        bytes proposal_box_name = Concat(PROPOSAL_BOX_PREFIX, proposal_id)
         box<Proposal> proposal = OpenBox(proposal_box_name)
         assert(proposal.voting_end_timestamp < Global.LatestTimestamp)
         assert(proposal.is_cancelled == BYTES_FALSE)
         assert(proposal.is_executed == BYTES_FALSE)
         proposal.is_executed = BYTES_TRUE
 
-        # TODO: Add event log
+        bytes proposal_data
+        _, proposal_data = box_get(proposal_box_name)
+        log(Concat(method("proposal(byte[32],uint64,uint64,uint64,uint64,uint64,uint64,uint64,uint64,uint64,uint64,bool,bool,bool,byte[32])"), proposal_id, proposal_data))
+        log(Concat(method("execute_proposal(address,byte[32])"), user_address, proposal_id))
         exit(1)
     end
 
@@ -162,12 +177,12 @@ block main:
         # 2. Check proposal id
         # proposal id will be calculate off-chian. it is 32 bit hash of the proposal data.
         assert(len(proposal_id) == 32)
-        bytes proposal_box_name = concat(PROPOSAL_BOX_PREFIX, proposal_id)
+        bytes proposal_box_name = Concat(PROPOSAL_BOX_PREFIX, proposal_id)
         exists, _ = box_len(proposal_box_name)
         assert(!exists)
 
         # 3. Start & End time
-        int voting_start_timestamp = ((Global.LatestTimestamp / DAY) * DAY) + (app_global_get(VOTING_DELAY_KEY) * DAY)
+        int voting_start_timestamp = get_end_timestamp_of_day(Global.LatestTimestamp) + (app_global_get(VOTING_DELAY_KEY) * DAY)
         int voting_end_timestamp = voting_start_timestamp + (app_global_get(VOTING_DURATION_KEY) * DAY)
 
         # 4. Save box
@@ -177,14 +192,15 @@ block main:
         proposal.voting_start_timestamp = voting_start_timestamp
         proposal.voting_end_timestamp = voting_end_timestamp
         proposal.snapshot_total_voting_power = total_voting_power
-        proposal.proposer = user_address
+        proposal.proposer = Cast(user_address, bytes[32])
         proposal.quorum_numerator = app_global_get(QUORUM_NUMERATOR_KEY)
 
         app_global_put(PROPOSAL_ID_COUNTER_KEY, app_global_get(PROPOSAL_ID_COUNTER_KEY) + 1)
 
-        log(itob(Global.OpcodeBudget))
-
-        # TODO: Add event log.
+        bytes proposal_data
+        _, proposal_data = box_get(proposal_box_name)
+        log(Concat(method("proposal(byte[32],uint64,uint64,uint64,uint64,uint64,uint64,uint64,uint64,uint64,uint64,bool,bool,bool,address)"), proposal_id, proposal_data))
+        log(Concat(method("create_proposal(address,byte[32])"), user_address, proposal_id))
         exit(1)
     end
 
@@ -195,7 +211,7 @@ block main:
         bytes account_power_index = Txn.ApplicationArgs[3]
 
         # Get proposal
-        bytes proposal_box_name = concat(PROPOSAL_BOX_PREFIX, proposal_id)
+        bytes proposal_box_name = Concat(PROPOSAL_BOX_PREFIX, proposal_id)
         box<Proposal> proposal = OpenBox(proposal_box_name)
 
         # Proposal Active
@@ -220,7 +236,7 @@ block main:
         elif vote == 2:
             proposal.abstain_voting_power = proposal.abstain_voting_power + account_voting_power
         else:
-            error()
+            Error()
         end
         
         if (itob(proposal.snapshot_total_voting_power) b* itob(proposal.quorum_numerator)) b<= (itob(proposal.for_voting_power + proposal.abstain_voting_power) b* itob(100)):
@@ -230,8 +246,10 @@ block main:
         # Update proposal
         proposal.vote_count = proposal.vote_count + 1
 
-        # TODO: Add event log.
-        log(itob(Global.OpcodeBudget))
+        bytes proposal_data
+        _, proposal_data = box_get(proposal_box_name)
+        log(Concat(method("proposal(byte[32],uint64,uint64,uint64,uint64,uint64,uint64,uint64,uint64,uint64,uint64,bool,bool,bool,byte[32])"), proposal_id, proposal_data))
+        log(Concat(method("cast_vote(address,byte[32],uint64,uint64)"), user_address, proposal_id, itob(vote), itob(account_voting_power)))
         exit(1)
     end
 
@@ -249,21 +267,21 @@ block main:
             app_global_put(key, btoi(value))
         end
 
-        bytes log_key = concat(extract(6, 2, itob(len(Txn.ApplicationArgs[1]))), Txn.ApplicationArgs[1])
-        bytes log_value = concat(extract(6, 2, itob(len(Txn.ApplicationArgs[2]))), Txn.ApplicationArgs[2])
-        log(concat(concat(concat(method("update_setting(byte[],byte[],uint64)"), log_key), log_value), itob(type)))
+        bytes log_key = Concat(extract(6, 2, itob(len(Txn.ApplicationArgs[1]))), Txn.ApplicationArgs[1])
+        bytes log_value = Concat(extract(6, 2, itob(len(Txn.ApplicationArgs[2]))), Txn.ApplicationArgs[2])
+        log(Concat(method("update_setting(byte[],byte[],uint64)"), log_key, log_value, itob(type)))
         exit(1)
     end
 
     block get_proposal:
         bytes proposal_id = Txn.ApplicationArgs[1]
 
-        bytes proposal_box_name = concat(PROPOSAL_BOX_PREFIX, proposal_id)
+        bytes proposal_box_name = Concat(PROPOSAL_BOX_PREFIX, proposal_id)
         int exists
-        bytes proposal
-        exists, proposal = box_get(proposal_box_name)
+        bytes proposal_data
+        exists, proposal_data = box_get(proposal_box_name)
 
-        log(proposal)
+        log(Concat(method("return"), proposal_data))
         exit(1)
     end
 
@@ -271,13 +289,20 @@ block main:
         bytes proposal_id = Txn.ApplicationArgs[1]
         bytes address = Txn.ApplicationArgs[2]
 
-        bytes proposal_box_name = concat(PROPOSAL_BOX_PREFIX, proposal_id)
+        bytes proposal_box_name = Concat(PROPOSAL_BOX_PREFIX, proposal_id)
         int exists
         bytes proposal_data
         exists, proposal_data = box_get(proposal_box_name)
-        Proposal proposal = proposal_data
+        Proposal proposal = Cast(proposal_data, Proposal)
 
-        log(itob(has_voted(address, proposal.index)))
+        bytes result
+        if has_voted(address, proposal.index):
+            result = BYTES_TRUE
+        else:
+            result = BYTES_FALSE
+        end
+
+        log(Concat(method("return"), result))
         exit(1)
     end
 end
@@ -285,7 +310,7 @@ end
 func has_voted(address: bytes, proposal_index: int) int:
     int box_index = proposal_index / (ACCOUNT_ATTENDANCE_SHEET_BOX_SIZE * 8)
     int array_index = proposal_index % (ACCOUNT_ATTENDANCE_SHEET_BOX_SIZE * 8)
-    bytes box_name = concat(ATTENDANCE_BOX_PREFIX, concat(address, itob(box_index)))
+    bytes box_name = Concat(ATTENDANCE_BOX_PREFIX, Concat(address, itob(box_index)))
 
     int exists
     exists, _ = box_len(box_name)
@@ -298,7 +323,7 @@ end
 func set_user_as_voted(address: bytes, proposal_index: int):
     int box_index = proposal_index / (ACCOUNT_ATTENDANCE_SHEET_BOX_SIZE * 8)
     int array_index = proposal_index % (ACCOUNT_ATTENDANCE_SHEET_BOX_SIZE * 8)
-    bytes box_name = concat(ATTENDANCE_BOX_PREFIX, concat(address, itob(box_index)))
+    bytes box_name = Concat(ATTENDANCE_BOX_PREFIX, Concat(address, itob(box_index)))
 
     bytes sheet
     _ = box_create(box_name, ACCOUNT_ATTENDANCE_SHEET_BOX_SIZE)
@@ -309,7 +334,21 @@ func set_user_as_voted(address: bytes, proposal_index: int):
     return
 end
 
+func get_end_timestamp_of_day(timestamp: int) int:
+    return ((timestamp / DAY) * DAY) + DAY
+end
+
 # Inner App Calls
+func increase_budget():
+    inner_txn:
+        TypeEnum: Appl
+        ApplicationID: app_global_get(VAULT_APP_ID_KEY)
+        ApplicationArgs[0]: "increase_budget"
+        Fee: 0
+    end
+    return
+end
+
 func get_account_voting_power(address: bytes) int:
     inner_txn:
         TypeEnum: Appl

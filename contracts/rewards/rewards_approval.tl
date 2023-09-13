@@ -1,5 +1,5 @@
 #pragma version 8
-#tealish version git+https://github.com/Hipo/tealish.git@483cb7a30912747814c5ee0ee0dd7a7b1684c5f5
+#tealish version git+https://github.com/Hipo/tealish.git@e8d1b27620220bc4e520d7d3b6d62523e13a7723
 
 # Name: rp<box_index><array_index>
 # Size: 24 bytes
@@ -112,7 +112,7 @@ block main:
 
         bytes reward_period = construct_reward_period(total_reward_amount, cumulative_power_delta)
         save_reward_period(reward_period)
-        log(concat(concat(concat(method("create_reward_period(uint64,uint64,uint128)"), itob(period_index)), itob(total_reward_amount)), cumulative_power_delta))
+        log(Concat(method("create_reward_period(uint64,uint64,uint128)"), itob(period_index), itob(total_reward_amount), cumulative_power_delta))
         exit(1)
     end
 
@@ -133,10 +133,8 @@ block main:
         int total_reward_amount = 0
         bytes account_cumulative_power_delta
         int timestamp = get_period_start_timestamp(period_index)
-        # RewardPeriod reward_period = bzero(24)
-        bytes reward_period
-        
         bytes reward_amounts = ""
+
         for i in 0:period_count:
             period_index = period_index_start + i
             check_and_save_claimed_reward(user_address, period_index)
@@ -149,20 +147,17 @@ block main:
             
             account_cumulative_power_delta = get_account_cumulative_power_delta(user_address, period_start_timestamp, period_end_timestamp, account_power_index_1, account_power_index_2)
 
-            # reward_period = get_reward_period(period_index)
-            # reward_amount = btoi((itob(reward_period.total_reward_amount) b* account_cumulative_power_delta) b/ reward_period.total_cumulative_power_delta)
+            RewardPeriod reward_period = get_reward_period(period_index)
+            reward_amount = btoi((itob(reward_period.total_reward_amount) b* account_cumulative_power_delta) b/ reward_period.total_cumulative_power_delta)
 
-            reward_period = get_reward_period(period_index)
-            # reward_amount = total_reward_amount * account_cumulative_power_delta / total_cumulative_power_delta
-            reward_amount = btoi((extract(0, 8, reward_period) b* account_cumulative_power_delta) b/ extract(8, 16, reward_period))
-            reward_amounts = concat(reward_amounts, itob(reward_amount))
+            reward_amounts = Concat(reward_amounts, itob(reward_amount))
             total_reward_amount = total_reward_amount + reward_amount
         end
 
         transfer(app_global_get(TINY_ASSET_ID_KEY), total_reward_amount, Global.CurrentApplicationAddress, user_address)
         
         # claim_rewards(address, total_reward_amount, period_index_start, period_count, reward_amounts[])
-        log(concat(concat(concat(concat(concat(concat(method("claim_rewards(address,uint64,uint64,uint64,uint64[])"), user_address), itob(total_reward_amount)), itob(period_index_start)), itob(period_count)), extract(6, 2, itob(period_count))), reward_amounts))
+        log(Concat(method("claim_rewards(address,uint64,uint64,uint64,uint64[])"), user_address, itob(total_reward_amount), itob(period_index_start), itob(period_count), extract(6, 2, itob(period_count)), reward_amounts))
         exit(1)
     end
 
@@ -180,7 +175,7 @@ block main:
 
         # opt-in to TINY
         transfer(app_global_get(TINY_ASSET_ID_KEY), 0, Global.CurrentApplicationAddress, Global.CurrentApplicationAddress)
-        log(concat(concat(method("init(uint64,uint64)"), itob(first_period_timestamp)), itob(reward_amount)))
+        log(Concat(method("init(uint64,uint64)"), itob(first_period_timestamp), itob(reward_amount)))
         exit(1)
     end
     
@@ -194,7 +189,7 @@ block main:
         int reward_amount = btoi(Txn.ApplicationArgs[1])
         bytes reward_history = construct_reward_history(Global.LatestTimestamp, reward_amount)
         save_reward_history(reward_history)
-        log(concat(concat(method("set_reward_amount(uint64,uint64)"), itob(Global.LatestTimestamp)), itob(reward_amount)))
+        log(Concat(method("set_reward_amount(uint64,uint64)"), itob(Global.LatestTimestamp), itob(reward_amount)))
         exit(1)
     end
 
@@ -203,7 +198,7 @@ block main:
         assert(user_address == app_global_get(MANAGER_KEY))
 
         app_global_put(MANAGER_KEY, Txn.ApplicationArgs[1])
-        log(concat(method("set_manager(address)"), Txn.ApplicationArgs[1]))
+        log(Concat(method("set_manager(address)"), Txn.ApplicationArgs[1]))
         exit(1)
     end
     
@@ -212,13 +207,13 @@ block main:
         assert(user_address == app_global_get(MANAGER_KEY))
 
         app_global_put(REWARDS_MANAGER_KEY, Txn.ApplicationArgs[1])
-        log(concat(method("set_rewards_manager(address)"), Txn.ApplicationArgs[1]))
+        log(Concat(method("set_rewards_manager(address)"), Txn.ApplicationArgs[1]))
         exit(1)
     end
 end
 
 func construct_reward_period(amount: int, cumulative_power_delta: bytes) bytes:
-    return concat(itob(amount), (bzero(16) b| cumulative_power_delta))
+    return Concat(itob(amount), (bzero(16) b| cumulative_power_delta))
 end
 
 func save_reward_period(data: bytes):
@@ -227,25 +222,25 @@ func save_reward_period(data: bytes):
     assert(len(data) == REWARD_PERIOD_SIZE)
     int box_index = index / REWARD_PERIOD_BOX_ARRAY_LEN
     int array_index = index % REWARD_PERIOD_BOX_ARRAY_LEN
-    bytes box_name = concat(REWARD_PERIOD_BOX_PREFIX, itob(box_index))
+    bytes box_name = Concat(REWARD_PERIOD_BOX_PREFIX, itob(box_index))
     _ = box_create(box_name, REWARD_PERIOD_BOX_SIZE)
     box_replace(box_name, (array_index * REWARD_PERIOD_SIZE), data)
 
     # reward_period(index, total_reward_amount, total_cumulative_power_delta)
-    log(concat(concat(method("reward_period(uint64,uint64,uint128)"), itob(index)), data))
+    log(Concat(method("reward_period(uint64,uint64,uint128)"), itob(index), data))
     app_global_put(REWARD_PERIOD_COUNT_KEY, index + 1)
     return
 end
 
-func get_reward_period(index: int) bytes:
+func get_reward_period(index: int) RewardPeriod:
     int box_index = index / REWARD_PERIOD_BOX_ARRAY_LEN
     int array_index = index % REWARD_PERIOD_BOX_ARRAY_LEN
-    bytes box_name = concat(REWARD_PERIOD_BOX_PREFIX, itob(box_index))
-    return box_extract(box_name, (array_index * REWARD_PERIOD_SIZE), REWARD_PERIOD_SIZE)
+    bytes box_name = Concat(REWARD_PERIOD_BOX_PREFIX, itob(box_index))
+    return Cast(box_extract(box_name, (array_index * REWARD_PERIOD_SIZE), REWARD_PERIOD_SIZE), RewardPeriod)
 end
 
 func construct_reward_history(timestamp: int, reward_amount: int) bytes:
-    return concat(itob(timestamp), itob(reward_amount))
+    return Concat(itob(timestamp), itob(reward_amount))
 end
 
 func save_reward_history(data: bytes):
@@ -254,21 +249,21 @@ func save_reward_history(data: bytes):
     assert(len(data) == REWARD_HISTORY_SIZE)
     int box_index = index / REWARD_HISTORY_BOX_ARRAY_LEN
     int array_index = index % REWARD_HISTORY_BOX_ARRAY_LEN
-    bytes box_name = concat(REWARD_HISTORY_BOX_PREFIX, itob(box_index))
+    bytes box_name = Concat(REWARD_HISTORY_BOX_PREFIX, itob(box_index))
     _ = box_create(box_name, REWARD_HISTORY_BOX_SIZE)
     box_replace(box_name, (array_index * REWARD_HISTORY_SIZE), data)
 
     # reward_history(index, timestamp, reward_amount)
-    log(concat(concat(method("reward_history(uint64,uint64,uint64)"), itob(index)), data))
+    log(Concat(method("reward_history(uint64,uint64,uint64)"), itob(index), data))
     app_global_put(REWARD_HISTORY_COUNT_KEY, index + 1)
     return
 end
 
-func get_reward_history(index: int) bytes:
+func get_reward_history(index: int) RewardHistory:
     int box_index = index / REWARD_HISTORY_BOX_ARRAY_LEN
     int array_index = index % REWARD_HISTORY_BOX_ARRAY_LEN
-    bytes box_name = concat(REWARD_HISTORY_BOX_PREFIX, itob(box_index))
-    return box_extract(box_name, (array_index * REWARD_HISTORY_SIZE), REWARD_HISTORY_SIZE)
+    bytes box_name = Concat(REWARD_HISTORY_BOX_PREFIX, itob(box_index))
+    return Cast(box_extract(box_name, (array_index * REWARD_HISTORY_SIZE), REWARD_HISTORY_SIZE), RewardHistory)
 end
 
 func get_reward_amount(timestamp: int, reward_history_index: int) int:
@@ -288,7 +283,7 @@ end
 func check_and_save_claimed_reward(address: bytes, period_index: int):
     int box_index = period_index / (REWARD_CLAIM_SHEET_BOX_SIZE * 8)
     int array_index = period_index % (REWARD_CLAIM_SHEET_BOX_SIZE * 8)
-    bytes box_name = concat(REWARD_CLAIM_SHEET_BOX_PREFIX, concat(address, itob(box_index)))
+    bytes box_name = Concat(REWARD_CLAIM_SHEET_BOX_PREFIX, address, itob(box_index))
 
     bytes sheet
     _ = box_create(box_name, REWARD_CLAIM_SHEET_BOX_SIZE)
