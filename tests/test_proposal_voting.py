@@ -1,5 +1,6 @@
 import unittest.mock
 from datetime import datetime
+from unittest.mock import ANY
 from zoneinfo import ZoneInfo
 
 from algojig import LogicEvalError
@@ -12,14 +13,13 @@ from tinyman.governance.event import decode_logs
 from tinyman.governance.proposal_voting.constants import PROPOSAL_ID_COUNTER_KEY, VOTING_DELAY_KEY, VOTING_DURATION_KEY, PROPOSAL_THRESHOLD_KEY, QUORUM_NUMERATOR_KEY, MANAGER_KEY, PROPOSAL_MANAGER_KEY, PROPOSAL_VOTING_APP_MINIMUM_BALANCE_REQUIREMENT
 from tinyman.governance.proposal_voting.events import proposal_voting_events
 from tinyman.governance.proposal_voting.storage import get_proposal_box_name, Proposal, parse_box_proposal
-from tinyman.governance.proposal_voting.transactions import prepare_create_proposal_transactions, prepare_cast_vote_transactions, prepare_get_proposal_transactions, prepare_has_voted_transactions, prepare_cancel_proposal_transactions, prepare_execute_proposal_transactions
+from tinyman.governance.proposal_voting.transactions import prepare_create_proposal_transactions, prepare_cast_vote_transactions, prepare_get_proposal_transactions, prepare_has_voted_transactions, prepare_cancel_proposal_transactions, prepare_execute_proposal_transactions, prepare_approve_proposal_transactions
 from tinyman.governance.vault.transactions import prepare_create_lock_transactions, prepare_withdraw_transactions, prepare_increase_lock_amount_transactions
 from tinyman.governance.vault.utils import get_start_timestamp_of_week, get_bias, get_slope
 from tinyman.utils import int_to_bytes, TransactionGroup
 
 from tests.common import BaseTestCase, VaultAppMixin, ProposalVotingAppMixin
 from tests.constants import TINY_ASSET_ID, VAULT_APP_ID, PROPOSAL_VOTING_APP_ID, proposal_voting_approval_program, proposal_voting_clear_state_program
-from tests.proposal_voting.utils import get_end_timestamp_of_day
 from tests.utils import parse_box_account_power, get_account_power_index_at
 from tests.vault.utils import get_vault_app_global_state, get_account_state, get_slope_change_at
 
@@ -186,8 +186,9 @@ class ProposalVotingTestCase(VaultAppMixin, ProposalVotingAppMixin, BaseTestCase
         box_data = {
             'index': 0,
             'creation_timestamp': block_timestamp,
-            'voting_start_timestamp': get_end_timestamp_of_day(block_timestamp) + (2 * DAY),
-            'voting_end_timestamp': get_end_timestamp_of_day(block_timestamp) + (2 * DAY) + WEEK,
+            'approval_timestamp': 0,
+            'voting_start_timestamp': 0,
+            'voting_end_timestamp': 0,
             'snapshot_total_voting_power': bias_1 + bias_2,
             'vote_count': 0,
             'is_cancelled': False,
@@ -366,9 +367,41 @@ class ProposalVotingTestCase(VaultAppMixin, ProposalVotingAppMixin, BaseTestCase
         txn_group.sign_with_private_key(user_address, user_sk)
         self.ledger.eval_transactions(txn_group.signed_transactions, block_timestamp=block_timestamp)
 
-        
         proposal_box_name = get_proposal_box_name(proposal_id)
         proposal = parse_box_proposal(self.ledger.boxes[PROPOSAL_VOTING_APP_ID][proposal_box_name])
+        self.assertEqual(proposal.is_approved, False)
+        self.assertEqual(proposal.voting_start_timestamp, 0)
+        self.assertEqual(proposal.voting_end_timestamp, 0)
+
+        # Approve proposal
+        txn_group = prepare_approve_proposal_transactions(
+            proposal_voting_app_id=PROPOSAL_VOTING_APP_ID,
+            sender=self.app_creator_address,
+            proposal_id=proposal_id,
+            suggested_params=self.sp
+        )
+        txn_group.sign_with_private_key(self.app_creator_address, self.app_creator_sk)
+        block = self.ledger.eval_transactions(txn_group.signed_transactions, block_timestamp=block_timestamp)
+
+        # Logs
+        logs = block[b'txns'][0][b'dt'][b'lg']
+        events = decode_logs(logs, events=proposal_voting_events)
+        self.assertEqual(len(events), 2)
+        self.assertEqual(events[0]["event_name"], "proposal")
+        self.assertDictEqual(
+            events[1], 
+            {
+                "event_name": "approve_proposal",
+                "user_address": self.app_creator_address,
+                "proposal_id": list(proposal_id),
+            }
+        )
+    
+        # Box
+        proposal = parse_box_proposal(self.ledger.boxes[PROPOSAL_VOTING_APP_ID][proposal_box_name])
+        self.assertEqual(proposal.is_approved, True)
+        self.assertNotEqual(proposal.voting_start_timestamp, 0)
+        self.assertNotEqual(proposal.voting_end_timestamp, 0)
 
         # Cast Vote
         proposal_creation_timestamp = proposal.creation_timestamp
@@ -388,7 +421,23 @@ class ProposalVotingTestCase(VaultAppMixin, ProposalVotingAppMixin, BaseTestCase
             suggested_params=self.sp,
         )
         txn_group.sign_with_private_key(user_address, user_sk)
-        self.ledger.eval_transactions(txn_group.signed_transactions, block_timestamp=block_timestamp)
+        block = self.ledger.eval_transactions(txn_group.signed_transactions, block_timestamp=block_timestamp)
+        
+        # Logs
+        logs = block[b'txns'][1][b'dt'][b'lg']
+        events = decode_logs(logs, events=proposal_voting_events)
+        self.assertEqual(len(events), 2)
+        self.assertEqual(events[0]["event_name"], "proposal")
+        self.assertDictEqual(
+            events[1], 
+            {
+                "event_name": "cast_vote",
+                "user_address": user_address,
+                "proposal_id": list(proposal_id),
+                "vote": vote,
+                "voting_power": ANY
+            }
+        )
 
         # User 2
         vote = 0
@@ -469,8 +518,16 @@ class ProposalVotingTestCase(VaultAppMixin, ProposalVotingAppMixin, BaseTestCase
         )
         txn_group.sign_with_private_key(user_address, user_sk)
         self.ledger.eval_transactions(txn_group.signed_transactions, block_timestamp=block_timestamp)
-
-        proposal_creation_timestamp = block_timestamp
+        
+        # Approve proposal
+        txn_group = prepare_approve_proposal_transactions(
+            proposal_voting_app_id=PROPOSAL_VOTING_APP_ID,
+            sender=self.app_creator_address,
+            proposal_id=proposal_id,
+            suggested_params=self.sp
+        )
+        txn_group.sign_with_private_key(self.app_creator_address, self.app_creator_sk)
+        self.ledger.eval_transactions(txn_group.signed_transactions, block_timestamp=block_timestamp)
 
         # Withdraw
         block_timestamp = lock_end_timestamp + WEEK
@@ -498,7 +555,7 @@ class ProposalVotingTestCase(VaultAppMixin, ProposalVotingAppMixin, BaseTestCase
             proposal_id=proposal_id,
             proposal=proposal,
             vote=vote,
-            account_power_index=get_account_power_index_at(self.ledger, VAULT_APP_ID, user_address, proposal_creation_timestamp),
+            account_power_index=get_account_power_index_at(self.ledger, VAULT_APP_ID, user_address, proposal.creation_timestamp),
             create_attendance_box=True,
             suggested_params=self.sp,
         )
@@ -554,7 +611,15 @@ class ProposalVotingTestCase(VaultAppMixin, ProposalVotingAppMixin, BaseTestCase
         txn_group.sign_with_private_key(user_address, user_sk)
         self.ledger.eval_transactions(txn_group.signed_transactions, block_timestamp=block_timestamp)
 
-        proposal_creation_timestamp = block_timestamp
+        # Approve proposal
+        txn_group = prepare_approve_proposal_transactions(
+            proposal_voting_app_id=PROPOSAL_VOTING_APP_ID,
+            sender=self.app_creator_address,
+            proposal_id=proposal_id,
+            suggested_params=self.sp
+        )
+        txn_group.sign_with_private_key(self.app_creator_address, self.app_creator_sk)
+        self.ledger.eval_transactions(txn_group.signed_transactions, block_timestamp=block_timestamp)
 
         # Increase
         amount = 50_000_000
@@ -591,7 +656,7 @@ class ProposalVotingTestCase(VaultAppMixin, ProposalVotingAppMixin, BaseTestCase
             proposal_id=proposal_id,
             proposal=proposal,
             vote=vote,
-            account_power_index=get_account_power_index_at(self.ledger, VAULT_APP_ID, user_address, proposal_creation_timestamp),
+            account_power_index=get_account_power_index_at(self.ledger, VAULT_APP_ID, user_address, proposal.creation_timestamp),
             create_attendance_box=True,
             suggested_params=self.sp,
         )
@@ -774,7 +839,15 @@ class ProposalVotingTestCase(VaultAppMixin, ProposalVotingAppMixin, BaseTestCase
         txn_group.sign_with_private_key(user_address, user_sk)
         self.ledger.eval_transactions(txn_group.signed_transactions, block_timestamp=block_timestamp)
 
-        proposal_creation_timestamp = block_timestamp
+        # Approve proposal
+        txn_group = prepare_approve_proposal_transactions(
+            proposal_voting_app_id=PROPOSAL_VOTING_APP_ID,
+            sender=self.app_creator_address,
+            proposal_id=proposal_id,
+            suggested_params=self.sp
+        )
+        txn_group.sign_with_private_key(self.app_creator_address, self.app_creator_sk)
+        self.ledger.eval_transactions(txn_group.signed_transactions, block_timestamp=block_timestamp)
 
         # Cancel proposal
         proposal_box_name = get_proposal_box_name(proposal_id)
@@ -806,7 +879,7 @@ class ProposalVotingTestCase(VaultAppMixin, ProposalVotingAppMixin, BaseTestCase
             proposal_id=proposal_id,
             proposal=proposal,
             vote=vote,
-            account_power_index=get_account_power_index_at(self.ledger, VAULT_APP_ID, user_address, proposal_creation_timestamp),
+            account_power_index=get_account_power_index_at(self.ledger, VAULT_APP_ID, user_address, proposal.creation_timestamp),
             create_attendance_box=True,
             suggested_params=self.sp,
         )
@@ -861,6 +934,16 @@ class ProposalVotingTestCase(VaultAppMixin, ProposalVotingAppMixin, BaseTestCase
             suggested_params=self.sp
         )
         txn_group.sign_with_private_key(user_address, user_sk)
+        self.ledger.eval_transactions(txn_group.signed_transactions, block_timestamp=block_timestamp)
+        
+        # Approve proposal
+        txn_group = prepare_approve_proposal_transactions(
+            proposal_voting_app_id=PROPOSAL_VOTING_APP_ID,
+            sender=self.app_creator_address,
+            proposal_id=proposal_id,
+            suggested_params=self.sp
+        )
+        txn_group.sign_with_private_key(self.app_creator_address, self.app_creator_sk)
         self.ledger.eval_transactions(txn_group.signed_transactions, block_timestamp=block_timestamp)
 
         proposal_box_name = get_proposal_box_name(proposal_id)
