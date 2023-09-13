@@ -1,6 +1,6 @@
 from tinyman.governance.rewards.storage import RewardsAppGlobalState
 
-from common.constants import REWARDS_APP_ID
+from tests.constants import REWARDS_APP_ID
 
 
 def get_rewards_app_global_state(ledger):

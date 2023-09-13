@@ -10,9 +10,9 @@ from algosdk.account import generate_account
 from algosdk.encoding import decode_address
 from algosdk.logic import get_application_address
 from algosdk.transaction import SuggestedParams
+from tinyman.governance.constants import TINY_ASSET_ID_KEY
 from tinyman.governance.constants import WEEK, DAY
 from tinyman.governance.event import decode_logs
-from tinyman.governance.constants import TINY_ASSET_ID_KEY
 from tinyman.governance.vault.constants import TOTAL_LOCKED_AMOUNT_KEY, TOTAL_POWER_COUNT_KEY, TOTAL_POWERS, SLOPE_CHANGES, TWO_TO_THE_64, MAX_LOCK_TIME, LAST_TOTAL_POWER_TIMESTAMP_KEY
 from tinyman.governance.vault.events import vault_events
 from tinyman.governance.vault.storage import parse_box_total_power, parse_box_account_state, parse_box_account_power, parse_box_slope_change, TotalPower, AccountState, AccountPower, SlopeChange, get_account_state_box_name
@@ -20,10 +20,9 @@ from tinyman.governance.vault.transactions import prepare_init_transactions, pre
 from tinyman.governance.vault.utils import get_start_timestamp_of_week, get_slope, get_bias
 from tinyman.utils import int_to_bytes, bytes_to_int, TransactionGroup
 
-from common.constants import vault_approval_program, vault_clear_state_program, TINY_ASSET_ID, VAULT_APP_ID
-from common.utils import sign_txns
 from tests.common import BaseTestCase, VaultAppMixin
-from vault.utils import get_vault_app_global_state, get_account_state, get_slope_change_at, get_all_total_powers, get_account_powers
+from tests.constants import vault_approval_program, vault_clear_state_program, TINY_ASSET_ID, VAULT_APP_ID
+from tests.vault.utils import get_vault_app_global_state, get_account_state, get_slope_change_at, get_all_total_powers, get_account_powers
 
 
 class VaultTestCase(VaultAppMixin, BaseTestCase):
@@ -48,8 +47,8 @@ class VaultTestCase(VaultAppMixin, BaseTestCase):
     def test_create_and_init_app(self):
         block_datetime = datetime(year=2022, month=3, day=1, tzinfo=ZoneInfo("UTC"))
         block_timestamp = int(block_datetime.timestamp())
-
-        txn_group = [
+        
+        txn_group = TransactionGroup([
             transaction.ApplicationCreateTxn(
                 sender=self.app_creator_address,
                 sp=self.sp,
@@ -58,15 +57,12 @@ class VaultTestCase(VaultAppMixin, BaseTestCase):
                 clear_program=vault_clear_state_program.bytecode,
                 global_schema=transaction.StateSchema(num_uints=5, num_byte_slices=0),
                 local_schema=transaction.StateSchema(num_uints=0, num_byte_slices=0),
-                extra_pages=2,
+                extra_pages=3,
                 app_args=[TINY_ASSET_ID],
             )
-        ]
-
-        transaction.assign_group_id(txn_group)
-        signed_txns = sign_txns(txn_group, self.app_creator_sk)
-
-        block = self.ledger.eval_transactions(signed_txns, block_timestamp=int(block_datetime.timestamp()))
+        ])
+        txn_group.sign_with_private_key(self.app_creator_address, self.app_creator_sk)
+        block = self.ledger.eval_transactions(txn_group.signed_transactions, block_timestamp=int(block_datetime.timestamp()))
         app_id = block[b"txns"][0][b"apid"]
 
         self.assertDictEqual(

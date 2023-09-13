@@ -1,7 +1,7 @@
 from tinyman.governance.staking_voting.constants import STAKING_ACCOUNT_ATTENDANCE_SHEET_BOX_SIZE
 from tinyman.governance.staking_voting.storage import StakingVotingAppGlobalState, get_staking_attendance_sheet_box_name, get_staking_vote_box_name
 
-from common.constants import STAKING_VOTING_APP_ID
+from tests.constants import STAKING_VOTING_APP_ID
 
 
 def get_staking_voting_app_global_state(ledger):

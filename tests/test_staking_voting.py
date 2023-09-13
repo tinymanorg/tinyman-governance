@@ -18,11 +18,11 @@ from tinyman.governance.vault.transactions import prepare_create_lock_transactio
 from tinyman.governance.vault.utils import get_slope, get_bias, get_start_timestamp_of_week
 from tinyman.utils import int_to_bytes, bytes_to_int
 
-from common.constants import TINY_ASSET_ID, STAKING_VOTING_APP_ID, VAULT_APP_ID
-from common.utils import get_account_power_index_at
-from staking_voting.utils import is_account_attendance_box_exists, get_new_asset_count
 from tests.common import BaseTestCase, VaultAppMixin, StakingVotingAppMixin
-from vault.utils import get_vault_app_global_state, get_account_state, get_slope_change_at
+from tests.constants import TINY_ASSET_ID, STAKING_VOTING_APP_ID, VAULT_APP_ID
+from tests.staking_voting.utils import is_account_attendance_box_exists, get_new_asset_count
+from tests.utils import get_account_power_index_at
+from tests.vault.utils import get_vault_app_global_state, get_account_state, get_slope_change_at
 
 
 class StakingVotingTestCase(VaultAppMixin, StakingVotingAppMixin, BaseTestCase):
@@ -31,7 +31,7 @@ class StakingVotingTestCase(VaultAppMixin, StakingVotingAppMixin, BaseTestCase):
     def setUpClass(cls) -> None:
         super().setUpClass()
         cls.app_creator_sk, cls.app_creator_address = generate_account()
-        cls.vault_app_creation_timestamp = int(datetime(year=2022, month=3, day=1, tzinfo=ZoneInfo("UTC")).timestamp())
+        cls.vault_app_creation_timestamp = int(datetime(year=2022, month=3, day=1, hour=15, minute=7, tzinfo=ZoneInfo("UTC")).timestamp())
 
     def setUp(self):
         super().setUp()
@@ -65,19 +65,23 @@ class StakingVotingTestCase(VaultAppMixin, StakingVotingAppMixin, BaseTestCase):
         block = self.ledger.eval_transactions(txn_group.signed_transactions, block_timestamp=block_timestamp)
         logs = block[b'txns'][1][b'dt'][b'lg']
         events = decode_logs(logs, events=staking_voting_events)
+        
+        proposal_box_data = {
+            'index': 0,
+            'creation_timestamp': 1647356820,
+            'voting_start_timestamp': 1647475200,
+            'voting_end_timestamp': 1648080000,
+            'voting_power': 0,
+            'vote_count': 0,
+            'is_cancelled': False
+        }
         self.assertEqual(len(events), 2)
         self.assertDictEqual(
             events[0],
             {
                 'event_name': 'proposal',
-                'proposal_id': [123, 112, 120, 239, 120, 9, 193, 165, 26, 121, 130, 223, 101, 75, 166, 98, 53, 148, 168, 94, 247, 80, 161, 37, 133, 111, 139, 4, 78, 1, 41, 162],
-                'index': 0,
-                'creation_timestamp': 1647302400,
-                'voting_start_timestamp': 1647388800,
-                'voting_end_timestamp': 1647993600,
-                'voting_power': 0,
-                'vote_count': 0,
-                'is_cancelled': False
+                'proposal_id': list(proposal_id),
+                **proposal_box_data
             }
         )
         self.assertDictEqual(
@@ -85,23 +89,16 @@ class StakingVotingTestCase(VaultAppMixin, StakingVotingAppMixin, BaseTestCase):
             {
                 'event_name': 'create_proposal',
                 'user_address': self.app_creator_address,
-                'proposal_id': [123, 112, 120, 239, 120, 9, 193, 165, 26, 121, 130, 223, 101, 75, 166, 98, 53, 148, 168, 94, 247, 80, 161, 37, 133, 111, 139, 4, 78, 1, 41, 162]
+                'proposal_id': list(proposal_id)
             }
         )
         self.assertEqual(
             parse_box_staking_voting_proposal(self.ledger.boxes[STAKING_VOTING_APP_ID][get_staking_proposal_box_name(proposal_id)]),
-            StakingVotingProposal(
-                index= 0,
-                creation_timestamp=1647302400,
-                voting_start_timestamp=1647388800,
-                voting_end_timestamp=1647993600,
-                voting_power=0,
-                vote_count=0,
-                is_cancelled=False
-            )
+            StakingVotingProposal(**proposal_box_data)
         )
 
         block_timestamp += 10 * DAY
+        
         # Create another proposal
         metadata["name"] = "Proposal 2"
         proposal_id = hash_metadata(metadata)
@@ -113,6 +110,16 @@ class StakingVotingTestCase(VaultAppMixin, StakingVotingAppMixin, BaseTestCase):
         )
         txn_group.sign_with_private_key(address=self.app_creator_address, private_key=self.app_creator_sk)
         block = self.ledger.eval_transactions(txn_group.signed_transactions, block_timestamp=block_timestamp)
+        
+        proposal_box_data = {
+            'index': 1,
+            'creation_timestamp': 1648220820,
+            'voting_start_timestamp': 1648339200,
+            'voting_end_timestamp': 1648944000,
+            'voting_power': 0,
+            'vote_count': 0,
+            'is_cancelled': False
+        }
         logs = block[b'txns'][1][b'dt'][b'lg']
         events = decode_logs(logs, events=staking_voting_events)
         self.assertEqual(len(events), 2)
@@ -120,14 +127,8 @@ class StakingVotingTestCase(VaultAppMixin, StakingVotingAppMixin, BaseTestCase):
             events[0],
             {
                 'event_name': 'proposal',
-                'proposal_id': [253, 218, 88, 117, 106, 182, 231, 142, 113, 18, 170, 213, 83, 211, 181, 75, 218, 68, 228, 28, 102, 78, 219, 66, 188, 37, 172, 44, 54, 139, 75, 39],
-                'index': 1,
-                'creation_timestamp': 1648166400,
-                'voting_start_timestamp': 1648252800,
-                'voting_end_timestamp': 1648857600,
-                'voting_power': 0,
-                'vote_count': 0,
-                'is_cancelled': False
+                'proposal_id': list(proposal_id),
+                **proposal_box_data
             }
         )
         self.assertDictEqual(
@@ -135,7 +136,7 @@ class StakingVotingTestCase(VaultAppMixin, StakingVotingAppMixin, BaseTestCase):
             {
                 'event_name': 'create_proposal',
                 'user_address': self.app_creator_address,
-                'proposal_id': [253, 218, 88, 117, 106, 182, 231, 142, 113, 18, 170, 213, 83, 211, 181, 75, 218, 68, 228, 28, 102, 78, 219, 66, 188, 37, 172, 44, 54, 139, 75, 39]
+                'proposal_id': list(proposal_id)
             }
         )
 
@@ -229,15 +230,14 @@ class StakingVotingTestCase(VaultAppMixin, StakingVotingAppMixin, BaseTestCase):
         proposal_creation_timestamp = block_timestamp
 
         # Cast Vote
-        block_timestamp = proposal_creation_timestamp + DAY
+        proposal_box_name = get_staking_proposal_box_name(proposal_id)
+        proposal = parse_box_staking_voting_proposal(self.ledger.boxes[STAKING_VOTING_APP_ID][proposal_box_name])
+        block_timestamp = proposal.voting_start_timestamp
         # votes = [10, 15, 20, 25, 30]
         # asset_ids = [1, 2, 3, 4, 50]
         # votes = [10, 10, 10, 10, 10, 10, 10, 10, 10, 5, 5]
         votes = [10] * 5 + [5] * 9 + [3, 2]
         asset_ids = list(range(1, len(votes) + 1))
-
-        proposal_box_name = get_staking_proposal_box_name(proposal_id)
-        proposal = parse_box_staking_voting_proposal(self.ledger.boxes[STAKING_VOTING_APP_ID][proposal_box_name])
         txn_group = prepare_cast_vote_transactions(
             staking_voting_app_id=STAKING_VOTING_APP_ID,
             vault_app_id=VAULT_APP_ID,
@@ -369,12 +369,11 @@ class StakingVotingTestCase(VaultAppMixin, StakingVotingAppMixin, BaseTestCase):
         self.ledger.eval_transactions(txn_group.signed_transactions, block_timestamp=block_timestamp)
 
         # Cast Vote
-        block_timestamp = proposal_creation_timestamp + DAY
-        votes = [10, 15, 20, 25, 30]
-        asset_ids = list(range(1, len(votes) + 1))
-
         proposal_box_name = get_staking_proposal_box_name(proposal_id)
         proposal = parse_box_staking_voting_proposal(self.ledger.boxes[STAKING_VOTING_APP_ID][proposal_box_name])
+        block_timestamp = proposal.voting_start_timestamp
+        votes = [10, 15, 20, 25, 30]
+        asset_ids = list(range(1, len(votes) + 1))
         txn_group = prepare_cast_vote_transactions(
             staking_voting_app_id=STAKING_VOTING_APP_ID,
             vault_app_id=VAULT_APP_ID,
@@ -484,7 +483,7 @@ class StakingVotingTestCase(VaultAppMixin, StakingVotingAppMixin, BaseTestCase):
         print()
 
         # Try to cast Vote
-        block_timestamp = proposal_creation_timestamp + DAY
+        block_timestamp = proposal.voting_start_timestamp + 1
         votes = [10, 15, 20, 25, 30]
         asset_ids = list(range(1, len(votes) + 1))
 
