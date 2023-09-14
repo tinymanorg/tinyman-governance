@@ -3,7 +3,7 @@ import math
 from tinyman.governance.vault.constants import TOTAL_POWER_BOX_ARRAY_LEN, ACCOUNT_POWER_BOX_ARRAY_LEN
 from tinyman.governance.vault.storage import VaultAppGlobalState, parse_box_account_state, get_account_state_box_name, get_slope_change_box_name, parse_box_slope_change, TotalPower, get_total_power_box_name, parse_box_total_power, get_account_power_box_name, parse_box_account_power
 
-from common.constants import VAULT_APP_ID
+from tests.constants import VAULT_APP_ID
 
 
 def get_vault_app_global_state(ledger):

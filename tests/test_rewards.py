@@ -13,19 +13,19 @@ from tinyman.governance.constants import WEEK
 from tinyman.governance.event import decode_logs
 from tinyman.governance.rewards.constants import MANAGER_KEY, REWARD_HISTORY_COUNT_KEY, REWARD_PERIOD_COUNT_KEY, FIRST_PERIOD_TIMESTAMP, REWARDS_MANAGER_KEY
 from tinyman.governance.rewards.events import rewards_events
-from tinyman.governance.rewards.storage import get_reward_history_box_name, RewardClaimSheet, get_account_reward_claim_sheet_box_name
+from tinyman.governance.rewards.storage import get_reward_history_box_name, RewardClaimSheet, get_account_reward_claim_sheet_box_name, parse_box_reward_history, RewardHistory
 from tinyman.governance.rewards.transactions import prepare_claim_reward_transactions, prepare_init_transactions, prepare_create_reward_period_transactions, prepare_set_reward_amount_transactions
 from tinyman.governance.vault.constants import TOTAL_LOCKED_AMOUNT_KEY
 from tinyman.governance.vault.storage import get_power_index_at
 from tinyman.governance.vault.transactions import prepare_create_lock_transactions, prepare_increase_lock_amount_transactions
 from tinyman.governance.vault.utils import get_start_timestamp_of_week
-from tinyman.utils import bytes_to_int
+from tinyman.utils import TransactionGroup
 
-from common.constants import TINY_ASSET_ID, rewards_approval_program, rewards_clear_state_program, VAULT_APP_ID, REWARDS_APP_ID
-from common.utils import sign_txns, parse_box_reward_history, get_total_power_index_at, get_reward_history_index_at
-from rewards.utils import get_rewards_app_global_state
 from tests.common import BaseTestCase, VaultAppMixin, RewardsAppMixin
-from vault.utils import get_vault_app_global_state, get_account_state, get_slope_change_at, get_account_powers
+from tests.constants import TINY_ASSET_ID, rewards_approval_program, rewards_clear_state_program, VAULT_APP_ID, REWARDS_APP_ID
+from tests.rewards.utils import get_rewards_app_global_state
+from tests.utils import get_total_power_index_at, get_reward_history_index_at
+from tests.vault.utils import get_vault_app_global_state, get_account_state, get_slope_change_at, get_account_powers
 
 
 class RewardsTestCase(VaultAppMixin, RewardsAppMixin, BaseTestCase):
@@ -50,7 +50,7 @@ class RewardsTestCase(VaultAppMixin, RewardsAppMixin, BaseTestCase):
         block_datetime = datetime(year=2022, month=3, day=2, tzinfo=ZoneInfo("UTC"))
         block_timestamp = int(block_datetime.timestamp())
 
-        txn_group = [
+        txn_group = TransactionGroup([
             transaction.ApplicationCreateTxn(
                 sender=self.app_creator_address,
                 sp=self.sp,
@@ -59,15 +59,12 @@ class RewardsTestCase(VaultAppMixin, RewardsAppMixin, BaseTestCase):
                 clear_program=rewards_clear_state_program.bytecode,
                 global_schema=transaction.StateSchema(num_uints=5, num_byte_slices=2),
                 local_schema=transaction.StateSchema(num_uints=0, num_byte_slices=0),
-                extra_pages=1,
+                extra_pages=3,
                 app_args=[TINY_ASSET_ID, VAULT_APP_ID],
             )
-        ]
-
-        transaction.assign_group_id(txn_group)
-        signed_txns = sign_txns(txn_group, self.app_creator_sk)
-
-        block = self.ledger.eval_transactions(signed_txns, block_timestamp=block_timestamp)
+        ])
+        txn_group.sign_with_private_key(self.app_creator_address, self.app_creator_sk)
+        block = self.ledger.eval_transactions(txn_group.signed_transactions, block_timestamp=block_timestamp)
         app_id = block[b"txns"][0][b"apid"]
 
         self.assertDictEqual(
@@ -112,12 +109,12 @@ class RewardsTestCase(VaultAppMixin, RewardsAppMixin, BaseTestCase):
         self.assertEqual(len(reward_histories), 1)
         reward_history = reward_histories[0]
         next_week_timestamp = get_start_timestamp_of_week(block_timestamp) + WEEK
-        self.assertDictEqual(
+        self.assertEqual(
             reward_history,
-            {
-                'timestamp': next_week_timestamp,
-                'reward_amount': reward_amount
-            }
+            RewardHistory(
+                timestamp=next_week_timestamp,
+                reward_amount=reward_amount
+            )
         )
 
     def test_claim_rewards(self):
@@ -204,7 +201,7 @@ class RewardsTestCase(VaultAppMixin, RewardsAppMixin, BaseTestCase):
                         app_call_note=None,
                     )
                     txn_group.sign_with_private_key(self.user_address, self.user_sk)
-                    block = self.ledger.eval_transactions(txn_group.signed_transactions, block_timestamp=block_timestamp)
+                    self.ledger.eval_transactions(txn_group.signed_transactions, block_timestamp=block_timestamp)
 
                 if period_index % 4 == 0:
                     txn_group = prepare_set_reward_amount_transactions(
@@ -236,13 +233,14 @@ class RewardsTestCase(VaultAppMixin, RewardsAppMixin, BaseTestCase):
         txn_group.sign_with_private_key(self.user_address, self.user_sk)
         block = self.ledger.eval_transactions(txn_group.signed_transactions, block_timestamp=block_timestamp)
         
-        app_calls = [t for t in block[b'txns'] if t[b'txn'][b'type'] == b'appl']
-        logs = app_calls[-1][b'dt'][b'lg']
-
-        print("OPCODE", bytes_to_int(logs[-1]))
-        events = decode_logs(logs, events=rewards_events)
-        for e in events:
-            print(e)
+        # app_calls = [t for t in block[b'txns'] if t[b'txn'][b'type'] == b'appl']
+        # logs = app_calls[-1][b'dt'][b'lg']
+        # 
+        # print("OPCODE", bytes_to_int(logs[-1]))
+        # print(app_calls)
+        # events = decode_logs(logs, events=rewards_events)
+        # for e in events:
+        #     print(e)
 
 
 def get_reward_period_indexes(account_powers, first_period_start_timestamp):
