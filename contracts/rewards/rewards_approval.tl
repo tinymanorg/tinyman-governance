@@ -83,6 +83,7 @@ block main:
         "set_reward_amount": set_reward_amount
         "set_manager": set_manager
         "set_rewards_manager": set_rewards_manager
+        "update_setting": update_setting
         "init": init
     end
 
@@ -208,6 +209,26 @@ block main:
 
         app_global_put(REWARDS_MANAGER_KEY, Txn.ApplicationArgs[1])
         log(Concat(method("set_rewards_manager(address)"), Txn.ApplicationArgs[1]))
+        exit(1)
+    end
+
+    block update_setting:
+        bytes user_address = Txn.Sender
+        assert(user_address == app_global_get(REWARDS_MANAGER_KEY))
+
+        bytes key = Txn.ApplicationArgs[1]
+        bytes value = Txn.ApplicationArgs[2]
+        int type = btoi(Txn.ApplicationArgs[3])
+
+        if !type:
+            app_global_put(key, value)
+        else:
+            app_global_put(key, btoi(value))
+        end
+
+        bytes log_key = Concat(extract(6, 2, itob(len(Txn.ApplicationArgs[1]))), Txn.ApplicationArgs[1])
+        bytes log_value = Concat(extract(6, 2, itob(len(Txn.ApplicationArgs[2]))), Txn.ApplicationArgs[2])
+        log(Concat(method("update_setting(byte[],byte[],uint64)"), log_key, log_value, itob(type)))
         exit(1)
     end
 end
