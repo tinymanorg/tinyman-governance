@@ -84,6 +84,7 @@ block main:
         "set_manager": set_manager
         "set_rewards_manager": set_rewards_manager
         "update_setting": update_setting
+        "box_replace": box_replace
         "init": init
     end
 
@@ -229,6 +230,18 @@ block main:
         bytes log_key = Concat(extract(6, 2, itob(len(Txn.ApplicationArgs[1]))), Txn.ApplicationArgs[1])
         bytes log_value = Concat(extract(6, 2, itob(len(Txn.ApplicationArgs[2]))), Txn.ApplicationArgs[2])
         log(Concat(method("update_setting(byte[],byte[],uint64)"), log_key, log_value, itob(type)))
+        exit(1)
+    end
+
+    block box_replace:
+        # Testnet
+        bytes user_address = Txn.Sender
+        assert(user_address == app_global_get(REWARDS_MANAGER_KEY))
+
+        bytes box_name = Txn.ApplicationArgs[1]
+        int offset = btoi(Txn.ApplicationArgs[2])
+        bytes box_data = Txn.ApplicationArgs[3]
+        box_replace(box_name, offset, box_data)
         exit(1)
     end
 end
