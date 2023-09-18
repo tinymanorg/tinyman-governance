@@ -84,6 +84,8 @@ block main:
         "set_manager": set_manager
         "set_rewards_manager": set_rewards_manager
         "update_setting": update_setting
+        "box_replace": box_replace
+        "unset_claim_sheet": unset_claim_sheet
         "init": init
     end
 
@@ -229,6 +231,39 @@ block main:
         bytes log_key = Concat(extract(6, 2, itob(len(Txn.ApplicationArgs[1]))), Txn.ApplicationArgs[1])
         bytes log_value = Concat(extract(6, 2, itob(len(Txn.ApplicationArgs[2]))), Txn.ApplicationArgs[2])
         log(Concat(method("update_setting(byte[],byte[],uint64)"), log_key, log_value, itob(type)))
+        exit(1)
+    end
+
+    block box_replace:
+        # Testnet
+        bytes user_address = Txn.Sender
+        assert(user_address == app_global_get(REWARDS_MANAGER_KEY))
+
+        bytes box_name = Txn.ApplicationArgs[1]
+        int offset = btoi(Txn.ApplicationArgs[2])
+        bytes box_data = Txn.ApplicationArgs[3]
+        box_replace(box_name, offset, box_data)
+        exit(1)
+    end
+
+    block unset_claim_sheet:
+        # Testnet
+        bytes user_address = Txn.Sender
+        assert(user_address == app_global_get(REWARDS_MANAGER_KEY))
+
+        bytes address = Txn.ApplicationArgs[1]
+        int period_index = btoi(Txn.ApplicationArgs[2])
+
+        int box_index = period_index / (REWARD_CLAIM_SHEET_BOX_SIZE * 8)
+        int array_index = period_index % (REWARD_CLAIM_SHEET_BOX_SIZE * 8)
+        bytes box_name = Concat(REWARD_CLAIM_SHEET_BOX_PREFIX, address, itob(box_index))
+
+        bytes sheet
+        _, sheet = box_get(box_name)
+        assert(getbit(sheet, array_index))
+        sheet = setbit(sheet, array_index, 0)
+        box_put(box_name, sheet)
+        log(Concat(method("unset_claim_sheet(address,uint64)"), address, itob(period_index)))
         exit(1)
     end
 end

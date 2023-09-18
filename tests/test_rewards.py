@@ -8,6 +8,7 @@ from algosdk import transaction
 from algosdk.account import generate_account
 from algosdk.encoding import decode_address
 from algosdk.logic import get_application_address
+from algosdk.transaction import ApplicationCallTxn, OnComplete
 from tinyman.governance.constants import TINY_ASSET_ID_KEY, VAULT_APP_ID_KEY
 from tinyman.governance.constants import WEEK
 from tinyman.governance.event import decode_logs
@@ -162,7 +163,7 @@ class RewardsTestCase(VaultAppMixin, RewardsAppMixin, BaseTestCase):
         print("app_creator_address", self.app_creator_address)
         print("rewards_app", get_application_address(REWARDS_APP_ID))
         print("vault_app", get_application_address(VAULT_APP_ID))
-        for period_index in range(120):
+        for period_index in range(5):
             print()
             print(period_index)
 
@@ -216,7 +217,7 @@ class RewardsTestCase(VaultAppMixin, RewardsAppMixin, BaseTestCase):
 
         account_powers = get_account_powers(self.ledger, self.user_address)        
         period_index_start = 0
-        period_count = 104
+        period_count = 3
         account_power_indexes = [get_power_index_at(account_powers, first_period_start_timestamp + (WEEK * (period_index_start + i))) or 0 for i in range(period_count + 1)]
 
         txn_group = prepare_claim_reward_transactions(
@@ -232,7 +233,32 @@ class RewardsTestCase(VaultAppMixin, RewardsAppMixin, BaseTestCase):
         )
         txn_group.sign_with_private_key(self.user_address, self.user_sk)
         block = self.ledger.eval_transactions(txn_group.signed_transactions, block_timestamp=block_timestamp)
+
+        box_name = get_account_reward_claim_sheet_box_name(address=self.user_address, box_index=0)
+        raw_box = self.ledger.boxes[REWARDS_APP_ID][box_name]
+        claim_sheet = RewardClaimSheet(value=raw_box)
+        print(claim_sheet.claim_sheet[:10])
+
+        txn_group = TransactionGroup(
+            [
+                ApplicationCallTxn(
+                    sender=self.app_creator_address,
+                    index=REWARDS_APP_ID,
+                    sp=self.sp,
+                    on_complete=OnComplete.NoOpOC,
+                    app_args=["unset_claim_sheet", decode_address(self.user_address), 0],
+                    boxes=[(REWARDS_APP_ID, box_name)]
+                )
+            ]
+        )
+        txn_group.sign_with_private_key(self.app_creator_address, self.app_creator_sk)
+        block = self.ledger.eval_transactions(txn_group.signed_transactions, block_timestamp=block_timestamp)
         
+        box_name = get_account_reward_claim_sheet_box_name(address=self.user_address, box_index=0)
+        raw_box = self.ledger.boxes[REWARDS_APP_ID][box_name]
+        claim_sheet = RewardClaimSheet(value=raw_box)
+        print(claim_sheet.claim_sheet[:10])
+
         # app_calls = [t for t in block[b'txns'] if t[b'txn'][b'type'] == b'appl']
         # logs = app_calls[-1][b'dt'][b'lg']
         # 
