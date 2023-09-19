@@ -12,11 +12,12 @@ from tinyman.governance.staking_voting.constants import STAKING_VOTING_APP_MINIM
 from tinyman.governance.staking_voting.events import staking_voting_events
 from tinyman.governance.staking_voting.storage import StakingVotingProposal, get_staking_proposal_box_name, parse_box_staking_voting_proposal, get_staking_vote_box_name
 from tinyman.governance.staking_voting.transactions import prepare_create_staking_proposal_transactions, prepare_cancel_staking_proposal_transactions, prepare_set_manager_transactions, prepare_set_proposal_manager_transactions, prepare_cast_vote_transactions
-from tinyman.governance.utils import hash_metadata
+from tinyman.governance.utils import generate_cid_from_proposal_metadata
 from tinyman.governance.vault.storage import parse_box_account_power
 from tinyman.governance.vault.transactions import prepare_create_lock_transactions, prepare_increase_lock_amount_transactions
 from tinyman.governance.vault.utils import get_slope, get_bias, get_start_timestamp_of_week
 from tinyman.utils import int_to_bytes, bytes_to_int
+from tinyman.governance.staking_voting.transactions import generate_staking_proposal_metadata
 
 from tests.common import BaseTestCase, VaultAppMixin, StakingVotingAppMixin
 from tests.constants import TINY_ASSET_ID, STAKING_VOTING_APP_ID, VAULT_APP_ID
@@ -54,7 +55,7 @@ class StakingVotingTestCase(VaultAppMixin, StakingVotingAppMixin, BaseTestCase):
             "start_timestamp": int(block_timestamp),
             "end_timestamp":int(block_timestamp),
         }
-        proposal_id = hash_metadata(metadata)
+        proposal_id = generate_cid_from_proposal_metadata(metadata)
         txn_group = prepare_create_staking_proposal_transactions(
             staking_voting_app_id=STAKING_VOTING_APP_ID,
             sender=self.app_creator_address,
@@ -80,7 +81,7 @@ class StakingVotingTestCase(VaultAppMixin, StakingVotingAppMixin, BaseTestCase):
             events[0],
             {
                 'event_name': 'proposal',
-                'proposal_id': list(proposal_id),
+                'proposal_id': list(proposal_id.encode()),
                 **proposal_box_data
             }
         )
@@ -89,7 +90,7 @@ class StakingVotingTestCase(VaultAppMixin, StakingVotingAppMixin, BaseTestCase):
             {
                 'event_name': 'create_proposal',
                 'user_address': self.app_creator_address,
-                'proposal_id': list(proposal_id)
+                'proposal_id': list(proposal_id.encode())
             }
         )
         self.assertEqual(
@@ -101,7 +102,7 @@ class StakingVotingTestCase(VaultAppMixin, StakingVotingAppMixin, BaseTestCase):
         
         # Create another proposal
         metadata["name"] = "Proposal 2"
-        proposal_id = hash_metadata(metadata)
+        proposal_id = generate_cid_from_proposal_metadata(metadata)
         txn_group = prepare_create_staking_proposal_transactions(
             staking_voting_app_id=STAKING_VOTING_APP_ID,
             sender=self.app_creator_address,
@@ -127,7 +128,7 @@ class StakingVotingTestCase(VaultAppMixin, StakingVotingAppMixin, BaseTestCase):
             events[0],
             {
                 'event_name': 'proposal',
-                'proposal_id': list(proposal_id),
+                'proposal_id': list(proposal_id.encode()),
                 **proposal_box_data
             }
         )
@@ -136,14 +137,14 @@ class StakingVotingTestCase(VaultAppMixin, StakingVotingAppMixin, BaseTestCase):
             {
                 'event_name': 'create_proposal',
                 'user_address': self.app_creator_address,
-                'proposal_id': list(proposal_id)
+                'proposal_id': list(proposal_id.encode())
             }
         )
 
         # Generating a proposal with the same hash/id is not allowed
         with self.assertRaises(LogicEvalError) as e:
             self.ledger.eval_transactions(txn_group.signed_transactions, block_timestamp=block_timestamp)
-        self.assertEqual(e.exception.source['line'], 'assert(!proposal_exists(proposal_id))')
+        self.assertEqual(e.exception.source['line'], 'box<Proposal> proposal = CreateBox(proposal_box_name)')
         
         # proposal_id must be 32 bytes, test with 31 bytes
         proposal_id = proposal_id[:-1]
@@ -156,7 +157,7 @@ class StakingVotingTestCase(VaultAppMixin, StakingVotingAppMixin, BaseTestCase):
         txn_group.sign_with_private_key(address=self.app_creator_address, private_key=self.app_creator_sk)
         with self.assertRaises(LogicEvalError) as e:
             self.ledger.eval_transactions(txn_group.signed_transactions, block_timestamp=block_timestamp)
-        self.assertEqual(e.exception.source['line'], 'assert(len(proposal_id) == 32)')
+        self.assertEqual(e.exception.source['line'], 'assert(len(proposal_id) == 59)')
 
     def test_cast_vote(self):
         user_sk, user_address = generate_account()
@@ -218,7 +219,15 @@ class StakingVotingTestCase(VaultAppMixin, StakingVotingAppMixin, BaseTestCase):
         self.ledger.eval_transactions(txn_group.signed_transactions, block_timestamp=block_timestamp)
 
         # Create proposal
-        proposal_id = int_to_bytes(1) * 4
+        proposal_metadata = generate_staking_proposal_metadata(
+            title="Proposal 1",
+            description="",
+            staking_program_start_date="",
+            staking_program_end_date="",
+            staking_program_cycle_duration=1,
+            staking_program_reward_asset=1,
+        )
+        proposal_id = generate_cid_from_proposal_metadata(proposal_metadata)
         txn_group = prepare_create_staking_proposal_transactions(
             staking_voting_app_id=STAKING_VOTING_APP_ID,
             sender=self.app_creator_address,
@@ -334,7 +343,7 @@ class StakingVotingTestCase(VaultAppMixin, StakingVotingAppMixin, BaseTestCase):
         self.ledger.eval_transactions(txn_group.signed_transactions, block_timestamp=block_timestamp)
 
         # Create proposal
-        proposal_id = hash_metadata({})
+        proposal_id = generate_cid_from_proposal_metadata({})
         txn_group = prepare_create_staking_proposal_transactions(
             staking_voting_app_id=STAKING_VOTING_APP_ID,
             sender=self.app_creator_address,
@@ -449,7 +458,7 @@ class StakingVotingTestCase(VaultAppMixin, StakingVotingAppMixin, BaseTestCase):
         self.ledger.eval_transactions(txn_group.signed_transactions, block_timestamp=block_timestamp)
 
         # Create proposal
-        proposal_id = int_to_bytes(1) * 4
+        proposal_id = generate_cid_from_proposal_metadata({"name": "Proposal 1"})
         txn_group = prepare_create_staking_proposal_transactions(
             staking_voting_app_id=STAKING_VOTING_APP_ID,
             sender=self.app_creator_address,

@@ -84,15 +84,14 @@ block main:
         bytes user_address = Txn.Sender
         assert(user_address == app_global_get(PROPOSAL_MANAGER_KEY))
 
-        # proposal id will be calculate off-chain. it is 32 bit hash of the proposal data.
+        # proposal id will be calculated off-chian. it is base32 string representation of CID (base32 - cidv1 - raw - (sha2-256 : 256 : <metadata>))
         bytes proposal_id = Txn.ApplicationArgs[1]
-        assert(len(proposal_id) == 32)
-        assert(!proposal_exists(proposal_id))
+        assert(len(proposal_id) == 59)
+        bytes proposal_box_name = Concat(PROPOSAL_BOX_PREFIX, proposal_id)
 
         int voting_start_timestamp = get_end_timestamp_of_day(Global.LatestTimestamp) + (app_global_get(VOTING_DELAY_KEY) * DAY)
         int voting_end_timestamp = voting_start_timestamp + (app_global_get(VOTING_DURATION_KEY) * DAY)
 
-        bytes proposal_box_name = Concat(PROPOSAL_BOX_PREFIX, proposal_id)
         box<Proposal> proposal = CreateBox(proposal_box_name)
         proposal.index = app_global_get(PROPOSAL_ID_COUNTER_KEY)
         proposal.creation_timestamp = Global.LatestTimestamp
@@ -102,8 +101,8 @@ block main:
 
         bytes proposal_data
         _, proposal_data = box_get(proposal_box_name)
-        log(Concat(method("proposal(byte[32],uint64,uint64,uint64,uint64,uint64,uint64,bool)"), proposal_id, proposal_data))
-        log(Concat(method("create_proposal(address,byte[32])"), user_address, proposal_id))
+        log(Concat(method("proposal(byte[59],uint64,uint64,uint64,uint64,uint64,uint64,bool)"), proposal_id, proposal_data))
+        log(Concat(method("create_proposal(address,byte[59])"), user_address, proposal_id))
         exit(1)
     end
     
@@ -121,8 +120,8 @@ block main:
 
         bytes proposal_data
         _, proposal_data = box_get(proposal_box_name)
-        log(Concat(method("proposal(byte[32],uint64,uint64,uint64,uint64,uint64,uint64,bool)"), proposal_id, proposal_data))
-        log(Concat(method("cancel_proposal(address,byte[32])"), user_address, proposal_id))
+        log(Concat(method("proposal(byte[59],uint64,uint64,uint64,uint64,uint64,uint64,bool)"), proposal_id, proposal_data))
+        log(Concat(method("cancel_proposal(address,byte[59])"), user_address, proposal_id))
         exit(1)
     end
 
@@ -183,8 +182,8 @@ block main:
 
         bytes proposal_data
         _, proposal_data = box_get(proposal_box_name)
-        log(Concat(method("proposal(byte[32],uint64,uint64,uint64,uint64,uint64,uint64,bool)"), proposal_id, proposal_data))
-        log(Concat(method("cast_vote(address,byte[32],uint64)"), user_address, proposal_id, itob(account_voting_power)))
+        log(Concat(method("proposal(byte[59],uint64,uint64,uint64,uint64,uint64,uint64,bool)"), proposal_id, proposal_data))
+        log(Concat(method("cast_vote(address,byte[59],uint64)"), user_address, proposal_id, itob(account_voting_power)))
         exit(1)
     end
 
@@ -236,12 +235,6 @@ block main:
         log(Concat(method("set_proposal_manager(address)"), Txn.ApplicationArgs[1]))
         exit(1)
     end
-end
-
-func proposal_exists(proposal_id: bytes) int:
-    int exists
-    exists, _ = box_len(Concat(PROPOSAL_BOX_PREFIX, proposal_id))
-    return exists
 end
 
 func set_user_as_voted(address: bytes, proposal_index: int):
