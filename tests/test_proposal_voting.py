@@ -10,13 +10,14 @@ from algosdk.encoding import decode_address
 from algosdk.logic import get_application_address
 from tinyman.governance.constants import WEEK, DAY, VAULT_APP_ID_KEY
 from tinyman.governance.event import decode_logs
-from tinyman.governance.proposal_voting.constants import PROPOSAL_ID_COUNTER_KEY, VOTING_DELAY_KEY, VOTING_DURATION_KEY, PROPOSAL_THRESHOLD_KEY, QUORUM_NUMERATOR_KEY, MANAGER_KEY, PROPOSAL_MANAGER_KEY, PROPOSAL_VOTING_APP_MINIMUM_BALANCE_REQUIREMENT
+from tinyman.governance.proposal_voting.constants import PROPOSAL_ID_COUNTER_KEY, VOTING_DELAY_KEY, VOTING_DURATION_KEY, PROPOSAL_THRESHOLD_KEY, QUORUM_NUMERATOR_KEY, MANAGER_KEY, PROPOSAL_MANAGER_KEY, PROPOSAL_VOTING_APP_MINIMUM_BALANCE_REQUIREMENT, APPROVAL_REQUIREMENT_KEY
 from tinyman.governance.proposal_voting.events import proposal_voting_events
 from tinyman.governance.proposal_voting.storage import get_proposal_box_name, Proposal, parse_box_proposal
 from tinyman.governance.proposal_voting.transactions import prepare_create_proposal_transactions, prepare_cast_vote_transactions, prepare_get_proposal_transactions, prepare_has_voted_transactions, prepare_cancel_proposal_transactions, prepare_execute_proposal_transactions, prepare_approve_proposal_transactions
 from tinyman.governance.vault.transactions import prepare_create_lock_transactions, prepare_withdraw_transactions, prepare_increase_lock_amount_transactions
 from tinyman.governance.vault.utils import get_start_timestamp_of_week, get_bias, get_slope
 from tinyman.utils import int_to_bytes, TransactionGroup
+from tinyman.governance.utils import generate_cid_from_proposal_metadata
 
 from tests.common import BaseTestCase, VaultAppMixin, ProposalVotingAppMixin
 from tests.constants import TINY_ASSET_ID, VAULT_APP_ID, PROPOSAL_VOTING_APP_ID, proposal_voting_approval_program, proposal_voting_clear_state_program
@@ -70,6 +71,7 @@ class ProposalVotingTestCase(VaultAppMixin, ProposalVotingAppMixin, BaseTestCase
                 VAULT_APP_ID_KEY: VAULT_APP_ID,
                 VOTING_DELAY_KEY: 2,
                 VOTING_DURATION_KEY: 7,
+                APPROVAL_REQUIREMENT_KEY: 1
             }
         )
         
@@ -170,7 +172,7 @@ class ProposalVotingTestCase(VaultAppMixin, ProposalVotingAppMixin, BaseTestCase
         self.ledger.eval_transactions(txn_group.signed_transactions, block_timestamp=block_timestamp)
 
         # Create proposal successfully
-        proposal_id = int_to_bytes(1) * 4
+        proposal_id = generate_cid_from_proposal_metadata({"name": "Proposal 1"})
         
         txn_group = prepare_create_proposal_transactions(
             proposal_voting_app_id=PROPOSAL_VOTING_APP_ID,
@@ -209,7 +211,7 @@ class ProposalVotingTestCase(VaultAppMixin, ProposalVotingAppMixin, BaseTestCase
             events[0],
             {
                 'event_name': 'proposal',
-                'proposal_id': list(proposal_id),
+                'proposal_id': list(proposal_id.encode()),
                 **box_data
             }
         )
@@ -218,7 +220,7 @@ class ProposalVotingTestCase(VaultAppMixin, ProposalVotingAppMixin, BaseTestCase
             {
                 'event_name': 'create_proposal',
                 'user_address': user_address,
-                'proposal_id': list(proposal_id)
+                'proposal_id': list(proposal_id.encode())
             }
         )
         
@@ -234,6 +236,7 @@ class ProposalVotingTestCase(VaultAppMixin, ProposalVotingAppMixin, BaseTestCase
                 QUORUM_NUMERATOR_KEY: 50,
                 VOTING_DELAY_KEY: 2,
                 VOTING_DURATION_KEY: 7,
+                APPROVAL_REQUIREMENT_KEY: 1,
             },
         )
         
@@ -247,10 +250,10 @@ class ProposalVotingTestCase(VaultAppMixin, ProposalVotingAppMixin, BaseTestCase
         # Creating a proposal with the same id fails
         with self.assertRaises(LogicEvalError) as e:
             self.ledger.eval_transactions(txn_group.signed_transactions, block_timestamp=block_timestamp)
-        self.assertEqual(e.exception.source['line'], 'assert(!exists)')
+        self.assertEqual(e.exception.source['line'], 'box<Proposal> proposal = CreateBox(proposal_box_name)')
 
         # User 2 doesn't have enough voting power for creating a proposal
-        proposal_id = int_to_bytes(2) * 4
+        proposal_id = generate_cid_from_proposal_metadata({"name": "Proposal 2"})
         txn_group = prepare_create_proposal_transactions(
             proposal_voting_app_id=PROPOSAL_VOTING_APP_ID,
             vault_app_id=VAULT_APP_ID,
@@ -355,7 +358,7 @@ class ProposalVotingTestCase(VaultAppMixin, ProposalVotingAppMixin, BaseTestCase
         self.ledger.eval_transactions(txn_group.signed_transactions, block_timestamp=block_timestamp)
 
         # Create proposal
-        proposal_id = int_to_bytes(1) * 4
+        proposal_id = generate_cid_from_proposal_metadata({"name": "Proposal 1"})
         txn_group = prepare_create_proposal_transactions(
             proposal_voting_app_id=PROPOSAL_VOTING_APP_ID,
             vault_app_id=VAULT_APP_ID,
@@ -393,7 +396,7 @@ class ProposalVotingTestCase(VaultAppMixin, ProposalVotingAppMixin, BaseTestCase
             {
                 "event_name": "approve_proposal",
                 "user_address": self.app_creator_address,
-                "proposal_id": list(proposal_id),
+                "proposal_id": list(proposal_id.encode()),
             }
         )
     
@@ -433,7 +436,7 @@ class ProposalVotingTestCase(VaultAppMixin, ProposalVotingAppMixin, BaseTestCase
             {
                 "event_name": "cast_vote",
                 "user_address": user_address,
-                "proposal_id": list(proposal_id),
+                "proposal_id": list(proposal_id.encode()),
                 "vote": vote,
                 "voting_power": ANY
             }
@@ -507,7 +510,7 @@ class ProposalVotingTestCase(VaultAppMixin, ProposalVotingAppMixin, BaseTestCase
         self.ledger.eval_transactions(txn_group.signed_transactions, block_timestamp=block_timestamp)
 
         # Create proposal
-        proposal_id = int_to_bytes(1) * 4
+        proposal_id = generate_cid_from_proposal_metadata({"name": "Proposal 1"})
         txn_group = prepare_create_proposal_transactions(
             proposal_voting_app_id=PROPOSAL_VOTING_APP_ID,
             vault_app_id=VAULT_APP_ID,
@@ -599,7 +602,7 @@ class ProposalVotingTestCase(VaultAppMixin, ProposalVotingAppMixin, BaseTestCase
         self.ledger.eval_transactions(txn_group.signed_transactions, block_timestamp=block_timestamp)
 
         # Create proposal
-        proposal_id = int_to_bytes(1) * 4
+        proposal_id = generate_cid_from_proposal_metadata({"name": "Proposal 1"})
         txn_group = prepare_create_proposal_transactions(
             proposal_voting_app_id=PROPOSAL_VOTING_APP_ID,
             vault_app_id=VAULT_APP_ID,
@@ -706,7 +709,7 @@ class ProposalVotingTestCase(VaultAppMixin, ProposalVotingAppMixin, BaseTestCase
         self.ledger.eval_transactions(txn_group.signed_transactions, block_timestamp=block_timestamp)
 
         # Create proposal
-        proposal_id = int_to_bytes(1) * 4
+        proposal_id = generate_cid_from_proposal_metadata({"name": "Proposal 1"})
         txn_group = prepare_create_proposal_transactions(
             proposal_voting_app_id=PROPOSAL_VOTING_APP_ID,
             vault_app_id=VAULT_APP_ID,
@@ -765,7 +768,7 @@ class ProposalVotingTestCase(VaultAppMixin, ProposalVotingAppMixin, BaseTestCase
         self.ledger.eval_transactions(txn_group.signed_transactions, block_timestamp=block_timestamp)
 
         # Create proposal
-        proposal_id = int_to_bytes(1) * 4
+        proposal_id = generate_cid_from_proposal_metadata({"name": "Proposal 1"})
         txn_group = prepare_create_proposal_transactions(
             proposal_voting_app_id=PROPOSAL_VOTING_APP_ID,
             vault_app_id=VAULT_APP_ID,
@@ -827,7 +830,7 @@ class ProposalVotingTestCase(VaultAppMixin, ProposalVotingAppMixin, BaseTestCase
         self.ledger.eval_transactions(txn_group.signed_transactions, block_timestamp=block_timestamp)
 
         # Create proposal
-        proposal_id = int_to_bytes(1) * 4
+        proposal_id = generate_cid_from_proposal_metadata({"name": "Proposal 1"})
         txn_group = prepare_create_proposal_transactions(
             proposal_voting_app_id=PROPOSAL_VOTING_APP_ID,
             vault_app_id=VAULT_APP_ID,
@@ -924,7 +927,7 @@ class ProposalVotingTestCase(VaultAppMixin, ProposalVotingAppMixin, BaseTestCase
         self.ledger.eval_transactions(txn_group.signed_transactions, block_timestamp=block_timestamp)
 
         # Create proposal
-        proposal_id = int_to_bytes(1) * 4
+        proposal_id = generate_cid_from_proposal_metadata({"name": "Proposal 1"})
         txn_group = prepare_create_proposal_transactions(
             proposal_voting_app_id=PROPOSAL_VOTING_APP_ID,
             vault_app_id=VAULT_APP_ID,
