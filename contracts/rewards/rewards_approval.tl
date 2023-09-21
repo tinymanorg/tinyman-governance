@@ -197,6 +197,7 @@ block main:
         bytes user_address = Txn.Sender
         assert(user_address == app_global_get(MANAGER_KEY))
 
+        assert(len(Txn.ApplicationArgs[1]) == 32)
         app_global_put(MANAGER_KEY, Txn.ApplicationArgs[1])
         log(Concat(method("set_manager(address)"), Txn.ApplicationArgs[1]))
         exit(1)
@@ -206,6 +207,7 @@ block main:
         bytes user_address = Txn.Sender
         assert(user_address == app_global_get(MANAGER_KEY))
 
+        assert(len(Txn.ApplicationArgs[1]) == 32)
         app_global_put(REWARDS_MANAGER_KEY, Txn.ApplicationArgs[1])
         log(Concat(method("set_rewards_manager(address)"), Txn.ApplicationArgs[1]))
         exit(1)
