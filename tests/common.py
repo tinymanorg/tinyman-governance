@@ -1,7 +1,6 @@
 import unittest
 
 from algojig import get_suggested_params, JigLedger
-from algojig.gojig import run
 from algosdk.account import generate_account
 from algosdk.encoding import decode_address
 from algosdk.logic import get_application_address
@@ -9,6 +8,7 @@ from tinyman.governance.constants import TINY_ASSET_ID_KEY, VAULT_APP_ID_KEY, WE
 from tinyman.governance.proposal_voting.constants import APPROVAL_REQUIREMENT_KEY
 from tinyman.governance.rewards.constants import REWARD_HISTORY_BOX_ARRAY_LEN, REWARD_HISTORY_BOX_SIZE, REWARD_HISTORY_SIZE, REWARD_HISTORY_BOX_PREFIX, REWARDS_APP_MINIMUM_BALANCE_REQUIREMENT, REWARD_PERIOD_COUNT_KEY, REWARD_HISTORY_COUNT_KEY, MANAGER_KEY, FIRST_PERIOD_TIMESTAMP, REWARDS_MANAGER_KEY
 from tinyman.governance.vault.constants import TOTAL_LOCKED_AMOUNT_KEY, TOTAL_POWER_COUNT_KEY, VAULT_APP_MINIMUM_BALANCE_REQUIREMENT, TOTAL_POWER_BOX_ARRAY_LEN, TOTAL_POWERS, TOTAL_POWER_BOX_SIZE, TOTAL_POWER_SIZE, LAST_TOTAL_POWER_TIMESTAMP_KEY
+from tinyman.governance.vault.storage import get_total_power_box_name
 from tinyman.governance.vault.transactions import prepare_create_checkpoints_transactions
 from tinyman.utils import int_to_bytes
 
@@ -37,12 +37,13 @@ class BaseTestCase(unittest.TestCase):
         self.ledger = JigLedger()
         self.ledger.create_asset(TINY_ASSET_ID, params=dict())
 
-    def low_level_eval(self, signed_txns, block_timestamp):
-        self.ledger.init_ledger_db(block_timestamp)
-        self.ledger.write()
-        self.ledger.write_transactions(signed_txns)
-        output = run("eval")
-        return output
+    # def low_level_eval(self, signed_txns, block_timestamp):
+    #     from algojig.gojig import run
+    #     self.ledger.init_ledger_db(block_timestamp)
+    #     self.ledger.write()
+    #     self.ledger.write_transactions(signed_txns)
+    #     output = run("eval")
+    #     return output
 
     def init_app_boxes(self, app_id):
         if app_id not in self.ledger.boxes:
@@ -55,14 +56,13 @@ class VaultAppMixin:
         if app_creator_address not in self.ledger.accounts:
             self.ledger.set_account_balance(app_creator_address, 1_000_000)
 
-        # TODO: Update int and byte counts
         self.ledger.create_app(
             app_id=VAULT_APP_ID,
             approval_program=vault_approval_program,
             creator=app_creator_address,
             local_ints=0,
             local_bytes=0,
-            global_ints=16,
+            global_ints=4,
             global_bytes=0
         )
 
@@ -111,7 +111,7 @@ class VaultAppMixin:
         box_index = index // TOTAL_POWER_BOX_ARRAY_LEN
         array_index = index % TOTAL_POWER_BOX_ARRAY_LEN
 
-        box_name = TOTAL_POWERS + int_to_bytes(box_index)
+        box_name = get_total_power_box_name(box_index=box_index)
         if box_name not in self.ledger.boxes[VAULT_APP_ID]:
             self.ledger.boxes[VAULT_APP_ID][box_name] = int_to_bytes(0, 1) * TOTAL_POWER_BOX_SIZE
 
@@ -128,7 +128,6 @@ class RewardsAppMixin:
         if app_creator_address not in self.ledger.accounts:
             self.ledger.set_account_balance(app_creator_address, 1_000_000)
 
-        # TODO: Update int and byte counts
         self.ledger.create_app(
             app_id=REWARDS_APP_ID,
             approval_program=rewards_approval_program,
@@ -148,6 +147,7 @@ class RewardsAppMixin:
                 VAULT_APP_ID_KEY: VAULT_APP_ID,
                 REWARD_PERIOD_COUNT_KEY: 0,
                 FIRST_PERIOD_TIMESTAMP: 0,
+                REWARD_HISTORY_COUNT_KEY: 0,
                 MANAGER_KEY: decode_address(app_creator_address),
                 REWARDS_MANAGER_KEY: decode_address(app_creator_address),
             }

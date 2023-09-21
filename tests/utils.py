@@ -85,3 +85,17 @@ def get_reward_history_index_at(ledger, app_id, timestamp):
 
     return reward_history_index
 
+
+def get_app_box_names(ledger, app_id):
+    if app_id in ledger.boxes:
+        return list(ledger.boxes[app_id].keys())
+    return list()
+
+def get_first_app_call_txn(block_txns, ignore_budget_increase=True):
+    for txn in block_txns:
+        if txn[b"txn"][b"type"] == b"appl":
+            if ignore_budget_increase:
+                if txn[b"txn"][b"apaa"][0] != b"increase_budget":
+                    return txn
+            else:
+                return txn

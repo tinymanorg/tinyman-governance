@@ -96,9 +96,9 @@ block main:
         "create_checkpoints": create_checkpoints
         "get_tiny_power_of": get_tiny_power_of
         "get_tiny_power_of_at": get_tiny_power_of_at
-        "get_cumulative_power_of_at": get_cumulative_power_of_at
         "get_total_tiny_power": get_total_tiny_power
         "get_total_tiny_power_at": get_total_tiny_power_at
+        "get_cumulative_power_of_at": get_cumulative_power_of_at
         "get_total_cumulative_power_at": get_total_cumulative_power_at
         "get_account_cumulative_power_delta": get_account_cumulative_power_delta
         "get_total_cumulative_power_delta": get_total_cumulative_power_delta
@@ -150,14 +150,14 @@ block main:
         _ = box_create(user_address, ACCOUNT_STATE_SIZE)
         box<AccountState> account_state = Box(user_address)
 
-        # Ensure that the account either has no previous lock or any existing locks have been fully withdrawn.
+        # Ensure that the account either has no previous lock or any existing locks have been fully withdrawn
         assert(!account_state.locked_amount)
 
         # Update the account state
         account_state.locked_amount = amount
         account_state.lock_end_time = lock_end_time
 
-        # Increase the power count by one.
+        # Increase the power count by one
         int account_power_index = account_state.power_count
         account_state.power_count = account_power_index + 1
 
@@ -166,11 +166,11 @@ block main:
 
         bytes cumulative_power
         if account_power_index:
-            # Account type 2.
+            # Account type 2
             AccountPower latest_account_power = get_account_power(user_address, account_power_index - 1)
             cumulative_power = latest_account_power.cumulative_power
         else:
-            # Account type 1.
+            # Account type 1
             cumulative_power = bzero(16)
         end
 
@@ -238,7 +238,7 @@ block main:
     end
 
     block extend_lock_end_time:
-        # This method enables users to remaining lock duration.
+        # This method enables users to extend remaining lock duration.
 
         bytes user_address = Txn.Sender
         int new_lock_end_time = btoi(Txn.ApplicationArgs[1])
@@ -293,7 +293,7 @@ block main:
         account_state.power_count = account_power_index + 1
 
         AccountPower latest_account_power = get_account_power(user_address, account_power_index - 1)
-        bytes cumulative_power = latest_account_power.cumulative_power b+ get_cumulative_power_2(latest_account_power.bias, latest_account_power.slope)
+        bytes cumulative_power = latest_account_power.cumulative_power b+ get_cumulative_power_1(latest_account_power.bias, 0, account_state.lock_end_time - latest_account_power.timestamp)
 
         # Create AccountPower
         bytes account_power = construct_account_power(0, account_state.lock_end_time, bzero(16), cumulative_power)
@@ -488,11 +488,11 @@ block main:
     
     block delete_account_state:
         bytes user_address = Txn.Sender
-        # int box_count = itob(Txn.ApplicationArgs[1])
 
         box<AccountState> account_state = Box(user_address)
         int account_power_count = account_state.power_count
         # check the lock
+        assert(!account_state.locked_amount)
         assert(!account_state.lock_end_time)
 
         int deleted_account_power_count = account_state.deleted_power_count
@@ -649,11 +649,11 @@ func create_checkpoints(account_bias_delta: int, account_slope_delta: bytes, has
     TotalPower last_total_power = get_total_power(app_global_get(TOTAL_POWER_COUNT_KEY) - 1)
 
     int bias = last_total_power.bias
-    int last_checkpoint = last_total_power.timestamp
+    int last_checkpoint_timestamp = last_total_power.timestamp
     bytes slope = last_total_power.slope
     bytes cumulative_power = last_total_power.cumulative_power
 
-    int t_i = (last_checkpoint / WEEK) * WEEK
+    int t_i = (last_checkpoint_timestamp / WEEK) * WEEK
     bytes d_slope
     int d_bias
     int time_delta
@@ -671,7 +671,7 @@ func create_checkpoints(account_bias_delta: int, account_slope_delta: bytes, has
             _, d_slope = box_get(Concat(SLOPE_CHANGE_BOX_PREFIX, itob(t_i)))
         end
 
-        time_delta = t_i - last_checkpoint
+        time_delta = t_i - last_checkpoint_timestamp
         d_bias = get_bias(slope, time_delta)
         if d_bias > bias:
             cumulative_power = cumulative_power b+ get_cumulative_power_2(bias, slope)
@@ -689,17 +689,17 @@ func create_checkpoints(account_bias_delta: int, account_slope_delta: bytes, has
             slope = slope b- d_slope
         end
 
-        last_checkpoint = t_i
+        last_checkpoint_timestamp = t_i
         if t_i == Global.LatestTimestamp:
             i = stop
             if has_account_event:
-                save_total_power(construct_total_power(bias + account_bias_delta, last_checkpoint, slope b+ account_slope_delta, cumulative_power))
+                save_total_power(construct_total_power(bias + account_bias_delta, last_checkpoint_timestamp, slope b+ account_slope_delta, cumulative_power))
             else:
-                save_total_power(construct_total_power(bias, last_checkpoint, slope, cumulative_power))
+                save_total_power(construct_total_power(bias, last_checkpoint_timestamp, slope, cumulative_power))
             end
         else:
             i = i + 1
-            save_total_power(construct_total_power(bias, last_checkpoint, slope, cumulative_power))
+            save_total_power(construct_total_power(bias, last_checkpoint_timestamp, slope, cumulative_power))
         end
     end
     assert(!(has_account_event && (t_i != Global.LatestTimestamp)))

@@ -420,7 +420,7 @@ class ProposalVotingTestCase(VaultAppMixin, ProposalVotingAppMixin, BaseTestCase
             proposal=proposal,
             vote=vote,
             account_power_index=get_account_power_index_at(self.ledger, VAULT_APP_ID, user_address, proposal_creation_timestamp),
-            create_attendance_box=True,
+            create_attendance_sheet_box=True,
             suggested_params=self.sp,
         )
         txn_group.sign_with_private_key(user_address, user_sk)
@@ -452,7 +452,7 @@ class ProposalVotingTestCase(VaultAppMixin, ProposalVotingAppMixin, BaseTestCase
             proposal=proposal,
             vote=vote,
             account_power_index=get_account_power_index_at(self.ledger, VAULT_APP_ID, user_2_address, proposal_creation_timestamp),
-            create_attendance_box=True,
+            create_attendance_sheet_box=True,
             suggested_params=self.sp,
         )
         txn_group.sign_with_private_key(user_2_address, user_2_sk)
@@ -468,7 +468,7 @@ class ProposalVotingTestCase(VaultAppMixin, ProposalVotingAppMixin, BaseTestCase
             proposal=proposal,
             vote=vote,
             account_power_index=get_account_power_index_at(self.ledger, VAULT_APP_ID, user_3_address, proposal_creation_timestamp),
-            create_attendance_box=True,
+            create_attendance_sheet_box=True,
             suggested_params=self.sp,
         )
         txn_group.sign_with_private_key(user_3_address, user_3_sk)
@@ -559,7 +559,7 @@ class ProposalVotingTestCase(VaultAppMixin, ProposalVotingAppMixin, BaseTestCase
             proposal=proposal,
             vote=vote,
             account_power_index=get_account_power_index_at(self.ledger, VAULT_APP_ID, user_address, proposal.creation_timestamp),
-            create_attendance_box=True,
+            create_attendance_sheet_box=True,
             suggested_params=self.sp,
         )
         txn_group.sign_with_private_key(user_address, user_sk)
@@ -660,7 +660,7 @@ class ProposalVotingTestCase(VaultAppMixin, ProposalVotingAppMixin, BaseTestCase
             proposal=proposal,
             vote=vote,
             account_power_index=get_account_power_index_at(self.ledger, VAULT_APP_ID, user_address, proposal.creation_timestamp),
-            create_attendance_box=True,
+            create_attendance_sheet_box=True,
             suggested_params=self.sp,
         )
         txn_group.sign_with_private_key(user_address, user_sk)
@@ -883,7 +883,7 @@ class ProposalVotingTestCase(VaultAppMixin, ProposalVotingAppMixin, BaseTestCase
             proposal=proposal,
             vote=vote,
             account_power_index=get_account_power_index_at(self.ledger, VAULT_APP_ID, user_address, proposal.creation_timestamp),
-            create_attendance_box=True,
+            create_attendance_sheet_box=True,
             suggested_params=self.sp,
         )
         txn_group.sign_with_private_key(user_address, user_sk)

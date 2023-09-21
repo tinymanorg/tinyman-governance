@@ -10,19 +10,18 @@ from tinyman.governance.constants import WEEK, DAY
 from tinyman.governance.event import decode_logs
 from tinyman.governance.staking_voting.constants import STAKING_VOTING_APP_MINIMUM_BALANCE_REQUIREMENT
 from tinyman.governance.staking_voting.events import staking_voting_events
-from tinyman.governance.staking_voting.storage import StakingVotingProposal, get_staking_proposal_box_name, parse_box_staking_voting_proposal, get_staking_vote_box_name
-from tinyman.governance.staking_voting.transactions import prepare_create_staking_proposal_transactions, prepare_cancel_staking_proposal_transactions, prepare_set_manager_transactions, prepare_set_proposal_manager_transactions, prepare_cast_vote_transactions
+from tinyman.governance.staking_voting.storage import StakingDistributionProposal, get_staking_distribution_proposal_box_name, parse_box_staking_distribution_proposal, get_staking_vote_box_name
+from tinyman.governance.staking_voting.transactions import generate_staking_distribution_proposal_metadata
+from tinyman.governance.staking_voting.transactions import prepare_create_staking_distribution_proposal_transactions, prepare_cancel_staking_distribution_proposal_transactions, prepare_set_manager_transactions, prepare_set_proposal_manager_transactions, prepare_cast_vote_for_staking_distribution_proposal_transactions
 from tinyman.governance.utils import generate_cid_from_proposal_metadata
 from tinyman.governance.vault.storage import parse_box_account_power
 from tinyman.governance.vault.transactions import prepare_create_lock_transactions, prepare_increase_lock_amount_transactions
 from tinyman.governance.vault.utils import get_slope, get_bias, get_start_timestamp_of_week
 from tinyman.utils import int_to_bytes, bytes_to_int
-from tinyman.governance.staking_voting.transactions import generate_staking_proposal_metadata
 
 from tests.common import BaseTestCase, VaultAppMixin, StakingVotingAppMixin
 from tests.constants import TINY_ASSET_ID, STAKING_VOTING_APP_ID, VAULT_APP_ID
-from tests.staking_voting.utils import is_account_attendance_box_exists, get_new_asset_count
-from tests.utils import get_account_power_index_at
+from tests.utils import get_account_power_index_at, get_app_box_names
 from tests.vault.utils import get_vault_app_global_state, get_account_state, get_slope_change_at
 
 
@@ -56,7 +55,7 @@ class StakingVotingTestCase(VaultAppMixin, StakingVotingAppMixin, BaseTestCase):
             "end_timestamp":int(block_timestamp),
         }
         proposal_id = generate_cid_from_proposal_metadata(metadata)
-        txn_group = prepare_create_staking_proposal_transactions(
+        txn_group = prepare_create_staking_distribution_proposal_transactions(
             staking_voting_app_id=STAKING_VOTING_APP_ID,
             sender=self.app_creator_address,
             proposal_id=proposal_id,
@@ -94,8 +93,8 @@ class StakingVotingTestCase(VaultAppMixin, StakingVotingAppMixin, BaseTestCase):
             }
         )
         self.assertEqual(
-            parse_box_staking_voting_proposal(self.ledger.boxes[STAKING_VOTING_APP_ID][get_staking_proposal_box_name(proposal_id)]),
-            StakingVotingProposal(**proposal_box_data)
+            parse_box_staking_distribution_proposal(self.ledger.boxes[STAKING_VOTING_APP_ID][get_staking_distribution_proposal_box_name(proposal_id)]),
+            StakingDistributionProposal(**proposal_box_data)
         )
 
         block_timestamp += 10 * DAY
@@ -103,7 +102,7 @@ class StakingVotingTestCase(VaultAppMixin, StakingVotingAppMixin, BaseTestCase):
         # Create another proposal
         metadata["name"] = "Proposal 2"
         proposal_id = generate_cid_from_proposal_metadata(metadata)
-        txn_group = prepare_create_staking_proposal_transactions(
+        txn_group = prepare_create_staking_distribution_proposal_transactions(
             staking_voting_app_id=STAKING_VOTING_APP_ID,
             sender=self.app_creator_address,
             proposal_id=proposal_id,
@@ -148,7 +147,7 @@ class StakingVotingTestCase(VaultAppMixin, StakingVotingAppMixin, BaseTestCase):
         
         # proposal_id must be 32 bytes, test with 31 bytes
         proposal_id = proposal_id[:-1]
-        txn_group = prepare_create_staking_proposal_transactions(
+        txn_group = prepare_create_staking_distribution_proposal_transactions(
             staking_voting_app_id=STAKING_VOTING_APP_ID,
             sender=self.app_creator_address,
             proposal_id=proposal_id,
@@ -219,7 +218,7 @@ class StakingVotingTestCase(VaultAppMixin, StakingVotingAppMixin, BaseTestCase):
         self.ledger.eval_transactions(txn_group.signed_transactions, block_timestamp=block_timestamp)
 
         # Create proposal
-        proposal_metadata = generate_staking_proposal_metadata(
+        proposal_metadata = generate_staking_distribution_proposal_metadata(
             title="Proposal 1",
             description="",
             staking_program_start_date="",
@@ -228,7 +227,7 @@ class StakingVotingTestCase(VaultAppMixin, StakingVotingAppMixin, BaseTestCase):
             staking_program_reward_asset=1,
         )
         proposal_id = generate_cid_from_proposal_metadata(proposal_metadata)
-        txn_group = prepare_create_staking_proposal_transactions(
+        txn_group = prepare_create_staking_distribution_proposal_transactions(
             staking_voting_app_id=STAKING_VOTING_APP_ID,
             sender=self.app_creator_address,
             proposal_id=proposal_id,
@@ -239,15 +238,15 @@ class StakingVotingTestCase(VaultAppMixin, StakingVotingAppMixin, BaseTestCase):
         proposal_creation_timestamp = block_timestamp
 
         # Cast Vote
-        proposal_box_name = get_staking_proposal_box_name(proposal_id)
-        proposal = parse_box_staking_voting_proposal(self.ledger.boxes[STAKING_VOTING_APP_ID][proposal_box_name])
+        proposal_box_name = get_staking_distribution_proposal_box_name(proposal_id)
+        proposal = parse_box_staking_distribution_proposal(self.ledger.boxes[STAKING_VOTING_APP_ID][proposal_box_name])
         block_timestamp = proposal.voting_start_timestamp
         # votes = [10, 15, 20, 25, 30]
         # asset_ids = [1, 2, 3, 4, 50]
         # votes = [10, 10, 10, 10, 10, 10, 10, 10, 10, 5, 5]
         votes = [10] * 5 + [5] * 9 + [3, 2]
         asset_ids = list(range(1, len(votes) + 1))
-        txn_group = prepare_cast_vote_transactions(
+        txn_group = prepare_cast_vote_for_staking_distribution_proposal_transactions(
             staking_voting_app_id=STAKING_VOTING_APP_ID,
             vault_app_id=VAULT_APP_ID,
             sender=user_address,
@@ -256,8 +255,7 @@ class StakingVotingTestCase(VaultAppMixin, StakingVotingAppMixin, BaseTestCase):
             votes=votes,
             asset_ids=asset_ids,
             account_power_index=get_account_power_index_at(self.ledger, VAULT_APP_ID, user_address, proposal_creation_timestamp),
-            new_asset_count=get_new_asset_count(self.ledger, proposal.index, asset_ids),
-            create_attendance_sheet=is_account_attendance_box_exists(self.ledger, user_address, proposal.index),
+            app_box_names=get_app_box_names(self.ledger, STAKING_VOTING_APP_ID),
             suggested_params=self.sp,
         )
         txn_group.sign_with_private_key(user_address, user_sk)
@@ -272,10 +270,10 @@ class StakingVotingTestCase(VaultAppMixin, StakingVotingAppMixin, BaseTestCase):
         slope = get_slope(100_000_000)
         bias = get_bias(slope, (lock_end_timestamp - proposal.creation_timestamp))
 
-        proposal_box_name = get_staking_proposal_box_name(proposal_id)
-        proposal = parse_box_staking_voting_proposal(self.ledger.boxes[STAKING_VOTING_APP_ID][proposal_box_name])
+        proposal_box_name = get_staking_distribution_proposal_box_name(proposal_id)
+        proposal = parse_box_staking_distribution_proposal(self.ledger.boxes[STAKING_VOTING_APP_ID][proposal_box_name])
 
-        self.assertEqual(parse_box_staking_voting_proposal(self.ledger.boxes[STAKING_VOTING_APP_ID][proposal_box_name]).vote_count, 1)
+        self.assertEqual(parse_box_staking_distribution_proposal(self.ledger.boxes[STAKING_VOTING_APP_ID][proposal_box_name]).vote_count, 1)
         for i in range(0, len(votes)):
             asset_id = asset_ids[i]
             vote_as_percentage = votes[i]
@@ -287,7 +285,7 @@ class StakingVotingTestCase(VaultAppMixin, StakingVotingAppMixin, BaseTestCase):
 
         votes = [20] * 5
         asset_ids = list(range(1, len(votes) + 1))
-        txn_group = prepare_cast_vote_transactions(
+        txn_group = prepare_cast_vote_for_staking_distribution_proposal_transactions(
             staking_voting_app_id=STAKING_VOTING_APP_ID,
             vault_app_id=VAULT_APP_ID,
             sender=user_2_address,
@@ -296,8 +294,7 @@ class StakingVotingTestCase(VaultAppMixin, StakingVotingAppMixin, BaseTestCase):
             votes=votes,
             asset_ids=asset_ids,
             account_power_index=get_account_power_index_at(self.ledger, VAULT_APP_ID, user_2_address, proposal_creation_timestamp),
-            new_asset_count=get_new_asset_count(self.ledger, proposal.index, asset_ids),
-            create_attendance_sheet=is_account_attendance_box_exists(self.ledger, user_2_address, proposal.index),
+            app_box_names=get_app_box_names(self.ledger, STAKING_VOTING_APP_ID),
             suggested_params=self.sp,
         )
         txn_group.sign_with_private_key(user_2_address, user_2_sk)
@@ -344,7 +341,7 @@ class StakingVotingTestCase(VaultAppMixin, StakingVotingAppMixin, BaseTestCase):
 
         # Create proposal
         proposal_id = generate_cid_from_proposal_metadata({})
-        txn_group = prepare_create_staking_proposal_transactions(
+        txn_group = prepare_create_staking_distribution_proposal_transactions(
             staking_voting_app_id=STAKING_VOTING_APP_ID,
             sender=self.app_creator_address,
             proposal_id=proposal_id,
@@ -378,12 +375,12 @@ class StakingVotingTestCase(VaultAppMixin, StakingVotingAppMixin, BaseTestCase):
         self.ledger.eval_transactions(txn_group.signed_transactions, block_timestamp=block_timestamp)
 
         # Cast Vote
-        proposal_box_name = get_staking_proposal_box_name(proposal_id)
-        proposal = parse_box_staking_voting_proposal(self.ledger.boxes[STAKING_VOTING_APP_ID][proposal_box_name])
+        proposal_box_name = get_staking_distribution_proposal_box_name(proposal_id)
+        proposal = parse_box_staking_distribution_proposal(self.ledger.boxes[STAKING_VOTING_APP_ID][proposal_box_name])
         block_timestamp = proposal.voting_start_timestamp
         votes = [10, 15, 20, 25, 30]
         asset_ids = list(range(1, len(votes) + 1))
-        txn_group = prepare_cast_vote_transactions(
+        txn_group = prepare_cast_vote_for_staking_distribution_proposal_transactions(
             staking_voting_app_id=STAKING_VOTING_APP_ID,
             vault_app_id=VAULT_APP_ID,
             sender=user_address,
@@ -392,8 +389,7 @@ class StakingVotingTestCase(VaultAppMixin, StakingVotingAppMixin, BaseTestCase):
             votes=votes,
             asset_ids=asset_ids,
             account_power_index=get_account_power_index_at(self.ledger, VAULT_APP_ID, user_address, proposal_creation_timestamp),
-            new_asset_count=get_new_asset_count(self.ledger, proposal.index, asset_ids),
-            create_attendance_sheet=is_account_attendance_box_exists(self.ledger, user_address, proposal.index),
+            app_box_names=get_app_box_names(self.ledger, STAKING_VOTING_APP_ID),
             suggested_params=self.sp,
         )
         txn_group.sign_with_private_key(user_address, user_sk)
@@ -409,8 +405,8 @@ class StakingVotingTestCase(VaultAppMixin, StakingVotingAppMixin, BaseTestCase):
         account_power = account_powers[-1]
         voting_power = account_power.bias - get_bias(account_power.slope, (proposal.creation_timestamp - account_power.timestamp))
 
-        proposal_box_name = get_staking_proposal_box_name(proposal_id)
-        proposal = parse_box_staking_voting_proposal(self.ledger.boxes[STAKING_VOTING_APP_ID][proposal_box_name])
+        proposal_box_name = get_staking_distribution_proposal_box_name(proposal_id)
+        proposal = parse_box_staking_distribution_proposal(self.ledger.boxes[STAKING_VOTING_APP_ID][proposal_box_name])
 
         self.assertTrue(proposal.vote_count)
         for i in range(0, len(votes)):
@@ -459,7 +455,7 @@ class StakingVotingTestCase(VaultAppMixin, StakingVotingAppMixin, BaseTestCase):
 
         # Create proposal
         proposal_id = generate_cid_from_proposal_metadata({"name": "Proposal 1"})
-        txn_group = prepare_create_staking_proposal_transactions(
+        txn_group = prepare_create_staking_distribution_proposal_transactions(
             staking_voting_app_id=STAKING_VOTING_APP_ID,
             sender=self.app_creator_address,
             proposal_id=proposal_id,
@@ -470,12 +466,12 @@ class StakingVotingTestCase(VaultAppMixin, StakingVotingAppMixin, BaseTestCase):
         proposal_creation_timestamp = block_timestamp
 
         # Cancel proposal
-        proposal_box_name = get_staking_proposal_box_name(proposal_id)
+        proposal_box_name = get_staking_distribution_proposal_box_name(proposal_id)
         proposal_manager_address = self.app_creator_address
         proposal_manager_sk = self.app_creator_sk
         block_timestamp += 1
 
-        txn_group = prepare_cancel_staking_proposal_transactions(
+        txn_group = prepare_cancel_staking_distribution_proposal_transactions(
             staking_voting_app_id=STAKING_VOTING_APP_ID,
             sender=proposal_manager_address,
             proposal_id=proposal_id,
@@ -483,7 +479,7 @@ class StakingVotingTestCase(VaultAppMixin, StakingVotingAppMixin, BaseTestCase):
         )
         txn_group.sign_with_private_key(proposal_manager_address, proposal_manager_sk)
         block = self.ledger.eval_transactions(txn_group.signed_transactions, block_timestamp=block_timestamp)
-        proposal = parse_box_staking_voting_proposal(self.ledger.boxes[STAKING_VOTING_APP_ID][proposal_box_name])
+        proposal = parse_box_staking_distribution_proposal(self.ledger.boxes[STAKING_VOTING_APP_ID][proposal_box_name])
         self.assertTrue(proposal.is_cancelled)
         logs = block[b'txns'][0][b'dt'][b'lg']
         events = decode_logs(logs, events=staking_voting_events)
@@ -496,8 +492,8 @@ class StakingVotingTestCase(VaultAppMixin, StakingVotingAppMixin, BaseTestCase):
         votes = [10, 15, 20, 25, 30]
         asset_ids = list(range(1, len(votes) + 1))
 
-        proposal = parse_box_staking_voting_proposal(self.ledger.boxes[STAKING_VOTING_APP_ID][proposal_box_name])
-        txn_group = prepare_cast_vote_transactions(
+        proposal = parse_box_staking_distribution_proposal(self.ledger.boxes[STAKING_VOTING_APP_ID][proposal_box_name])
+        txn_group = prepare_cast_vote_for_staking_distribution_proposal_transactions(
             staking_voting_app_id=STAKING_VOTING_APP_ID,
             vault_app_id=VAULT_APP_ID,
             sender=user_address,
@@ -506,8 +502,7 @@ class StakingVotingTestCase(VaultAppMixin, StakingVotingAppMixin, BaseTestCase):
             votes=votes,
             asset_ids=asset_ids,
             account_power_index=get_account_power_index_at(self.ledger, VAULT_APP_ID, user_address, proposal_creation_timestamp),
-            new_asset_count=get_new_asset_count(self.ledger, proposal.index, asset_ids),
-            create_attendance_sheet=is_account_attendance_box_exists(self.ledger, user_address, proposal.index),
+            app_box_names=get_app_box_names(self.ledger, STAKING_VOTING_APP_ID),
             suggested_params=self.sp,
         )
         txn_group.sign_with_private_key(user_address, user_sk)
