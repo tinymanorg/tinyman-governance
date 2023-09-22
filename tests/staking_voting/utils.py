@@ -3,9 +3,11 @@
 # from tests.constants import STAKING_VOTING_APP_ID
 # 
 # 
-# def get_staking_voting_app_global_state(ledger):
-#     return StakingVotingAppGlobalState(**{key.decode(): value for key, value in ledger.global_states[STAKING_VOTING_APP_ID].items()})
-
+# def get_staking_voting_app_global_state(ledger, app_id=None):
+#     if app_id is None:
+#         app_id = STAKING_VOTING_APP_ID
+#     return StakingVotingAppGlobalState(**{key.decode(): value for key, value in ledger.global_states[app_id].items()})
+# 
 # def is_account_attendance_box_exists(ledger, address, proposal_index):
 #     box_index = proposal_index // STAKING_ACCOUNT_ATTENDANCE_SHEET_BOX_SIZE
 #     account_attendance_box_name = get_staking_attendance_sheet_box_name(address, box_index)

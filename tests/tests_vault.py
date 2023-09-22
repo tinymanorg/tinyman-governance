@@ -2042,7 +2042,8 @@ class VaultTestCase(VaultAppMixin, BaseTestCase):
 
         exists = bytes_to_int(return_value[4:12])
         self.assertTrue(exists)
-        box_data = return_value[12:]
+        size = return_value[12:14]
+        box_data = return_value[14:]
         
         expected = get_account_state(self.ledger, self.user_address)
         retrieved = parse_box_account_state(box_data)

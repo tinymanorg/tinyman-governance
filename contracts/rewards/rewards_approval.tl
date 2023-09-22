@@ -81,6 +81,7 @@ block main:
         "increase_budget": increase_budget
         "create_reward_period": create_reward_period
         "set_reward_amount": set_reward_amount
+        "get_box": get_box
         "set_manager": set_manager
         "set_rewards_manager": set_rewards_manager
         "init": init
@@ -210,6 +211,17 @@ block main:
         assert(len(Txn.ApplicationArgs[1]) == 32)
         app_global_put(REWARDS_MANAGER_KEY, Txn.ApplicationArgs[1])
         log(Concat(method("set_rewards_manager(address)"), Txn.ApplicationArgs[1]))
+        exit(1)
+    end
+
+    block get_box:
+        bytes box_name = Txn.ApplicationArgs[1]
+
+        int exists
+        bytes data
+        exists, data = box_get(box_name)
+
+        log(Concat(method("return"), itob(exists), extract(6, 2, itob(len(data))), data))
         exit(1)
     end
 end

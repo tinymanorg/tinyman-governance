@@ -455,7 +455,7 @@ block main:
         bytes data
         exists, data = box_get(box_name)
 
-        log(Concat(method("return"), itob(exists), data))
+        log(Concat(method("return"), itob(exists), extract(6, 2, itob(len(data))), data))
         exit(1)
     end
 
