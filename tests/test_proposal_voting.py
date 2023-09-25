@@ -16,7 +16,7 @@ from tinyman.governance.proposal_voting.events import proposal_voting_events
 from tinyman.governance.proposal_voting.storage import ProposalVotingAppGlobalState
 from tinyman.governance.proposal_voting.storage import get_proposal_box_name, Proposal, parse_box_proposal
 from tinyman.governance.proposal_voting.transactions import generate_proposal_metadata
-from tinyman.governance.proposal_voting.transactions import prepare_disable_approval_requirement_transactions, prepare_create_proposal_transactions, prepare_cast_vote_transactions, prepare_get_proposal_transactions, prepare_has_voted_transactions, prepare_cancel_proposal_transactions, prepare_execute_proposal_transactions, prepare_approve_proposal_transactions, prepare_set_proposal_manager_transactions, prepare_set_manager_transactions
+from tinyman.governance.proposal_voting.transactions import prepare_disable_approval_requirement_transactions, prepare_create_proposal_transactions, prepare_cast_vote_transactions, prepare_get_proposal_transactions, prepare_has_voted_transactions, prepare_cancel_proposal_transactions, prepare_execute_proposal_transactions, prepare_approve_proposal_transactions, prepare_set_proposal_manager_transactions, prepare_set_manager_transactions, prepare_set_voting_delay_transactions, prepare_set_voting_duration_transactions, prepare_set_proposal_threshold_transactions, prepare_set_quorum_numerator_transactions
 from tinyman.governance.transactions import prepare_budget_increase_txn
 from tinyman.governance.utils import generate_cid_from_proposal_metadata
 from tinyman.governance.vault.transactions import prepare_create_lock_transactions, prepare_withdraw_transactions, prepare_increase_lock_amount_transactions
@@ -36,13 +36,15 @@ class ProposalVotingTestCase(VaultAppMixin, ProposalVotingAppMixin, BaseTestCase
     @classmethod
     def setUpClass(cls) -> None:
         super().setUpClass()
-        cls.app_creator_sk, cls.app_creator_address = generate_account()
+        cls.manager_sk, cls.manager_address = generate_account()
+        cls.proposal_manager_sk, cls.proposal_manager_address = generate_account()
         cls.vault_app_creation_timestamp = int(datetime(year=2022, month=3, day=1, tzinfo=ZoneInfo("UTC")).timestamp())
 
     def setUp(self):
         super().setUp()
-        self.ledger.set_account_balance(self.app_creator_address, 10_000_000)
-        self.create_vault_app(self.app_creator_address)
+        self.ledger.set_account_balance(self.manager_address, 10_000_000)
+        self.ledger.set_account_balance(self.proposal_manager_address, 10_000_000)
+        self.create_vault_app(self.manager_address)
         self.init_vault_app(self.vault_app_creation_timestamp + 30)
 
     def test_create_app(self):
@@ -51,7 +53,7 @@ class ProposalVotingTestCase(VaultAppMixin, ProposalVotingAppMixin, BaseTestCase
 
         txn_group = TransactionGroup([
             transaction.ApplicationCreateTxn(
-                sender=self.app_creator_address,
+                sender=self.manager_address,
                 sp=self.sp,
                 on_complete=transaction.OnComplete.NoOpOC,
                 approval_program=proposal_voting_approval_program.bytecode,
@@ -62,7 +64,7 @@ class ProposalVotingTestCase(VaultAppMixin, ProposalVotingAppMixin, BaseTestCase
                 app_args=[VAULT_APP_ID],
             )
         ])
-        txn_group.sign_with_private_key(self.app_creator_address, self.app_creator_sk)
+        txn_group.sign_with_private_key(self.manager_address, self.manager_sk)
         block = self.ledger.eval_transactions(txn_group.signed_transactions, block_timestamp=block_timestamp)
         app_id = block[b"txns"][0][b"apid"]
         
@@ -78,14 +80,13 @@ class ProposalVotingTestCase(VaultAppMixin, ProposalVotingAppMixin, BaseTestCase
                 proposal_threshold=5,
                 quorum_numerator=50,
                 approval_requirement=1,
-                manager=decode_address(self.app_creator_address),
-                proposal_manager=decode_address(self.app_creator_address),
+                manager=decode_address(self.manager_address),
+                proposal_manager=decode_address(self.manager_address),
             )
         )
 
-
     def test_update_app(self):
-        self.create_proposal_voting_app(self.app_creator_address)
+        self.create_proposal_voting_app(self.manager_address, self.proposal_manager_address)
         self.ledger.set_account_balance(get_application_address(PROPOSAL_VOTING_APP_ID), PROPOSAL_VOTING_APP_MINIMUM_BALANCE_REQUIREMENT)
 
         # Update
@@ -107,24 +108,23 @@ class ProposalVotingTestCase(VaultAppMixin, ProposalVotingAppMixin, BaseTestCase
 
         txn_group = TransactionGroup([
             transaction.ApplicationUpdateTxn(
-                sender=self.app_creator_address,
+                sender=self.manager_address,
                 index=PROPOSAL_VOTING_APP_ID,
                 sp=self.sp,
                 approval_program=proposal_voting_clear_state_program.bytecode,
                 clear_program=proposal_voting_clear_state_program.bytecode,
             )
         ])
-        txn_group.sign_with_private_key(self.app_creator_address, self.app_creator_sk)
+        txn_group.sign_with_private_key(self.manager_address, self.manager_sk)
         self.ledger.eval_transactions(txn_group.signed_transactions)
         
-
     def test_create_proposal(self):
         user_sk, user_address = generate_account()
         user_2_sk, user_2_address = generate_account()
 
         self.ledger.set_account_balance(user_address, 10_000_000)
         self.ledger.set_account_balance(user_2_address, 10_000_000)
-        self.create_proposal_voting_app(self.app_creator_address)
+        self.create_proposal_voting_app(self.manager_address, self.proposal_manager_address)
         self.ledger.set_account_balance(get_application_address(PROPOSAL_VOTING_APP_ID), PROPOSAL_VOTING_APP_MINIMUM_BALANCE_REQUIREMENT)
 
         block_timestamp = self.vault_app_creation_timestamp + 2 * WEEK
@@ -315,7 +315,7 @@ class ProposalVotingTestCase(VaultAppMixin, ProposalVotingAppMixin, BaseTestCase
         self.ledger.set_account_balance(user_2_address, 10_000_000)
         self.ledger.set_account_balance(user_3_address, 10_000_000)
         self.ledger.set_account_balance(user_4_address, 10_000_000)
-        self.create_proposal_voting_app(self.app_creator_address)
+        self.create_proposal_voting_app(self.manager_address, self.proposal_manager_address)
         self.ledger.set_account_balance(get_application_address(PROPOSAL_VOTING_APP_ID), PROPOSAL_VOTING_APP_MINIMUM_BALANCE_REQUIREMENT)
 
         block_timestamp = self.vault_app_creation_timestamp + 2 * WEEK
@@ -452,11 +452,11 @@ class ProposalVotingTestCase(VaultAppMixin, ProposalVotingAppMixin, BaseTestCase
         # Approve proposal
         txn_group = prepare_approve_proposal_transactions(
             proposal_voting_app_id=PROPOSAL_VOTING_APP_ID,
-            sender=self.app_creator_address,
+            sender=self.proposal_manager_address,
             proposal_id=proposal_id,
             suggested_params=self.sp
         )
-        txn_group.sign_with_private_key(self.app_creator_address, self.app_creator_sk)
+        txn_group.sign_with_private_key(self.proposal_manager_address, self.proposal_manager_sk)
         block = self.ledger.eval_transactions(txn_group.signed_transactions, block_timestamp=block_timestamp)
 
         # Logs
@@ -468,7 +468,7 @@ class ProposalVotingTestCase(VaultAppMixin, ProposalVotingAppMixin, BaseTestCase
             events[1], 
             {
                 "event_name": "approve_proposal",
-                "user_address": self.app_creator_address,
+                "user_address": self.proposal_manager_address,
                 "proposal_id": list(proposal_id.encode()),
             }
         )
@@ -591,7 +591,7 @@ class ProposalVotingTestCase(VaultAppMixin, ProposalVotingAppMixin, BaseTestCase
         user_sk, user_address = generate_account()
 
         self.ledger.set_account_balance(user_address, 10_000_000)
-        self.create_proposal_voting_app(self.app_creator_address)
+        self.create_proposal_voting_app(self.manager_address, self.proposal_manager_address)
         self.ledger.set_account_balance(get_application_address(PROPOSAL_VOTING_APP_ID), PROPOSAL_VOTING_APP_MINIMUM_BALANCE_REQUIREMENT)
         self.ledger.global_states[PROPOSAL_VOTING_APP_ID][b'approval_requirement'] = 0
 
@@ -681,7 +681,7 @@ class ProposalVotingTestCase(VaultAppMixin, ProposalVotingAppMixin, BaseTestCase
         user_sk, user_address = generate_account()
 
         self.ledger.set_account_balance(user_address, 10_000_000)
-        self.create_proposal_voting_app(self.app_creator_address)
+        self.create_proposal_voting_app(self.manager_address, self.proposal_manager_address)
         self.ledger.set_account_balance(get_application_address(PROPOSAL_VOTING_APP_ID), PROPOSAL_VOTING_APP_MINIMUM_BALANCE_REQUIREMENT)
 
         block_timestamp = self.vault_app_creation_timestamp + 2 * WEEK
@@ -728,11 +728,11 @@ class ProposalVotingTestCase(VaultAppMixin, ProposalVotingAppMixin, BaseTestCase
         # Approve proposal
         txn_group = prepare_approve_proposal_transactions(
             proposal_voting_app_id=PROPOSAL_VOTING_APP_ID,
-            sender=self.app_creator_address,
+            sender=self.proposal_manager_address,
             proposal_id=proposal_id,
             suggested_params=self.sp
         )
-        txn_group.sign_with_private_key(self.app_creator_address, self.app_creator_sk)
+        txn_group.sign_with_private_key(self.proposal_manager_address, self.proposal_manager_sk)
         self.ledger.eval_transactions(txn_group.signed_transactions, block_timestamp=block_timestamp)
 
         # Increase
@@ -787,7 +787,7 @@ class ProposalVotingTestCase(VaultAppMixin, ProposalVotingAppMixin, BaseTestCase
         user_sk, user_address = generate_account()
 
         self.ledger.set_account_balance(user_address, 10_000_000)
-        self.create_proposal_voting_app(self.app_creator_address)
+        self.create_proposal_voting_app(self.manager_address, self.proposal_manager_address)
         self.ledger.set_account_balance(get_application_address(PROPOSAL_VOTING_APP_ID), PROPOSAL_VOTING_APP_MINIMUM_BALANCE_REQUIREMENT)
 
         block_timestamp = self.vault_app_creation_timestamp + 2 * WEEK
@@ -854,7 +854,7 @@ class ProposalVotingTestCase(VaultAppMixin, ProposalVotingAppMixin, BaseTestCase
 
         self.ledger.set_account_balance(user_address, 10_000_000)
         self.ledger.set_account_balance(user_2_address, 10_000_000)
-        self.create_proposal_voting_app(self.app_creator_address)
+        self.create_proposal_voting_app(self.manager_address, self.proposal_manager_address)
         self.ledger.set_account_balance(get_application_address(PROPOSAL_VOTING_APP_ID), PROPOSAL_VOTING_APP_MINIMUM_BALANCE_REQUIREMENT)
 
         block_timestamp = self.vault_app_creation_timestamp + 2 * WEEK
@@ -979,7 +979,7 @@ class ProposalVotingTestCase(VaultAppMixin, ProposalVotingAppMixin, BaseTestCase
         user_sk, user_address = generate_account()
 
         self.ledger.set_account_balance(user_address, 10_000_000)
-        self.create_proposal_voting_app(self.app_creator_address)
+        self.create_proposal_voting_app(self.manager_address, self.proposal_manager_address)
         self.ledger.set_account_balance(get_application_address(PROPOSAL_VOTING_APP_ID), PROPOSAL_VOTING_APP_MINIMUM_BALANCE_REQUIREMENT)
 
         block_timestamp = self.vault_app_creation_timestamp + 2 * WEEK
@@ -1025,26 +1025,24 @@ class ProposalVotingTestCase(VaultAppMixin, ProposalVotingAppMixin, BaseTestCase
         # Approve proposal
         txn_group = prepare_approve_proposal_transactions(
             proposal_voting_app_id=PROPOSAL_VOTING_APP_ID,
-            sender=self.app_creator_address,
+            sender=self.proposal_manager_address,
             proposal_id=proposal_id,
             suggested_params=self.sp
         )
-        txn_group.sign_with_private_key(self.app_creator_address, self.app_creator_sk)
+        txn_group.sign_with_private_key(self.proposal_manager_address, self.proposal_manager_sk)
         self.ledger.eval_transactions(txn_group.signed_transactions, block_timestamp=block_timestamp)
 
         # Cancel proposal
         proposal_box_name = get_proposal_box_name(proposal_id)
-        proposal_manager_address = self.app_creator_address
-        proposal_manager_sk = self.app_creator_sk
         block_timestamp += 1
 
         txn_group = prepare_cancel_proposal_transactions(
             proposal_voting_app_id=PROPOSAL_VOTING_APP_ID,
-            sender=proposal_manager_address,
+            sender=self.proposal_manager_address,
             proposal_id=proposal_id,
             suggested_params=self.sp,
         )
-        txn_group.sign_with_private_key(proposal_manager_address, proposal_manager_sk)
+        txn_group.sign_with_private_key(self.proposal_manager_address, self.proposal_manager_sk)
         block = self.ledger.eval_transactions(txn_group.signed_transactions, block_timestamp=block_timestamp)
         
         # Logs
@@ -1057,7 +1055,7 @@ class ProposalVotingTestCase(VaultAppMixin, ProposalVotingAppMixin, BaseTestCase
             events[1],
             {
                 'event_name': 'cancel_proposal',
-                'user_address': self.app_creator_address,
+                'user_address': self.proposal_manager_address,
                 'proposal_id': list(proposal_id.encode()),
             }
         )
@@ -1070,11 +1068,11 @@ class ProposalVotingTestCase(VaultAppMixin, ProposalVotingAppMixin, BaseTestCase
         block_timestamp += DAY
         txn_group = prepare_cancel_proposal_transactions(
             proposal_voting_app_id=PROPOSAL_VOTING_APP_ID,
-            sender=proposal_manager_address,
+            sender=self.proposal_manager_address,
             proposal_id=proposal_id,
             suggested_params=self.sp,
         )
-        txn_group.sign_with_private_key(proposal_manager_address, proposal_manager_sk)
+        txn_group.sign_with_private_key(self.proposal_manager_address, self.proposal_manager_sk)
         with self.assertRaises(LogicEvalError) as e:
             self.ledger.eval_transactions(txn_group.signed_transactions, block_timestamp=block_timestamp)
         self.assertEqual(e.exception.source['line'], 'assert(proposal.is_cancelled == BYTES_FALSE)')
@@ -1105,7 +1103,7 @@ class ProposalVotingTestCase(VaultAppMixin, ProposalVotingAppMixin, BaseTestCase
         user_sk, user_address = generate_account()
 
         self.ledger.set_account_balance(user_address, 10_000_000)
-        self.create_proposal_voting_app(self.app_creator_address)
+        self.create_proposal_voting_app(self.manager_address, self.proposal_manager_address)
         self.ledger.set_account_balance(get_application_address(PROPOSAL_VOTING_APP_ID), PROPOSAL_VOTING_APP_MINIMUM_BALANCE_REQUIREMENT)
 
         block_timestamp = self.vault_app_creation_timestamp + 2 * WEEK
@@ -1152,11 +1150,11 @@ class ProposalVotingTestCase(VaultAppMixin, ProposalVotingAppMixin, BaseTestCase
         # Approve proposal
         txn_group = prepare_approve_proposal_transactions(
             proposal_voting_app_id=PROPOSAL_VOTING_APP_ID,
-            sender=self.app_creator_address,
+            sender=self.proposal_manager_address,
             proposal_id=proposal_id,
             suggested_params=self.sp
         )
-        txn_group.sign_with_private_key(self.app_creator_address, self.app_creator_sk)
+        txn_group.sign_with_private_key(self.proposal_manager_address, self.proposal_manager_sk)
         self.ledger.eval_transactions(txn_group.signed_transactions, block_timestamp=block_timestamp)
 
         proposal_box_name = get_proposal_box_name(proposal_id)
@@ -1164,17 +1162,15 @@ class ProposalVotingTestCase(VaultAppMixin, ProposalVotingAppMixin, BaseTestCase
 
         # Execute Proposal
         proposal_box_name = get_proposal_box_name(proposal_id)
-        proposal_manager_address = self.app_creator_address
-        proposal_manager_sk = self.app_creator_sk
         block_timestamp += 1
 
         txn_group = prepare_execute_proposal_transactions(
             proposal_voting_app_id=PROPOSAL_VOTING_APP_ID,
-            sender=proposal_manager_address,
+            sender=self.proposal_manager_address,
             proposal_id=proposal_id,
             suggested_params=self.sp,
         )
-        txn_group.sign_with_private_key(proposal_manager_address, proposal_manager_sk)
+        txn_group.sign_with_private_key(self.proposal_manager_address, self.proposal_manager_sk)
         with self.assertRaises(LogicEvalError) as e:
             self.ledger.eval_transactions(txn_group.signed_transactions, block_timestamp=block_timestamp)
         self.assertEqual(e.exception.source['line'], "assert(proposal.voting_end_timestamp < Global.LatestTimestamp)")
@@ -1192,7 +1188,7 @@ class ProposalVotingTestCase(VaultAppMixin, ProposalVotingAppMixin, BaseTestCase
             events[1],
             {
                 'event_name': 'execute_proposal',
-                'user_address': self.app_creator_address,
+                'user_address': self.proposal_manager_address,
                 'proposal_id': list(proposal_id.encode()),
             }
         )
@@ -1205,11 +1201,11 @@ class ProposalVotingTestCase(VaultAppMixin, ProposalVotingAppMixin, BaseTestCase
         block_timestamp += DAY
         txn_group = prepare_cancel_proposal_transactions(
             proposal_voting_app_id=PROPOSAL_VOTING_APP_ID,
-            sender=proposal_manager_address,
+            sender=self.proposal_manager_address,
             proposal_id=proposal_id,
             suggested_params=self.sp,
         )
-        txn_group.sign_with_private_key(proposal_manager_address, proposal_manager_sk)
+        txn_group.sign_with_private_key(self.proposal_manager_address, self.proposal_manager_sk)
         with self.assertRaises(LogicEvalError) as e:
             self.ledger.eval_transactions(txn_group.signed_transactions, block_timestamp=block_timestamp)
         self.assertEqual(e.exception.source['line'], 'assert(proposal.is_executed == BYTES_FALSE)')
@@ -1218,7 +1214,7 @@ class ProposalVotingTestCase(VaultAppMixin, ProposalVotingAppMixin, BaseTestCase
         user_sk, user_address = generate_account()
 
         self.ledger.set_account_balance(user_address, 10_000_000)
-        self.create_proposal_voting_app(self.app_creator_address)
+        self.create_proposal_voting_app(self.manager_address, self.proposal_manager_address)
         self.ledger.set_account_balance(get_application_address(PROPOSAL_VOTING_APP_ID), PROPOSAL_VOTING_APP_MINIMUM_BALANCE_REQUIREMENT)
 
         block_timestamp = self.vault_app_creation_timestamp + 2 * WEEK
@@ -1268,16 +1264,15 @@ class ProposalVotingTestCase(VaultAppMixin, ProposalVotingAppMixin, BaseTestCase
         self.assertEqual(proposal.voting_start_timestamp, 0)
         self.assertEqual(proposal.voting_end_timestamp, 0)
 
-
         # Approve proposal
         block_timestamp += DAY
         txn_group = prepare_approve_proposal_transactions(
             proposal_voting_app_id=PROPOSAL_VOTING_APP_ID,
-            sender=self.app_creator_address,
+            sender=self.proposal_manager_address,
             proposal_id=proposal_id,
             suggested_params=self.sp
         )
-        txn_group.sign_with_private_key(self.app_creator_address, self.app_creator_sk)
+        txn_group.sign_with_private_key(self.proposal_manager_address, self.proposal_manager_sk)
         block = self.ledger.eval_transactions(txn_group.signed_transactions, block_timestamp=block_timestamp)
         
         # Logs
@@ -1290,7 +1285,7 @@ class ProposalVotingTestCase(VaultAppMixin, ProposalVotingAppMixin, BaseTestCase
             events[1],
             {
                 'event_name': 'approve_proposal',
-                'user_address': self.app_creator_address,
+                'user_address': self.proposal_manager_address,
                 'proposal_id': list(proposal_id.encode()),
             }
         )
@@ -1309,11 +1304,11 @@ class ProposalVotingTestCase(VaultAppMixin, ProposalVotingAppMixin, BaseTestCase
         self.create_checkpoints(user_address, user_sk, block_timestamp)
         txn_group = prepare_approve_proposal_transactions(
             proposal_voting_app_id=PROPOSAL_VOTING_APP_ID,
-            sender=self.app_creator_address,
+            sender=self.proposal_manager_address,
             proposal_id=proposal_id,
             suggested_params=self.sp
         )
-        txn_group.sign_with_private_key(self.app_creator_address, self.app_creator_sk)
+        txn_group.sign_with_private_key(self.proposal_manager_address, self.proposal_manager_sk)
         with self.assertRaises(LogicEvalError) as e:
             self.ledger.eval_transactions(txn_group.signed_transactions, block_timestamp=block_timestamp)
         self.assertEqual(e.exception.source['line'], 'assert(proposal.is_approved == BYTES_FALSE)')
@@ -1351,11 +1346,11 @@ class ProposalVotingTestCase(VaultAppMixin, ProposalVotingAppMixin, BaseTestCase
         self.create_checkpoints(user_address, user_sk, block_timestamp)
         txn_group = prepare_approve_proposal_transactions(
             proposal_voting_app_id=PROPOSAL_VOTING_APP_ID,
-            sender=self.app_creator_address,
+            sender=self.proposal_manager_address,
             proposal_id=proposal_id,
             suggested_params=self.sp
         )
-        txn_group.sign_with_private_key(self.app_creator_address, self.app_creator_sk)
+        txn_group.sign_with_private_key(self.proposal_manager_address, self.proposal_manager_sk)
         with self.assertRaises(LogicEvalError) as e:
             self.ledger.eval_transactions(txn_group.signed_transactions, block_timestamp=block_timestamp)
         self.assertEqual(e.exception.source['line'], 'assert(!proposal.voting_start_timestamp)')
@@ -1364,7 +1359,7 @@ class ProposalVotingTestCase(VaultAppMixin, ProposalVotingAppMixin, BaseTestCase
         user_sk, user_address = generate_account()
         self.ledger.set_account_balance(user_address, 10_000_000)
         
-        self.create_proposal_voting_app(self.app_creator_address)
+        self.create_proposal_voting_app(self.manager_address, self.proposal_manager_address)
         self.ledger.set_account_balance(get_application_address(PROPOSAL_VOTING_APP_ID), PROPOSAL_VOTING_APP_MINIMUM_BALANCE_REQUIREMENT)
 
         txn_group = prepare_disable_approval_requirement_transactions(
@@ -1379,10 +1374,10 @@ class ProposalVotingTestCase(VaultAppMixin, ProposalVotingAppMixin, BaseTestCase
 
         txn_group = prepare_disable_approval_requirement_transactions(
             proposal_voting_app_id=PROPOSAL_VOTING_APP_ID,
-            sender=self.app_creator_address,
+            sender=self.proposal_manager_address,
             suggested_params=self.sp
         )
-        txn_group.sign_with_private_key(self.app_creator_address, self.app_creator_sk)
+        txn_group.sign_with_private_key(self.proposal_manager_address, self.proposal_manager_sk)
         block = self.ledger.eval_transactions(txn_group.signed_transactions)
 
         # Logs
@@ -1398,10 +1393,10 @@ class ProposalVotingTestCase(VaultAppMixin, ProposalVotingAppMixin, BaseTestCase
         )
         txn_group = prepare_disable_approval_requirement_transactions(
             proposal_voting_app_id=PROPOSAL_VOTING_APP_ID,
-            sender=self.app_creator_address,
+            sender=self.proposal_manager_address,
             suggested_params=self.sp
         )
-        txn_group.sign_with_private_key(self.app_creator_address, self.app_creator_sk)
+        txn_group.sign_with_private_key(self.proposal_manager_address, self.proposal_manager_sk)
         with self.assertRaises(LogicEvalError) as e:
             self.ledger.eval_transactions(txn_group.signed_transactions)
         self.assertEqual(e.exception.source['line'], 'assert(app_global_get(APPROVAL_REQUIREMENT_KEY))')
@@ -1412,7 +1407,7 @@ class ProposalVotingTestCase(VaultAppMixin, ProposalVotingAppMixin, BaseTestCase
         user_sk, user_address = generate_account()
         self.ledger.set_account_balance(user_address, 10_000_000)
 
-        self.create_proposal_voting_app(self.app_creator_address)
+        self.create_proposal_voting_app(self.manager_address, self.proposal_manager_address)
         self.ledger.set_account_balance(get_application_address(PROPOSAL_VOTING_APP_ID), PROPOSAL_VOTING_APP_MINIMUM_BALANCE_REQUIREMENT)
 
         # Test address validation
@@ -1430,25 +1425,28 @@ class ProposalVotingTestCase(VaultAppMixin, ProposalVotingAppMixin, BaseTestCase
         # Set user as manager
         txn_group = prepare_set_manager_transactions(
             proposal_voting_app_id=PROPOSAL_VOTING_APP_ID,
-            sender=self.app_creator_address,
+            sender=self.manager_address,
             new_manager_address=user_address,
             suggested_params=self.sp,
         )
-        txn_group.sign_with_private_key(self.app_creator_address, self.app_creator_sk)
+        txn_group.sign_with_private_key(self.manager_address, self.manager_sk)
         block = self.ledger.eval_transactions(txn_group.signed_transactions, block_timestamp=block_timestamp)
         logs = block[b'txns'][0][b'dt'][b'lg']
         events = decode_logs(logs, events=proposal_voting_events)
         self.assertEqual(len(events), 1)
         self.assertDictEqual(
             events[0],
-            {'event_name': 'set_manager', 'manager': user_address}
+            {
+                'event_name': 'set_manager',
+                'manager': user_address
+            }
         )
 
         # Set back app creator as manager
         txn_group = prepare_set_manager_transactions(
             proposal_voting_app_id=PROPOSAL_VOTING_APP_ID,
             sender=user_address,
-            new_manager_address=self.app_creator_address,
+            new_manager_address=self.manager_address,
             suggested_params=self.sp,
         )
         txn_group.sign_with_private_key(user_address, user_sk)
@@ -1458,7 +1456,10 @@ class ProposalVotingTestCase(VaultAppMixin, ProposalVotingAppMixin, BaseTestCase
         self.assertEqual(len(events), 1)
         self.assertDictEqual(
             events[0],
-            {'event_name': 'set_manager', 'manager': self.app_creator_address}
+            {
+                'event_name': 'set_manager',
+                'manager': self.manager_address
+            }
         )
 
     def test_set_proposal_manager(self):
@@ -1467,7 +1468,7 @@ class ProposalVotingTestCase(VaultAppMixin, ProposalVotingAppMixin, BaseTestCase
         user_sk, user_address = generate_account()
         self.ledger.set_account_balance(user_address, 10_000_000)
 
-        self.create_proposal_voting_app(self.app_creator_address)
+        self.create_proposal_voting_app(self.manager_address, self.proposal_manager_address)
         self.ledger.set_account_balance(get_application_address(PROPOSAL_VOTING_APP_ID), PROPOSAL_VOTING_APP_MINIMUM_BALANCE_REQUIREMENT)
 
         # Test address validation
@@ -1485,43 +1486,280 @@ class ProposalVotingTestCase(VaultAppMixin, ProposalVotingAppMixin, BaseTestCase
         # Set user as manager
         txn_group = prepare_set_proposal_manager_transactions(
             proposal_voting_app_id=PROPOSAL_VOTING_APP_ID,
-            sender=self.app_creator_address,
+            sender=self.manager_address,
             new_manager_address=user_address,
             suggested_params=self.sp,
         )
-        txn_group.sign_with_private_key(self.app_creator_address, self.app_creator_sk)
+        txn_group.sign_with_private_key(self.manager_address, self.manager_sk)
         block = self.ledger.eval_transactions(txn_group.signed_transactions, block_timestamp=block_timestamp)
         logs = block[b'txns'][0][b'dt'][b'lg']
         events = decode_logs(logs, events=proposal_voting_events)
         self.assertEqual(len(events), 1)
         self.assertDictEqual(
             events[0],
-            {'event_name': 'set_proposal_manager', 'manager': user_address}
+            {
+                'event_name': 'set_proposal_manager',
+                'proposal_manager': user_address
+            }
         )
 
         # Set back app creator as manager
         txn_group = prepare_set_proposal_manager_transactions(
             proposal_voting_app_id=PROPOSAL_VOTING_APP_ID,
-            sender=self.app_creator_address,
-            new_manager_address=self.app_creator_address,
+            sender=self.manager_address,
+            new_manager_address=self.manager_address,
             suggested_params=self.sp,
         )
-        txn_group.sign_with_private_key(self.app_creator_address, self.app_creator_sk)
+        txn_group.sign_with_private_key(self.manager_address, self.manager_sk)
         block = self.ledger.eval_transactions(txn_group.signed_transactions, block_timestamp=block_timestamp)
         logs = block[b'txns'][0][b'dt'][b'lg']
         events = decode_logs(logs, events=proposal_voting_events)
         self.assertEqual(len(events), 1)
         self.assertDictEqual(
             events[0],
-            {'event_name': 'set_proposal_manager', 'manager': self.app_creator_address}
+            {
+                'event_name': 'set_proposal_manager',
+                'proposal_manager': self.manager_address
+            }
         )
 
+    def test_set_voting_delay(self):
+        self.create_proposal_voting_app(self.manager_address, self.proposal_manager_address)
+        self.ledger.set_account_balance(get_application_address(PROPOSAL_VOTING_APP_ID), PROPOSAL_VOTING_APP_MINIMUM_BALANCE_REQUIREMENT)
+
+        # Permission
+        user_sk, user_address = generate_account()
+        self.ledger.set_account_balance(user_address, 10_000_000)
+
+        txn_group = prepare_set_voting_delay_transactions(
+            proposal_voting_app_id=PROPOSAL_VOTING_APP_ID,
+            sender=user_address,
+            new_voting_delay=10,
+            suggested_params=self.sp,
+        )
+        txn_group.sign_with_private_key(user_address, user_sk)
+        with self.assertRaises(LogicEvalError) as e:
+            self.ledger.eval_transactions(txn_group.signed_transactions)
+        self.assertEqual(e.exception.source['line'], 'assert(user_address == app_global_get(PROPOSAL_MANAGER_KEY))')
+        
+        txn_group = prepare_set_voting_delay_transactions(
+            proposal_voting_app_id=PROPOSAL_VOTING_APP_ID,
+            sender=self.manager_address,
+            new_voting_delay=10,
+            suggested_params=self.sp,
+        )
+        txn_group.sign_with_private_key(self.manager_address, self.manager_sk)
+        with self.assertRaises(LogicEvalError) as e:
+            self.ledger.eval_transactions(txn_group.signed_transactions)
+        self.assertEqual(e.exception.source['line'], 'assert(user_address == app_global_get(PROPOSAL_MANAGER_KEY))')        
+
+        # Success
+        # Global state
+        proposal_voting_app_global_state = get_proposal_voting_app_global_state(self.ledger, PROPOSAL_VOTING_APP_ID)
+        self.assertEqual(proposal_voting_app_global_state.voting_delay, 2)
+
+        txn_group = prepare_set_voting_delay_transactions(
+            proposal_voting_app_id=PROPOSAL_VOTING_APP_ID,
+            sender=self.proposal_manager_address,
+            new_voting_delay=10,
+            suggested_params=self.sp,
+        )
+        txn_group.sign_with_private_key(self.proposal_manager_address, self.proposal_manager_sk)
+        block = self.ledger.eval_transactions(txn_group.signed_transactions)
+        logs = block[b'txns'][0][b'dt'][b'lg']
+        events = decode_logs(logs, events=proposal_voting_events)
+        self.assertEqual(len(events), 1)
+        self.assertDictEqual(
+            events[0],
+            {
+                'event_name': 'set_voting_delay',
+                'voting_delay': 10,
+            }
+        )
+
+        # Global state
+        proposal_voting_app_global_state = get_proposal_voting_app_global_state(self.ledger, PROPOSAL_VOTING_APP_ID)
+        self.assertEqual(proposal_voting_app_global_state.voting_delay, 10)
+
+    def test_set_voting_duration(self):
+        self.create_proposal_voting_app(self.manager_address, self.proposal_manager_address)
+        self.ledger.set_account_balance(get_application_address(PROPOSAL_VOTING_APP_ID), PROPOSAL_VOTING_APP_MINIMUM_BALANCE_REQUIREMENT)
+
+        # Permission
+        user_sk, user_address = generate_account()
+        self.ledger.set_account_balance(user_address, 10_000_000)
+
+        txn_group = prepare_set_voting_duration_transactions(
+            proposal_voting_app_id=PROPOSAL_VOTING_APP_ID,
+            sender=user_address,
+            new_voting_duration=10,
+            suggested_params=self.sp,
+        )
+        txn_group.sign_with_private_key(user_address, user_sk)
+        with self.assertRaises(LogicEvalError) as e:
+            self.ledger.eval_transactions(txn_group.signed_transactions)
+        self.assertEqual(e.exception.source['line'], 'assert(user_address == app_global_get(PROPOSAL_MANAGER_KEY))')
+
+        txn_group = prepare_set_voting_duration_transactions(
+            proposal_voting_app_id=PROPOSAL_VOTING_APP_ID,
+            sender=self.manager_address,
+            new_voting_duration=10,
+            suggested_params=self.sp,
+        )
+        txn_group.sign_with_private_key(self.manager_address, self.manager_sk)
+        with self.assertRaises(LogicEvalError) as e:
+            self.ledger.eval_transactions(txn_group.signed_transactions)
+        self.assertEqual(e.exception.source['line'], 'assert(user_address == app_global_get(PROPOSAL_MANAGER_KEY))')
+
+        # Success
+        # Global state
+        proposal_voting_app_global_state = get_proposal_voting_app_global_state(self.ledger, PROPOSAL_VOTING_APP_ID)
+        self.assertEqual(proposal_voting_app_global_state.voting_duration, 7)
+
+        txn_group = prepare_set_voting_duration_transactions(
+            proposal_voting_app_id=PROPOSAL_VOTING_APP_ID,
+            sender=self.proposal_manager_address,
+            new_voting_duration=10,
+            suggested_params=self.sp,
+        )
+        txn_group.sign_with_private_key(self.proposal_manager_address, self.proposal_manager_sk)
+        block = self.ledger.eval_transactions(txn_group.signed_transactions)
+        logs = block[b'txns'][0][b'dt'][b'lg']
+        events = decode_logs(logs, events=proposal_voting_events)
+        self.assertEqual(len(events), 1)
+        self.assertDictEqual(
+            events[0],
+            {
+                'event_name': 'set_voting_duration',
+                'voting_duration': 10,
+            }
+        )
+
+        # Global state
+        proposal_voting_app_global_state = get_proposal_voting_app_global_state(self.ledger, PROPOSAL_VOTING_APP_ID)
+        self.assertEqual(proposal_voting_app_global_state.voting_duration, 10)
+        
+    def test_set_proposal_threshold(self):
+        self.create_proposal_voting_app(self.manager_address, self.proposal_manager_address)
+        self.ledger.set_account_balance(get_application_address(PROPOSAL_VOTING_APP_ID), PROPOSAL_VOTING_APP_MINIMUM_BALANCE_REQUIREMENT)
+
+        # Permission
+        user_sk, user_address = generate_account()
+        self.ledger.set_account_balance(user_address, 10_000_000)
+
+        txn_group = prepare_set_proposal_threshold_transactions(
+            proposal_voting_app_id=PROPOSAL_VOTING_APP_ID,
+            sender=user_address,
+            new_proposal_threshold=10,
+            suggested_params=self.sp,
+        )
+        txn_group.sign_with_private_key(user_address, user_sk)
+        with self.assertRaises(LogicEvalError) as e:
+            self.ledger.eval_transactions(txn_group.signed_transactions)
+        self.assertEqual(e.exception.source['line'], 'assert(user_address == app_global_get(PROPOSAL_MANAGER_KEY))')
+
+        txn_group = prepare_set_proposal_threshold_transactions(
+            proposal_voting_app_id=PROPOSAL_VOTING_APP_ID,
+            sender=self.manager_address,
+            new_proposal_threshold=10,
+            suggested_params=self.sp,
+        )
+        txn_group.sign_with_private_key(self.manager_address, self.manager_sk)
+        with self.assertRaises(LogicEvalError) as e:
+            self.ledger.eval_transactions(txn_group.signed_transactions)
+        self.assertEqual(e.exception.source['line'], 'assert(user_address == app_global_get(PROPOSAL_MANAGER_KEY))')
+
+        # Success
+        # Global state
+        proposal_voting_app_global_state = get_proposal_voting_app_global_state(self.ledger, PROPOSAL_VOTING_APP_ID)
+        self.assertEqual(proposal_voting_app_global_state.proposal_threshold, 5)
+
+        txn_group = prepare_set_proposal_threshold_transactions(
+            proposal_voting_app_id=PROPOSAL_VOTING_APP_ID,
+            sender=self.proposal_manager_address,
+            new_proposal_threshold=10,
+            suggested_params=self.sp,
+        )
+        txn_group.sign_with_private_key(self.proposal_manager_address, self.proposal_manager_sk)
+        block = self.ledger.eval_transactions(txn_group.signed_transactions)
+        logs = block[b'txns'][0][b'dt'][b'lg']
+        events = decode_logs(logs, events=proposal_voting_events)
+        self.assertEqual(len(events), 1)
+        self.assertDictEqual(
+            events[0],
+            {
+                'event_name': 'set_proposal_threshold',
+                'proposal_threshold': 10,
+            }
+        )
+
+        # Global state
+        proposal_voting_app_global_state = get_proposal_voting_app_global_state(self.ledger, PROPOSAL_VOTING_APP_ID)
+        self.assertEqual(proposal_voting_app_global_state.proposal_threshold, 10)
+        
+    def test_set_quorum_numerator(self):
+        self.create_proposal_voting_app(self.manager_address, self.proposal_manager_address)
+        self.ledger.set_account_balance(get_application_address(PROPOSAL_VOTING_APP_ID), PROPOSAL_VOTING_APP_MINIMUM_BALANCE_REQUIREMENT)
+
+        # Permission
+        user_sk, user_address = generate_account()
+        self.ledger.set_account_balance(user_address, 10_000_000)
+
+        txn_group = prepare_set_quorum_numerator_transactions(
+            proposal_voting_app_id=PROPOSAL_VOTING_APP_ID,
+            sender=user_address,
+            new_quorum_numerator=10,
+            suggested_params=self.sp,
+        )
+        txn_group.sign_with_private_key(user_address, user_sk)
+        with self.assertRaises(LogicEvalError) as e:
+            self.ledger.eval_transactions(txn_group.signed_transactions)
+        self.assertEqual(e.exception.source['line'], 'assert(user_address == app_global_get(PROPOSAL_MANAGER_KEY))')
+
+        txn_group = prepare_set_quorum_numerator_transactions(
+            proposal_voting_app_id=PROPOSAL_VOTING_APP_ID,
+            sender=self.manager_address,
+            new_quorum_numerator=10,
+            suggested_params=self.sp,
+        )
+        txn_group.sign_with_private_key(self.manager_address, self.manager_sk)
+        with self.assertRaises(LogicEvalError) as e:
+            self.ledger.eval_transactions(txn_group.signed_transactions)
+        self.assertEqual(e.exception.source['line'], 'assert(user_address == app_global_get(PROPOSAL_MANAGER_KEY))')
+
+        # Success
+        # Global state
+        proposal_voting_app_global_state = get_proposal_voting_app_global_state(self.ledger, PROPOSAL_VOTING_APP_ID)
+        self.assertEqual(proposal_voting_app_global_state.quorum_numerator, 50)
+
+        txn_group = prepare_set_quorum_numerator_transactions(
+            proposal_voting_app_id=PROPOSAL_VOTING_APP_ID,
+            sender=self.proposal_manager_address,
+            new_quorum_numerator=10,
+            suggested_params=self.sp,
+        )
+        txn_group.sign_with_private_key(self.proposal_manager_address, self.proposal_manager_sk)
+        block = self.ledger.eval_transactions(txn_group.signed_transactions)
+        logs = block[b'txns'][0][b'dt'][b'lg']
+        events = decode_logs(logs, events=proposal_voting_events)
+        self.assertEqual(len(events), 1)
+        self.assertDictEqual(
+            events[0],
+            {
+                'event_name': 'set_quorum_numerator',
+                'quorum_numerator': 10,
+            }
+        )
+
+        # Global state
+        proposal_voting_app_global_state = get_proposal_voting_app_global_state(self.ledger, PROPOSAL_VOTING_APP_ID)
+        self.assertEqual(proposal_voting_app_global_state.quorum_numerator, 10)
 
     def test_budget_increase(self):
         user_sk, user_address = generate_account()
         self.ledger.set_account_balance(user_address, 10_000_000)
 
-        self.create_proposal_voting_app(self.app_creator_address)
+        self.create_proposal_voting_app(self.manager_address, self.proposal_manager_address)
         self.ledger.set_account_balance(get_application_address(PROPOSAL_VOTING_APP_ID), PROPOSAL_VOTING_APP_MINIMUM_BALANCE_REQUIREMENT)
 
         txn = prepare_budget_increase_txn(

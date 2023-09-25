@@ -222,9 +222,12 @@ class StakingVotingAppMixin:
 
 class ProposalVotingAppMixin:
 
-    def create_proposal_voting_app(self, app_creator_address):
+    def create_proposal_voting_app(self, app_creator_address, proposal_manager_address=None):
         if app_creator_address not in self.ledger.accounts:
             self.ledger.set_account_balance(app_creator_address, 1_000_000)
+            
+        if proposal_manager_address is None:
+            proposal_manager_address = app_creator_address
 
         # TODO: Update int and byte counts
         self.ledger.create_app(
@@ -249,6 +252,6 @@ class ProposalVotingAppMixin:
                 b'quorum_numerator': 50,
                 APPROVAL_REQUIREMENT_KEY: 1,
                 b'manager': decode_address(app_creator_address),
-                b'proposal_manager': decode_address(app_creator_address)
+                b'proposal_manager': decode_address(proposal_manager_address)
             }
         )

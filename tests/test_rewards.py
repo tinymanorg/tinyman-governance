@@ -682,7 +682,7 @@ class RewardsTestCase(VaultAppMixin, RewardsAppMixin, BaseTestCase):
         self.assertEqual(len(events), 1)
         self.assertDictEqual(
             events[0],
-            {'event_name': 'set_rewards_manager', 'manager': user_address}
+            {'event_name': 'set_rewards_manager', 'rewards_manager': user_address}
         )
 
         # Global state
@@ -703,7 +703,7 @@ class RewardsTestCase(VaultAppMixin, RewardsAppMixin, BaseTestCase):
         self.assertEqual(len(events), 1)
         self.assertDictEqual(
             events[0],
-            {'event_name': 'set_rewards_manager', 'manager': self.app_creator_address}
+            {'event_name': 'set_rewards_manager', 'rewards_manager': self.app_creator_address}
         )
 
         # Global state

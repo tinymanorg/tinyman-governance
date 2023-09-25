@@ -300,7 +300,7 @@ block main:
         # assert(new_voting_delay <= 7)
 
         app_global_put(VOTING_DELAY_KEY, new_voting_delay)
-        log(Concat(method("set_voting_delay(address)"), itob(new_voting_delay)))
+        log(Concat(method("set_voting_delay(uint64)"), itob(new_voting_delay)))
         exit(1)
     end
 
@@ -315,7 +315,7 @@ block main:
         # assert(new_voting_duration <= 10)
 
         app_global_put(VOTING_DURATION_KEY, new_voting_duration)
-        log(Concat(method("set_voting_duration(address)"), itob(new_voting_duration)))
+        log(Concat(method("set_voting_duration(uint64)"), itob(new_voting_duration)))
         exit(1)
     end
 
@@ -330,7 +330,7 @@ block main:
         # assert(new_proposal_threshold <= 100)
 
         app_global_put(PROPOSAL_THRESHOLD_KEY, new_proposal_threshold)
-        log(Concat(method("set_proposal_threshold(address)"), itob(new_proposal_threshold)))
+        log(Concat(method("set_proposal_threshold(uint64)"), itob(new_proposal_threshold)))
         exit(1)
     end
 
@@ -345,7 +345,7 @@ block main:
         # assert(new_quorum_numerator <= 100)
 
         app_global_put(QUORUM_NUMERATOR_KEY, new_quorum_numerator)
-        log(Concat(method("set_quorum_numerator(address)"), itob(new_quorum_numerator)))
+        log(Concat(method("set_quorum_numerator(uint64)"), itob(new_quorum_numerator)))
         exit(1)
     end
 
