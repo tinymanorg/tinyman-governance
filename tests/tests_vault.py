@@ -11,7 +11,7 @@ from algosdk.logic import get_application_address
 from tinyman.governance.constants import TINY_ASSET_ID_KEY
 from tinyman.governance.constants import WEEK, DAY
 from tinyman.governance.event import decode_logs
-from tinyman.governance.transactions import prepare_budget_increase_txn
+from tinyman.governance.transactions import _prepare_budget_increase_transaction
 from tinyman.governance.vault.constants import TOTAL_LOCKED_AMOUNT_KEY, TOTAL_POWER_COUNT_KEY, TWO_TO_THE_64, MAX_LOCK_TIME, LAST_TOTAL_POWER_TIMESTAMP_KEY, ACCOUNT_POWER_BOX_COST, ACCOUNT_STATE_BOX_COST
 from tinyman.governance.vault.events import vault_events
 from tinyman.governance.vault.storage import VaultAppGlobalState
@@ -170,7 +170,7 @@ class VaultTestCase(VaultAppMixin, BaseTestCase):
 
         txn_group = TransactionGroup(
             [
-                prepare_budget_increase_txn(
+                _prepare_budget_increase_transaction(
                     sender=self.user_address,
                     sp=self.sp,
                     index=VAULT_APP_ID,

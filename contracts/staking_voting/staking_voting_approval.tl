@@ -211,7 +211,7 @@ block main:
         # assert(new_voting_delay <= 7)
 
         app_global_put(VOTING_DELAY_KEY, new_voting_delay)
-        log(Concat(method("set_voting_delay(address)"), itob(new_voting_delay)))
+        log(Concat(method("set_voting_delay(uint64)"), itob(new_voting_delay)))
         exit(1)
     end
 
@@ -226,7 +226,7 @@ block main:
         # assert(new_voting_duration <= 10)
 
         app_global_put(VOTING_DURATION_KEY, new_voting_duration)
-        log(Concat(method("set_voting_duration(address)"), itob(new_voting_duration)))
+        log(Concat(method("set_voting_duration(uint64)"), itob(new_voting_duration)))
         exit(1)
     end
 

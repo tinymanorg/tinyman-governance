@@ -18,7 +18,7 @@ from tinyman.governance.vault.storage import get_power_index_at
 from tinyman.governance.vault.transactions import prepare_create_lock_transactions, prepare_increase_lock_amount_transactions
 from tinyman.governance.vault.utils import get_start_timestamp_of_week
 from tinyman.utils import TransactionGroup
-from tinyman.governance.transactions import prepare_budget_increase_txn
+from tinyman.governance.transactions import _prepare_budget_increase_transaction
 
 from tests.common import BaseTestCase, VaultAppMixin, RewardsAppMixin
 from tests.constants import TINY_ASSET_ID, rewards_approval_program, rewards_clear_state_program, VAULT_APP_ID, REWARDS_APP_ID
@@ -508,7 +508,7 @@ class RewardsTestCase(VaultAppMixin, RewardsAppMixin, BaseTestCase):
     def test_budget_increase(self):
         self.create_rewards_app(self.app_creator_address)
 
-        txn = prepare_budget_increase_txn(
+        txn = _prepare_budget_increase_transaction(
             sender=self.user_address,
             sp=self.sp,
             index=REWARDS_APP_ID,
@@ -517,7 +517,7 @@ class RewardsTestCase(VaultAppMixin, RewardsAppMixin, BaseTestCase):
         txn_group.sign_with_private_key(self.user_address, self.user_sk)
         self.ledger.eval_transactions(txn_group.signed_transactions)
         
-        txn = prepare_budget_increase_txn(
+        txn = _prepare_budget_increase_transaction(
             sender=self.user_address,
             sp=self.sp,
             index=REWARDS_APP_ID,

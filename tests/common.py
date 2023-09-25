@@ -189,9 +189,12 @@ class RewardsAppMixin:
 
 class StakingVotingAppMixin:
 
-    def create_staking_voting_app(self, app_creator_address):
+    def create_staking_voting_app(self, app_creator_address, proposal_manager_address=None):
         if app_creator_address not in self.ledger.accounts:
             self.ledger.set_account_balance(app_creator_address, 1_000_000)
+            
+        if proposal_manager_address is None:
+            proposal_manager_address = app_creator_address
 
         # TODO: Update int and byte counts
         self.ledger.create_app(
@@ -209,13 +212,12 @@ class StakingVotingAppMixin:
         self.ledger.set_global_state(
             STAKING_VOTING_APP_ID,
             {
-                TINY_ASSET_ID_KEY: TINY_ASSET_ID,
                 b'vault_app_id': VAULT_APP_ID,
                 b'proposal_id_counter': 0,
                 b'voting_delay': 1,
                 b'voting_duration': 7,
                 b'manager': decode_address(app_creator_address),
-                b'proposal_manager': decode_address(app_creator_address)
+                b'proposal_manager': decode_address(proposal_manager_address)
             }
         )
 
