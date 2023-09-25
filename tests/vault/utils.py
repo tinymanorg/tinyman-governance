@@ -6,8 +6,10 @@ from tinyman.governance.vault.storage import VaultAppGlobalState, parse_box_acco
 from tests.constants import VAULT_APP_ID
 
 
-def get_vault_app_global_state(ledger):
-    return VaultAppGlobalState(**{key.decode(): value for key, value in ledger.global_states[VAULT_APP_ID].items()})
+def get_vault_app_global_state(ledger, app_id=None) -> VaultAppGlobalState:
+    if app_id is None:
+        app_id = VAULT_APP_ID
+    return VaultAppGlobalState(**{key.decode(): value for key, value in ledger.global_states[app_id].items()})
 
 
 def get_account_state(ledger, user_address):

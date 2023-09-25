@@ -81,9 +81,9 @@ block main:
         "increase_budget": increase_budget
         "create_reward_period": create_reward_period
         "set_reward_amount": set_reward_amount
+        "get_box": get_box
         "set_manager": set_manager
         "set_rewards_manager": set_rewards_manager
-        "update_setting": update_setting
         "box_replace": box_replace
         "unset_claim_sheet": unset_claim_sheet
         "init": init
@@ -200,6 +200,7 @@ block main:
         bytes user_address = Txn.Sender
         assert(user_address == app_global_get(MANAGER_KEY))
 
+        assert(len(Txn.ApplicationArgs[1]) == 32)
         app_global_put(MANAGER_KEY, Txn.ApplicationArgs[1])
         log(Concat(method("set_manager(address)"), Txn.ApplicationArgs[1]))
         exit(1)
@@ -209,28 +210,20 @@ block main:
         bytes user_address = Txn.Sender
         assert(user_address == app_global_get(MANAGER_KEY))
 
+        assert(len(Txn.ApplicationArgs[1]) == 32)
         app_global_put(REWARDS_MANAGER_KEY, Txn.ApplicationArgs[1])
         log(Concat(method("set_rewards_manager(address)"), Txn.ApplicationArgs[1]))
         exit(1)
     end
 
-    block update_setting:
-        bytes user_address = Txn.Sender
-        assert(user_address == app_global_get(REWARDS_MANAGER_KEY))
+    block get_box:
+        bytes box_name = Txn.ApplicationArgs[1]
 
-        bytes key = Txn.ApplicationArgs[1]
-        bytes value = Txn.ApplicationArgs[2]
-        int type = btoi(Txn.ApplicationArgs[3])
+        int exists
+        bytes data
+        exists, data = box_get(box_name)
 
-        if !type:
-            app_global_put(key, value)
-        else:
-            app_global_put(key, btoi(value))
-        end
-
-        bytes log_key = Concat(extract(6, 2, itob(len(Txn.ApplicationArgs[1]))), Txn.ApplicationArgs[1])
-        bytes log_value = Concat(extract(6, 2, itob(len(Txn.ApplicationArgs[2]))), Txn.ApplicationArgs[2])
-        log(Concat(method("update_setting(byte[],byte[],uint64)"), log_key, log_value, itob(type)))
+        log(Concat(method("return"), itob(exists), extract(6, 2, itob(len(data))), data))
         exit(1)
     end
 
