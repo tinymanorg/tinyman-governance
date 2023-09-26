@@ -18,7 +18,7 @@ from tinyman.governance.proposal_voting.storage import get_proposal_box_name, Pr
 from tinyman.governance.proposal_voting.transactions import generate_proposal_metadata
 from tinyman.governance.proposal_voting.transactions import prepare_disable_approval_requirement_transactions, prepare_create_proposal_transactions, prepare_cast_vote_transactions, prepare_get_proposal_transactions, prepare_has_voted_transactions, prepare_cancel_proposal_transactions, prepare_execute_proposal_transactions, prepare_approve_proposal_transactions, prepare_set_proposal_manager_transactions, prepare_set_manager_transactions, prepare_set_voting_delay_transactions, prepare_set_voting_duration_transactions, prepare_set_proposal_threshold_transactions, prepare_set_quorum_numerator_transactions
 from tinyman.governance.transactions import _prepare_budget_increase_transaction
-from tinyman.governance.utils import generate_cid_from_proposal_metadata
+from tinyman.governance.utils import generate_cid_from_proposal_metadata, serialize_metadata
 from tinyman.governance.vault.transactions import prepare_create_lock_transactions, prepare_withdraw_transactions, prepare_increase_lock_amount_transactions
 from tinyman.governance.vault.utils import get_start_timestamp_of_week, get_bias, get_slope
 from tinyman.utils import int_to_bytes, TransactionGroup
@@ -192,7 +192,11 @@ class ProposalVotingTestCase(VaultAppMixin, ProposalVotingAppMixin, BaseTestCase
             discussion_url="",
             pool_url="",
         )
+        breakpoint()
+        serialized_metadata = serialize_metadata(proposal_metadata)
+        print(serialized_metadata)
         proposal_id = generate_cid_from_proposal_metadata(proposal_metadata)
+        print(proposal_id)
         txn_group = prepare_create_proposal_transactions(
             proposal_voting_app_id=PROPOSAL_VOTING_APP_ID,
             vault_app_id=VAULT_APP_ID,

@@ -18,6 +18,7 @@ from tinyman.governance.vault.storage import get_power_index_at
 from tinyman.governance.vault.transactions import prepare_create_lock_transactions, prepare_increase_lock_amount_transactions
 from tinyman.governance.vault.utils import get_start_timestamp_of_week
 from tinyman.utils import TransactionGroup
+from tinyman.utils import int_to_bytes, bytes_to_int
 from tinyman.governance.transactions import _prepare_budget_increase_transaction
 
 from tests.common import BaseTestCase, VaultAppMixin, RewardsAppMixin
@@ -259,8 +260,10 @@ class RewardsTestCase(VaultAppMixin, RewardsAppMixin, BaseTestCase):
                 
         account_powers = get_account_powers(self.ledger, user_1_address)
         for period_index in range(3):
-            account_power_index_start = get_power_index_at(account_powers, first_period_start_timestamp + (WEEK * period_index)) or 0
-            account_power_index_end = get_power_index_at(account_powers, first_period_start_timestamp + (WEEK * (period_index + 1)))
+            period_start_timestamp = first_period_start_timestamp + (WEEK * period_index)
+            period_end_timestamp = period_start_timestamp + WEEK
+            account_power_index_start = get_power_index_at(account_powers, period_start_timestamp) or 0
+            account_power_index_end = get_power_index_at(account_powers, period_end_timestamp)
             if raw_box := self.ledger.boxes[REWARDS_APP_ID].get(get_account_reward_claim_sheet_box_name(user_1_address, 0)):
                 sheet = RewardClaimSheet(value=raw_box)
                 self.assertEqual(sheet.is_reward_claimed_for_period(period_index), False)
@@ -296,7 +299,31 @@ class RewardsTestCase(VaultAppMixin, RewardsAppMixin, BaseTestCase):
             inner_txns = app_call_txn[b'dt'][b'itx']
             self.assertEqual(len(inner_txns), 2)
             self.assertEqual(
-                inner_txns[-1][b'txn'],
+                inner_txns[0][b'txn'],
+                {
+                    b'apaa': [
+                        b'get_account_cumulative_power_delta',
+                        decode_address(user_1_address),
+                        int_to_bytes(period_start_timestamp),
+                        int_to_bytes(period_end_timestamp),
+                        int_to_bytes(account_power_index_start),
+                        int_to_bytes(account_power_index_end)
+                    ],
+                    b'apid': VAULT_APP_ID,
+                    b'fv': ANY,
+                    b'lv': ANY,
+                    b'snd': decode_address(get_application_address(REWARDS_APP_ID)),
+                    b'type': b'appl'
+                },
+                {
+                    b'fv': ANY,
+                    b'lv': ANY,
+                    b'snd': decode_address(get_application_address(REWARDS_APP_ID)),
+                    b'type': b'appl',
+                }
+            )
+            self.assertEqual(
+                inner_txns[1][b'txn'],
                 {
                     b'aamt': events[0]['total_reward_amount'],
                     b'arcv': decode_address(user_1_address),

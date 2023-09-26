@@ -127,16 +127,17 @@ block main:
         bytes account_power_indexes = Txn.ApplicationArgs[3]
         assert(period_count)
 
+        int timestamp = get_period_start_timestamp(period_index_start)
+        int total_reward_amount = 0
+        bytes reward_amounts = ""
+
         int period_index
         int period_start_timestamp
         int period_end_timestamp
         bytes account_power_index_1
         bytes account_power_index_2
         int reward_amount
-        int total_reward_amount = 0
         bytes account_cumulative_power_delta
-        int timestamp = get_period_start_timestamp(period_index)
-        bytes reward_amounts = ""
 
         for i in 0:period_count:
             period_index = period_index_start + i
