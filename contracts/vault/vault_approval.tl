@@ -149,7 +149,8 @@ block main:
 
         assert(amount >= MIN_LOCK_AMOUNT)
         assert(!(lock_end_time % WEEK))
-        assert(lock_end_time >= (Global.LatestTimestamp + (4 * WEEK)))
+        # assert(lock_end_time >= (Global.LatestTimestamp + (4 * WEEK)))
+        assert(lock_end_time >= Global.LatestTimestamp)
         assert(lock_end_time <= (Global.LatestTimestamp + MAX_LOCK_TIME))
 
         # An account may have state box if it is not locking first time.
