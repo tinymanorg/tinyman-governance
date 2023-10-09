@@ -148,7 +148,7 @@ block main:
         int lock_end_time = btoi(Txn.ApplicationArgs[1])
 
         assert(amount >= MIN_LOCK_AMOUNT)
-        assert(!(lock_end_time % WEEK))
+        # assert(!(lock_end_time % WEEK))
         # assert(lock_end_time >= (Global.LatestTimestamp + (4 * WEEK)))
         assert(lock_end_time >= Global.LatestTimestamp)
         assert(lock_end_time <= (Global.LatestTimestamp + MAX_LOCK_TIME))
