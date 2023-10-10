@@ -192,6 +192,8 @@ block main:
         assert(proposal.voting_end_timestamp < Global.LatestTimestamp)
         assert(proposal.is_cancelled == BYTES_FALSE)
         assert(proposal.is_executed == BYTES_FALSE)
+        assert(proposal.is_quorum_reached == BYTES_TRUE)
+        assert(proposal.for_voting_power > proposal.against_voting_power)
         proposal.is_executed = BYTES_TRUE
 
         bytes proposal_data
