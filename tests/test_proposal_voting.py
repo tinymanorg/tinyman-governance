@@ -190,13 +190,10 @@ class ProposalVotingTestCase(VaultAppMixin, ProposalVotingAppMixin, BaseTestCase
             description="",
             category="",
             discussion_url="",
-            pool_url="",
+            poll_url="",
         )
-        breakpoint()
-        serialized_metadata = serialize_metadata(proposal_metadata)
-        print(serialized_metadata)
+
         proposal_id = generate_cid_from_proposal_metadata(proposal_metadata)
-        print(proposal_id)
         txn_group = prepare_create_proposal_transactions(
             proposal_voting_app_id=PROPOSAL_VOTING_APP_ID,
             vault_app_id=VAULT_APP_ID,
@@ -1160,9 +1157,24 @@ class ProposalVotingTestCase(VaultAppMixin, ProposalVotingAppMixin, BaseTestCase
         )
         txn_group.sign_with_private_key(self.proposal_manager_address, self.proposal_manager_sk)
         self.ledger.eval_transactions(txn_group.signed_transactions, block_timestamp=block_timestamp)
-
+        
         proposal_box_name = get_proposal_box_name(proposal_id)
         proposal = parse_box_proposal(self.ledger.boxes[PROPOSAL_VOTING_APP_ID][proposal_box_name])
+
+        block_timestamp = proposal.voting_start_timestamp + 1
+        txn_group = prepare_cast_vote_transactions(
+            proposal_voting_app_id=PROPOSAL_VOTING_APP_ID,
+            vault_app_id=VAULT_APP_ID,
+            sender=user_address,
+            proposal_id=proposal_id,
+            proposal=proposal,
+            vote=1,
+            account_power_index=get_account_power_index_at(self.ledger, VAULT_APP_ID, user_address, proposal.creation_timestamp),
+            create_attendance_sheet_box=True,
+            suggested_params=self.sp,
+        )
+        txn_group.sign_with_private_key(user_address, user_sk)
+        self.ledger.eval_transactions(txn_group.signed_transactions, block_timestamp=block_timestamp)
 
         # Execute Proposal
         proposal_box_name = get_proposal_box_name(proposal_id)
