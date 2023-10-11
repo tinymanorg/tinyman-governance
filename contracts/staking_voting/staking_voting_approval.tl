@@ -14,6 +14,7 @@ struct Proposal:
 end
 
 # 24 * 60 * 60
+const int MIN = 60
 const int DAY = 86400
 const int MAX_OPTION_COUNT = 16
 const bytes BYTES_FALSE = "\x00"
@@ -91,8 +92,8 @@ block main:
         assert(len(proposal_id) == 59)
         bytes proposal_box_name = Concat(PROPOSAL_BOX_PREFIX, proposal_id)
 
-        int voting_start_timestamp = get_end_timestamp_of_day(Global.LatestTimestamp) + (app_global_get(VOTING_DELAY_KEY) * DAY)
-        int voting_end_timestamp = voting_start_timestamp + (app_global_get(VOTING_DURATION_KEY) * DAY)
+        int voting_start_timestamp = get_end_timestamp_of_day(Global.LatestTimestamp) + (app_global_get(VOTING_DELAY_KEY) * MIN)
+        int voting_end_timestamp = voting_start_timestamp + (app_global_get(VOTING_DURATION_KEY) * MIN)
 
         box<Proposal> proposal = CreateBox(proposal_box_name)
         proposal.index = app_global_get(PROPOSAL_ID_COUNTER_KEY)
@@ -287,7 +288,7 @@ func add_vote_amount(proposal_index: int, asset_id: int, vote_amount: int):
 end
 
 func get_end_timestamp_of_day(timestamp: int) int:
-    return ((timestamp / DAY) * DAY) + DAY
+    return ((timestamp / MIN) * MIN) + MIN
 end
 
 # Inner Txns

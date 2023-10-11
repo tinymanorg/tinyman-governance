@@ -22,6 +22,7 @@ struct Proposal:
 end
 
 # 24 * 60 * 60
+const int MIN = 60
 const int DAY = 86400
 const bytes BYTES_FALSE = "\x00"
 const bytes BYTES_TRUE = "\x80"
@@ -149,8 +150,8 @@ block main:
         assert(!proposal.voting_start_timestamp)
         assert(proposal.is_cancelled == BYTES_FALSE)
 
-        int voting_start_timestamp = get_end_timestamp_of_day(Global.LatestTimestamp) + (app_global_get(VOTING_DELAY_KEY) * DAY)
-        int voting_end_timestamp = voting_start_timestamp + (app_global_get(VOTING_DURATION_KEY) * DAY)
+        int voting_start_timestamp = get_end_timestamp_of_day(Global.LatestTimestamp) + (app_global_get(VOTING_DELAY_KEY) * MIN)
+        int voting_end_timestamp = voting_start_timestamp + (app_global_get(VOTING_DURATION_KEY) * MIN)
 
         proposal.is_approved = BYTES_TRUE
         proposal.voting_start_timestamp = voting_start_timestamp
@@ -227,8 +228,8 @@ block main:
 
         # 4. Start & End time
         if !app_global_get(APPROVAL_REQUIREMENT_KEY):
-            int voting_start_timestamp = get_end_timestamp_of_day(Global.LatestTimestamp) + (app_global_get(VOTING_DELAY_KEY) * DAY)
-            int voting_end_timestamp = voting_start_timestamp + (app_global_get(VOTING_DURATION_KEY) * DAY)
+            int voting_start_timestamp = get_end_timestamp_of_day(Global.LatestTimestamp) + (app_global_get(VOTING_DELAY_KEY) * MIN)
+            int voting_end_timestamp = voting_start_timestamp + (app_global_get(VOTING_DURATION_KEY) * MIN)
             proposal.voting_start_timestamp = voting_start_timestamp
             proposal.voting_end_timestamp = voting_end_timestamp
         end
@@ -432,7 +433,7 @@ func set_user_as_voted(address: bytes, proposal_index: int):
 end
 
 func get_end_timestamp_of_day(timestamp: int) int:
-    return ((timestamp / DAY) * DAY) + DAY
+    return ((timestamp / MIN) * MIN) + MIN
 end
 
 # Inner App Calls
