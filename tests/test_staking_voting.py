@@ -241,8 +241,8 @@ class StakingVotingTestCase(VaultAppMixin, StakingVotingAppMixin, BaseTestCase):
         proposal_metadata = generate_staking_distribution_proposal_metadata(
             title="Proposal 1",
             description="",
-            staking_program_start_date="",
-            staking_program_end_date="",
+            staking_program_start_time=block_timestamp,
+            staking_program_end_time=block_timestamp + 4 * WEEK,
             staking_program_cycle_duration=1,
             staking_program_reward_asset=1,
         )
@@ -293,7 +293,7 @@ class StakingVotingTestCase(VaultAppMixin, StakingVotingAppMixin, BaseTestCase):
             
             self.assertEqual(
                 vote_events[i],
-                {'event_name': 'vote', 'asset_id': asset_ids[i], 'voting_power': asset_voting_power}
+                {'event_name': 'vote', 'asset_id': asset_ids[i], 'voting_power': asset_voting_power, 'vote_percentage': vote_as_percentage}
             )
             asset_voting_powers[asset_ids[i]] += asset_voting_power
             
@@ -360,7 +360,7 @@ class StakingVotingTestCase(VaultAppMixin, StakingVotingAppMixin, BaseTestCase):
 
             self.assertEqual(
                 vote_events[i],
-                {'event_name': 'vote', 'asset_id': asset_ids[i], 'voting_power': asset_voting_power}
+                {'event_name': 'vote', 'asset_id': asset_ids[i], 'voting_power': asset_voting_power, 'vote_percentage': vote_as_percentage}
             )
 
             # Box
@@ -500,7 +500,7 @@ class StakingVotingTestCase(VaultAppMixin, StakingVotingAppMixin, BaseTestCase):
 
             self.assertEqual(
                 vote_events[i],
-                {'event_name': 'vote', 'asset_id': asset_ids[i], 'voting_power': asset_voting_power}
+                {'event_name': 'vote', 'asset_id': asset_ids[i], 'voting_power': asset_voting_power, 'vote_percentage': vote_as_percentage}
             )
 
             # Box
