@@ -178,7 +178,7 @@ block main:
             asset_id = extract_uint64(asset_ids, tmp_index)
             add_vote_amount(proposal_index, asset_id, option_vote_amount)
 
-            log(Concat(method("vote(uint64,uint64)"), itob(asset_id), itob(option_vote_amount)))
+            log(Concat(method("vote(uint64,uint64,uint64)"), itob(asset_id), itob(option_vote_amount), itob(tmp_vote_percentage)))
         end
         assert(total_percentage == 100)
 
