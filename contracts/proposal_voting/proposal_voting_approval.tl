@@ -26,6 +26,14 @@ const int DAY = 86400
 const bytes BYTES_FALSE = "\x00"
 const bytes BYTES_TRUE = "\x80"
 
+const int PROPOSAL_STATE_WAITING_FOR_APPROVAL = 0
+const int PROPOSAL_STATE_CANCELLED = 1
+const int PROPOSAL_STATE_PENDING = 2
+const int PROPOSAL_STATE_ACTIVE = 3
+const int PROPOSAL_STATE_DEFEATED = 4
+const int PROPOSAL_STATE_SUCCEEDED = 5
+const int PROPOSAL_STATE_EXECUTED = 6
+
 # Global States
 const bytes VAULT_APP_ID_KEY = "vault_app_id"
 const bytes PROPOSAL_ID_COUNTER_KEY = "proposal_id_counter"
@@ -98,6 +106,7 @@ block main:
         "cancel_proposal": cancel_proposal
         "execute_proposal": execute_proposal
         "get_box": get_box
+        "get_proposal_state": get_proposal_state
         "set_manager": set_manager
         "set_proposal_manager": set_proposal_manager
         "set_voting_delay": set_voting_delay
@@ -400,6 +409,33 @@ block main:
         exists, data = box_get(box_name)
 
         log(Concat(method("return"), itob(exists), extract(6, 2, itob(len(data))), data))
+        exit(1)
+    end
+
+    block get_proposal_state:
+        bytes proposal_id = Txn.ApplicationArgs[1]
+
+        bytes proposal_box_name = Concat(PROPOSAL_BOX_PREFIX, proposal_id)
+        box<Proposal> proposal = OpenBox(proposal_box_name)
+
+        int state
+        if proposal.is_cancelled == BYTES_TRUE:
+            state = PROPOSAL_STATE_CANCELLED
+        elif proposal.is_executed == BYTES_TRUE:
+            state = PROPOSAL_STATE_EXECUTED
+        elif !proposal.voting_start_timestamp:
+            state = PROPOSAL_STATE_WAITING_FOR_APPROVAL
+        elif Global.LatestTimestamp < proposal.voting_start_timestamp:
+            state = PROPOSAL_STATE_PENDING
+        elif Global.LatestTimestamp < proposal.voting_end_timestamp:
+            state = PROPOSAL_STATE_ACTIVE
+        elif (proposal.is_quorum_reached == BYTES_FALSE) || (proposal.for_voting_power <= proposal.against_voting_power):
+            state = PROPOSAL_STATE_DEFEATED
+        else:
+            state = PROPOSAL_STATE_SUCCEEDED
+        end
+
+        log(Concat(method("return"), itob(state)))
         exit(1)
     end
 end
