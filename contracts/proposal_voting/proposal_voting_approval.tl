@@ -26,12 +26,21 @@ const int DAY = 86400
 const bytes BYTES_FALSE = "\x00"
 const bytes BYTES_TRUE = "\x80"
 
+const int PROPOSAL_STATE_WAITING_FOR_APPROVAL = 0
+const int PROPOSAL_STATE_CANCELLED = 1
+const int PROPOSAL_STATE_PENDING = 2
+const int PROPOSAL_STATE_ACTIVE = 3
+const int PROPOSAL_STATE_DEFEATED = 4
+const int PROPOSAL_STATE_SUCCEEDED = 5
+const int PROPOSAL_STATE_EXECUTED = 6
+
 # Global States
 const bytes VAULT_APP_ID_KEY = "vault_app_id"
 const bytes PROPOSAL_ID_COUNTER_KEY = "proposal_id_counter"
 const bytes VOTING_DELAY_KEY = "voting_delay"
 const bytes VOTING_DURATION_KEY = "voting_duration"
 const bytes PROPOSAL_THRESHOLD_KEY = "proposal_threshold"
+const bytes PROPOSAL_THRESHOLD_NUMERATOR_KEY = "proposal_threshold_numerator"
 const bytes QUORUM_NUMERATOR_KEY = "quorum_numerator"
 const bytes MANAGER_KEY = "manager"
 const bytes PROPOSAL_MANAGER_KEY = "proposal_manager"
@@ -68,8 +77,11 @@ block create_app:
     # voting ends at the N'th midnight after voting start time
     app_global_put(VOTING_DURATION_KEY, 7)
 
-    # proposer must hold %N of the total voting power
-    app_global_put(PROPOSAL_THRESHOLD_KEY, 5)
+    # proposer must have X amount total voting power, default 450K
+    app_global_put(PROPOSAL_THRESHOLD_KEY, 450000000000)
+
+    # proposer must have %N of the total voting power, default %0
+    app_global_put(PROPOSAL_THRESHOLD_NUMERATOR_KEY, 0)
 
     # %N of the total voting power must be voted for accept or abstain
     app_global_put(QUORUM_NUMERATOR_KEY, 50)
@@ -98,11 +110,13 @@ block main:
         "cancel_proposal": cancel_proposal
         "execute_proposal": execute_proposal
         "get_box": get_box
+        "get_proposal_state": get_proposal_state
         "set_manager": set_manager
         "set_proposal_manager": set_proposal_manager
         "set_voting_delay": set_voting_delay
         "set_voting_duration": set_voting_duration
         "set_proposal_threshold": set_proposal_threshold
+        "set_proposal_threshold_numerator": set_proposal_threshold_numerator
         "set_quorum_numerator": set_quorum_numerator
         "disable_approval_requirement": disable_approval_requirement
     end
@@ -210,7 +224,11 @@ block main:
         # 1. Check voting power threshold
         int account_voting_power = get_account_voting_power(user_address)
         int total_voting_power = get_total_voting_power()
-        assert((itob(account_voting_power) b* itob(100)) b>= (itob(total_voting_power) b* itob(app_global_get(PROPOSAL_THRESHOLD_KEY))))
+
+        # Tiny power amount threshold
+        assert(account_voting_power >= app_global_get(PROPOSAL_THRESHOLD_KEY))
+        # Tiny power percentage threshold
+        assert((itob(account_voting_power) b* itob(100)) b>= (itob(total_voting_power) b* itob(app_global_get(PROPOSAL_THRESHOLD_NUMERATOR_KEY))))
 
         # 2. Check proposal id
         # proposal id will be calculated off-chian. it is base32 string representation of CID (base32 - cidv1 - raw - (sha2-256 : 256 : <metadata>))
@@ -326,13 +344,21 @@ block main:
         assert(user_address == app_global_get(PROPOSAL_MANAGER_KEY))
 
         int new_proposal_threshold = btoi(Txn.ApplicationArgs[1])
-        
-        # TODO: Set limits
-        # assert(1 <= new_proposal_threshold)
-        # assert(new_proposal_threshold <= 100)
 
         app_global_put(PROPOSAL_THRESHOLD_KEY, new_proposal_threshold)
         log(Concat(method("set_proposal_threshold(uint64)"), itob(new_proposal_threshold)))
+        exit(1)
+    end
+
+    block set_proposal_threshold_numerator:
+        bytes user_address = Txn.Sender
+        assert(user_address == app_global_get(PROPOSAL_MANAGER_KEY))
+
+        int new_proposal_threshold_numerator = btoi(Txn.ApplicationArgs[1])
+        assert(new_proposal_threshold_numerator <= 100)
+
+        app_global_put(PROPOSAL_THRESHOLD_NUMERATOR_KEY, new_proposal_threshold_numerator)
+        log(Concat(method("set_proposal_threshold_numerator(uint64)"), itob(new_proposal_threshold_numerator)))
         exit(1)
     end
 
@@ -400,6 +426,33 @@ block main:
         exists, data = box_get(box_name)
 
         log(Concat(method("return"), itob(exists), extract(6, 2, itob(len(data))), data))
+        exit(1)
+    end
+
+    block get_proposal_state:
+        bytes proposal_id = Txn.ApplicationArgs[1]
+
+        bytes proposal_box_name = Concat(PROPOSAL_BOX_PREFIX, proposal_id)
+        box<Proposal> proposal = OpenBox(proposal_box_name)
+
+        int state
+        if proposal.is_cancelled == BYTES_TRUE:
+            state = PROPOSAL_STATE_CANCELLED
+        elif proposal.is_executed == BYTES_TRUE:
+            state = PROPOSAL_STATE_EXECUTED
+        elif !proposal.voting_start_timestamp:
+            state = PROPOSAL_STATE_WAITING_FOR_APPROVAL
+        elif Global.LatestTimestamp < proposal.voting_start_timestamp:
+            state = PROPOSAL_STATE_PENDING
+        elif Global.LatestTimestamp < proposal.voting_end_timestamp:
+            state = PROPOSAL_STATE_ACTIVE
+        elif (proposal.is_quorum_reached == BYTES_FALSE) || (proposal.for_voting_power <= proposal.against_voting_power):
+            state = PROPOSAL_STATE_DEFEATED
+        else:
+            state = PROPOSAL_STATE_SUCCEEDED
+        end
+
+        log(Concat(method("return"), itob(state)))
         exit(1)
     end
 end
