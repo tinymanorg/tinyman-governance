@@ -224,7 +224,7 @@ class StakingVotingAppMixin:
 
 class ProposalVotingAppMixin:
 
-    def create_proposal_voting_app(self, app_creator_address, proposal_manager_address=None):
+    def create_proposal_voting_app(self, app_creator_address, proposal_manager_address=None, proposal_threshold=None):
         if app_creator_address not in self.ledger.accounts:
             self.ledger.set_account_balance(app_creator_address, 1_000_000)
             
@@ -248,7 +248,8 @@ class ProposalVotingAppMixin:
             {
                 b'vault_app_id': VAULT_APP_ID,
                 b'proposal_id_counter': 0,
-                b'proposal_threshold': 5,
+                b'proposal_threshold': proposal_threshold or 0,
+                b'proposal_threshold_numerator': 5,
                 b'voting_delay': 2,
                 b'voting_duration': 7,
                 b'quorum_numerator': 50,

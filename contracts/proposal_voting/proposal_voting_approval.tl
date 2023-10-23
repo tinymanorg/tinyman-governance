@@ -40,6 +40,7 @@ const bytes PROPOSAL_ID_COUNTER_KEY = "proposal_id_counter"
 const bytes VOTING_DELAY_KEY = "voting_delay"
 const bytes VOTING_DURATION_KEY = "voting_duration"
 const bytes PROPOSAL_THRESHOLD_KEY = "proposal_threshold"
+const bytes PROPOSAL_THRESHOLD_NUMERATOR_KEY = "proposal_threshold_numerator"
 const bytes QUORUM_NUMERATOR_KEY = "quorum_numerator"
 const bytes MANAGER_KEY = "manager"
 const bytes PROPOSAL_MANAGER_KEY = "proposal_manager"
@@ -76,8 +77,11 @@ block create_app:
     # voting ends at the N'th midnight after voting start time
     app_global_put(VOTING_DURATION_KEY, 7)
 
-    # proposer must hold %N of the total voting power
-    app_global_put(PROPOSAL_THRESHOLD_KEY, 5)
+    # proposer must have X amount total voting power, default 450K
+    app_global_put(PROPOSAL_THRESHOLD_KEY, 450000000000)
+
+    # proposer must have %N of the total voting power, default %0
+    app_global_put(PROPOSAL_THRESHOLD_NUMERATOR_KEY, 0)
 
     # %N of the total voting power must be voted for accept or abstain
     app_global_put(QUORUM_NUMERATOR_KEY, 50)
@@ -112,6 +116,7 @@ block main:
         "set_voting_delay": set_voting_delay
         "set_voting_duration": set_voting_duration
         "set_proposal_threshold": set_proposal_threshold
+        "set_proposal_threshold_numerator": set_proposal_threshold_numerator
         "set_quorum_numerator": set_quorum_numerator
         "disable_approval_requirement": disable_approval_requirement
     end
@@ -219,7 +224,11 @@ block main:
         # 1. Check voting power threshold
         int account_voting_power = get_account_voting_power(user_address)
         int total_voting_power = get_total_voting_power()
-        assert((itob(account_voting_power) b* itob(100)) b>= (itob(total_voting_power) b* itob(app_global_get(PROPOSAL_THRESHOLD_KEY))))
+
+        # Tiny power amount threshold
+        assert(account_voting_power >= app_global_get(PROPOSAL_THRESHOLD_KEY))
+        # Tiny power percentage threshold
+        assert((itob(account_voting_power) b* itob(100)) b>= (itob(total_voting_power) b* itob(app_global_get(PROPOSAL_THRESHOLD_NUMERATOR_KEY))))
 
         # 2. Check proposal id
         # proposal id will be calculated off-chian. it is base32 string representation of CID (base32 - cidv1 - raw - (sha2-256 : 256 : <metadata>))
@@ -335,13 +344,21 @@ block main:
         assert(user_address == app_global_get(PROPOSAL_MANAGER_KEY))
 
         int new_proposal_threshold = btoi(Txn.ApplicationArgs[1])
-        
-        # TODO: Set limits
-        # assert(1 <= new_proposal_threshold)
-        # assert(new_proposal_threshold <= 100)
 
         app_global_put(PROPOSAL_THRESHOLD_KEY, new_proposal_threshold)
         log(Concat(method("set_proposal_threshold(uint64)"), itob(new_proposal_threshold)))
+        exit(1)
+    end
+
+    block set_proposal_threshold_numerator:
+        bytes user_address = Txn.Sender
+        assert(user_address == app_global_get(PROPOSAL_MANAGER_KEY))
+
+        int new_proposal_threshold_numerator = btoi(Txn.ApplicationArgs[1])
+        assert(new_proposal_threshold_numerator <= 100)
+
+        app_global_put(PROPOSAL_THRESHOLD_NUMERATOR_KEY, new_proposal_threshold_numerator)
+        log(Concat(method("set_proposal_threshold_numerator(uint64)"), itob(new_proposal_threshold_numerator)))
         exit(1)
     end
 
