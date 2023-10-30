@@ -135,7 +135,7 @@ block main:
     block create_lock:
         # This method is responsible for initiating a new lock for two categories of accounts:
         # 1) Accounts which have never had a token lock before.
-        # 2) Accounts that have previously withdrawn their entire locked token amount.
+        # 2) Accounts that have previously withdrawn their locked token amount.
 
         bytes user_address = Txn.Sender
         int amount = get_received_tiny_amount()

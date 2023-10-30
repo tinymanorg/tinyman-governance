@@ -136,9 +136,10 @@ block main:
         bytes user_address = Txn.Sender
         assert(user_address == app_global_get(MANAGER_KEY))
 
-        assert(len(Txn.ApplicationArgs[1]) == 32)
-        app_global_put(MANAGER_KEY, Txn.ApplicationArgs[1])
-        log(Concat(method("set_manager(address)"), Txn.ApplicationArgs[1]))
+        bytes new_manager = Txn.ApplicationArgs[1]
+        assert(len(new_manager) == 32)
+        app_global_put(MANAGER_KEY, new_manager)
+        log(Concat(method("set_manager(address)"), new_manager))
         exit(1)
     end
 
@@ -146,9 +147,10 @@ block main:
         bytes user_address = Txn.Sender
         assert(user_address == app_global_get(MANAGER_KEY))
 
-        assert(len(Txn.ApplicationArgs[1]) == 32)
-        app_global_put(PROPOSAL_MANAGER_KEY, Txn.ApplicationArgs[1])
-        log(Concat(method("set_proposal_manager(address)"), Txn.ApplicationArgs[1]))
+        bytes set_proposal_manager = Txn.ApplicationArgs[1]
+        assert(len(set_proposal_manager) == 32)
+        app_global_put(PROPOSAL_MANAGER_KEY, set_proposal_manager)
+        log(Concat(method("set_proposal_manager(address)"), set_proposal_manager))
         exit(1)
     end
 
@@ -163,7 +165,7 @@ block main:
         assert(!proposal.voting_start_timestamp)
         assert(proposal.is_cancelled == BYTES_FALSE)
 
-        int voting_start_timestamp = get_end_timestamp_of_day(Global.LatestTimestamp) + (app_global_get(VOTING_DELAY_KEY) * DAY)
+        int voting_start_timestamp = get_voting_start_timestamp()
         int voting_end_timestamp = voting_start_timestamp + (app_global_get(VOTING_DURATION_KEY) * DAY)
 
         proposal.is_approved = BYTES_TRUE
@@ -231,7 +233,7 @@ block main:
         assert((itob(account_voting_power) b* itob(100)) b>= (itob(total_voting_power) b* itob(app_global_get(PROPOSAL_THRESHOLD_NUMERATOR_KEY))))
 
         # 2. Check proposal id
-        # proposal id will be calculated off-chian. it is base32 string representation of CID (base32 - cidv1 - raw - (sha2-256 : 256 : <metadata>))
+        # proposal id will be calculated off-chain. it is base32 string representation of CID (base32 - cidv1 - raw - (sha2-256 : 256 : <metadata>))
         assert(len(proposal_id) == 59)
         bytes proposal_box_name = Concat(PROPOSAL_BOX_PREFIX, proposal_id)
 
@@ -245,7 +247,7 @@ block main:
 
         # 4. Start & End time
         if !app_global_get(APPROVAL_REQUIREMENT_KEY):
-            int voting_start_timestamp = get_end_timestamp_of_day(Global.LatestTimestamp) + (app_global_get(VOTING_DELAY_KEY) * DAY)
+            int voting_start_timestamp = get_voting_start_timestamp()
             int voting_end_timestamp = voting_start_timestamp + (app_global_get(VOTING_DURATION_KEY) * DAY)
             proposal.voting_start_timestamp = voting_start_timestamp
             proposal.voting_end_timestamp = voting_end_timestamp
@@ -279,7 +281,7 @@ block main:
         assert(Global.LatestTimestamp < proposal.voting_end_timestamp)
 
         # Check attendance
-        set_user_as_voted(user_address, proposal.index)
+        check_and_set_user_as_voted(user_address, proposal.index)
 
         # Get voting power
         int account_voting_power = get_account_voting_power_at(user_address, proposal.creation_timestamp, account_power_index)
@@ -471,7 +473,7 @@ func has_voted(address: bytes, proposal_index: int) int:
     return 0
 end
 
-func set_user_as_voted(address: bytes, proposal_index: int):
+func check_and_set_user_as_voted(address: bytes, proposal_index: int):
     int box_index = proposal_index / (ACCOUNT_ATTENDANCE_SHEET_BOX_SIZE * 8)
     int array_index = proposal_index % (ACCOUNT_ATTENDANCE_SHEET_BOX_SIZE * 8)
     bytes box_name = Concat(ATTENDANCE_BOX_PREFIX, Concat(address, itob(box_index)))
@@ -485,8 +487,9 @@ func set_user_as_voted(address: bytes, proposal_index: int):
     return
 end
 
-func get_end_timestamp_of_day(timestamp: int) int:
-    return ((timestamp / DAY) * DAY) + DAY
+func get_voting_start_timestamp() int:
+    int end_timestamp_of_day = ((Global.LatestTimestamp / DAY) * DAY) + DAY
+    return end_timestamp_of_day + (app_global_get(VOTING_DELAY_KEY) * DAY)
 end
 
 # Inner App Calls

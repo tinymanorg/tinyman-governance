@@ -86,12 +86,12 @@ block main:
         bytes user_address = Txn.Sender
         assert(user_address == app_global_get(PROPOSAL_MANAGER_KEY))
 
-        # proposal id will be calculated off-chian. it is base32 string representation of CID (base32 - cidv1 - raw - (sha2-256 : 256 : <metadata>))
+        # proposal id will be calculated off-chain. it is base32 string representation of CID (base32 - cidv1 - raw - (sha2-256 : 256 : <metadata>))
         bytes proposal_id = Txn.ApplicationArgs[1]
         assert(len(proposal_id) == 59)
         bytes proposal_box_name = Concat(PROPOSAL_BOX_PREFIX, proposal_id)
 
-        int voting_start_timestamp = get_end_timestamp_of_day(Global.LatestTimestamp) + (app_global_get(VOTING_DELAY_KEY) * DAY)
+        int voting_start_timestamp = get_voting_start_timestamp()
         int voting_end_timestamp = voting_start_timestamp + (app_global_get(VOTING_DURATION_KEY) * DAY)
 
         box<Proposal> proposal = CreateBox(proposal_box_name)
@@ -151,7 +151,7 @@ block main:
         assert(option_count <= MAX_OPTION_COUNT)
 
         int proposal_index = proposal.index
-        set_user_as_voted(user_address, proposal_index)
+        check_and_set_user_as_voted(user_address, proposal_index)
 
         int account_voting_power = get_account_voting_power_at(user_address, proposal.creation_timestamp, account_power_index)
         assert(account_voting_power)
@@ -235,9 +235,10 @@ block main:
         bytes user_address = Txn.Sender
         assert(user_address == app_global_get(MANAGER_KEY))
 
-        assert(len(Txn.ApplicationArgs[1]) == 32)
-        app_global_put(MANAGER_KEY, Txn.ApplicationArgs[1])
-        log(Concat(method("set_manager(address)"), Txn.ApplicationArgs[1]))
+        bytes new_manager = Txn.ApplicationArgs[1]
+        assert(len(new_manager) == 32)
+        app_global_put(MANAGER_KEY, new_manager)
+        log(Concat(method("set_manager(address)"), new_manager))
         exit(1)
     end
 
@@ -245,9 +246,10 @@ block main:
         bytes user_address = Txn.Sender
         assert(user_address == app_global_get(MANAGER_KEY))
 
-        assert(len(Txn.ApplicationArgs[1]) == 32)
-        app_global_put(PROPOSAL_MANAGER_KEY, Txn.ApplicationArgs[1])
-        log(Concat(method("set_proposal_manager(address)"), Txn.ApplicationArgs[1]))
+        bytes set_proposal_manager = Txn.ApplicationArgs[1]
+        assert(len(set_proposal_manager) == 32)
+        app_global_put(PROPOSAL_MANAGER_KEY, set_proposal_manager)
+        log(Concat(method("set_proposal_manager(address)"), set_proposal_manager))
         exit(1)
     end
 
@@ -263,7 +265,7 @@ block main:
     end
 end
 
-func set_user_as_voted(address: bytes, proposal_index: int):
+func check_and_set_user_as_voted(address: bytes, proposal_index: int):
     int box_index = proposal_index / (ACCOUNT_ATTENDANCE_SHEET_BOX_SIZE * 8)
     int array_index = proposal_index % (ACCOUNT_ATTENDANCE_SHEET_BOX_SIZE * 8)
     bytes box_name = Concat(ATTENDANCE_BOX_PREFIX, Concat(address, itob(box_index)))
@@ -287,8 +289,9 @@ func add_vote_amount(proposal_index: int, asset_id: int, vote_amount: int):
     return
 end
 
-func get_end_timestamp_of_day(timestamp: int) int:
-    return ((timestamp / DAY) * DAY) + DAY
+func get_voting_start_timestamp() int:
+    int end_timestamp_of_day = ((Global.LatestTimestamp / DAY) * DAY) + DAY
+    return end_timestamp_of_day + (app_global_get(VOTING_DELAY_KEY) * DAY)
 end
 
 # Inner Txns
