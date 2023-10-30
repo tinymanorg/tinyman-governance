@@ -252,7 +252,7 @@ class ProposalVotingAppMixin:
                 b'proposal_threshold_numerator': 5,
                 b'voting_delay': 2,
                 b'voting_duration': 7,
-                b'quorum_numerator': 50,
+                b'quorum_threshold': 100_000_000_000,
                 APPROVAL_REQUIREMENT_KEY: 1,
                 b'manager': decode_address(app_creator_address),
                 b'proposal_manager': decode_address(proposal_manager_address)

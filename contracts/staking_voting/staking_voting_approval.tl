@@ -154,6 +154,7 @@ block main:
         set_user_as_voted(user_address, proposal_index)
 
         int account_voting_power = get_account_voting_power_at(user_address, proposal.creation_timestamp, account_power_index)
+        assert(account_voting_power)
 
         # Update proposal
         proposal.vote_count = proposal.vote_count + 1
