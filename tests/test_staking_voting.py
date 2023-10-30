@@ -7,25 +7,39 @@ from algojig import LogicEvalError
 from algosdk.account import generate_account
 from algosdk.encoding import decode_address
 from algosdk.logic import get_application_address
-from tinyman.governance.constants import WEEK, DAY
+from tinyman.governance.constants import DAY, WEEK
 from tinyman.governance.event import decode_logs
-from tinyman.governance.staking_voting.constants import STAKING_VOTING_APP_MINIMUM_BALANCE_REQUIREMENT
+from tinyman.governance.staking_voting.constants import \
+    STAKING_VOTING_APP_MINIMUM_BALANCE_REQUIREMENT
 from tinyman.governance.staking_voting.events import staking_voting_events
-from tinyman.governance.staking_voting.storage import StakingDistributionProposal, get_staking_distribution_proposal_box_name, parse_box_staking_distribution_proposal, get_staking_vote_box_name
-from tinyman.governance.staking_voting.transactions import generate_staking_distribution_proposal_metadata, prepare_get_box_transaction
-from tinyman.governance.staking_voting.transactions import prepare_create_staking_distribution_proposal_transactions, prepare_cancel_staking_distribution_proposal_transactions, prepare_set_manager_transactions, prepare_set_proposal_manager_transactions, prepare_cast_vote_for_staking_distribution_proposal_transactions, prepare_set_voting_delay_transactions, prepare_set_voting_duration_transactions
+from tinyman.governance.staking_voting.storage import (
+    StakingDistributionProposal, get_staking_distribution_proposal_box_name,
+    get_staking_vote_box_name, parse_box_staking_distribution_proposal)
+from tinyman.governance.staking_voting.transactions import (
+    generate_staking_distribution_proposal_metadata,
+    prepare_cancel_staking_distribution_proposal_transactions,
+    prepare_cast_vote_for_staking_distribution_proposal_transactions,
+    prepare_create_staking_distribution_proposal_transactions,
+    prepare_get_box_transaction, prepare_set_manager_transactions,
+    prepare_set_proposal_manager_transactions,
+    prepare_set_voting_delay_transactions,
+    prepare_set_voting_duration_transactions)
 from tinyman.governance.utils import generate_cid_from_proposal_metadata
 from tinyman.governance.vault.storage import parse_box_account_power
-from tinyman.governance.vault.transactions import prepare_create_lock_transactions, prepare_increase_lock_amount_transactions
-from tinyman.governance.vault.utils import get_slope, get_bias, get_start_timestamp_of_week
-from tinyman.utils import int_to_bytes, bytes_to_int
+from tinyman.governance.vault.transactions import (
+    prepare_create_lock_transactions,
+    prepare_increase_lock_amount_transactions)
+from tinyman.governance.vault.utils import (get_bias, get_slope,
+                                            get_start_timestamp_of_week)
+from tinyman.utils import bytes_to_int, int_to_bytes
 
-from tests.common import BaseTestCase, VaultAppMixin, StakingVotingAppMixin
-from tests.constants import TINY_ASSET_ID, STAKING_VOTING_APP_ID, VAULT_APP_ID
+from tests.common import BaseTestCase, StakingVotingAppMixin, VaultAppMixin
+from tests.constants import STAKING_VOTING_APP_ID, TINY_ASSET_ID, VAULT_APP_ID
 from tests.staking_voting.utils import get_staking_voting_app_global_state
-from tests.utils import get_account_power_index_at, get_app_box_names
-from tests.utils import get_first_app_call_txn
-from tests.vault.utils import get_vault_app_global_state, get_account_state, get_slope_change_at
+from tests.utils import (get_account_power_index_at, get_app_box_names,
+                         get_first_app_call_txn)
+from tests.vault.utils import (get_account_state, get_slope_change_at,
+                               get_vault_app_global_state)
 
 
 class StakingVotingTestCase(VaultAppMixin, StakingVotingAppMixin, BaseTestCase):
@@ -53,7 +67,7 @@ class StakingVotingTestCase(VaultAppMixin, StakingVotingAppMixin, BaseTestCase):
 
         # Global state
         proposal_voting_app_global_state = get_staking_voting_app_global_state(self.ledger, STAKING_VOTING_APP_ID)
-        self.assertEqual(proposal_voting_app_global_state.proposal_id_counter, 0)
+        self.assertEqual(proposal_voting_app_global_state.proposal_index_counter, 0)
         
         # Create proposal
         block_timestamp = self.vault_app_creation_timestamp + 2 * WEEK
@@ -112,7 +126,7 @@ class StakingVotingTestCase(VaultAppMixin, StakingVotingAppMixin, BaseTestCase):
         
         # Global state
         proposal_voting_app_global_state = get_staking_voting_app_global_state(self.ledger, STAKING_VOTING_APP_ID)
-        self.assertEqual(proposal_voting_app_global_state.proposal_id_counter, 1)
+        self.assertEqual(proposal_voting_app_global_state.proposal_index_counter, 1)
 
         block_timestamp += 10 * DAY
         
