@@ -10,7 +10,7 @@ struct Proposal:
     voting_end_timestamp: int
     snapshot_total_voting_power: int
     vote_count: int
-    quorum_numerator: int
+    quorum_threshold: int
     against_voting_power: int
     for_voting_power: int
     abstain_voting_power: int
@@ -41,7 +41,7 @@ const bytes VOTING_DELAY_KEY = "voting_delay"
 const bytes VOTING_DURATION_KEY = "voting_duration"
 const bytes PROPOSAL_THRESHOLD_KEY = "proposal_threshold"
 const bytes PROPOSAL_THRESHOLD_NUMERATOR_KEY = "proposal_threshold_numerator"
-const bytes QUORUM_NUMERATOR_KEY = "quorum_numerator"
+const bytes QUORUM_THRESHOLD_KEY = "quorum_threshold"
 const bytes MANAGER_KEY = "manager"
 const bytes PROPOSAL_MANAGER_KEY = "proposal_manager"
 const bytes APPROVAL_REQUIREMENT_KEY = "approval_requirement"
@@ -83,8 +83,8 @@ block create_app:
     # proposer must have %N of the total voting power, default %0
     app_global_put(PROPOSAL_THRESHOLD_NUMERATOR_KEY, 0)
 
-    # %N of the total voting power must be voted for accept or abstain
-    app_global_put(QUORUM_NUMERATOR_KEY, 50)
+    # required voting power (for or abstain) to reach quorum, default 2,25M (2_250_000_000_000)
+    app_global_put(QUORUM_THRESHOLD_KEY, 2250000000000)
 
     app_global_put(APPROVAL_REQUIREMENT_KEY, 1)
 
@@ -117,7 +117,7 @@ block main:
         "set_voting_duration": set_voting_duration
         "set_proposal_threshold": set_proposal_threshold
         "set_proposal_threshold_numerator": set_proposal_threshold_numerator
-        "set_quorum_numerator": set_quorum_numerator
+        "set_quorum_threshold": set_quorum_threshold
         "disable_approval_requirement": disable_approval_requirement
     end
 
@@ -241,7 +241,7 @@ block main:
         proposal.creation_timestamp = Global.LatestTimestamp
         proposal.snapshot_total_voting_power = total_voting_power
         proposal.proposer = Cast(user_address, bytes[32])
-        proposal.quorum_numerator = app_global_get(QUORUM_NUMERATOR_KEY)
+        proposal.quorum_threshold = app_global_get(QUORUM_THRESHOLD_KEY)
 
         # 4. Start & End time
         if !app_global_get(APPROVAL_REQUIREMENT_KEY):
@@ -296,7 +296,7 @@ block main:
             Error()
         end
         
-        if (itob(proposal.snapshot_total_voting_power) b* itob(proposal.quorum_numerator)) b<= (itob(proposal.for_voting_power + proposal.abstain_voting_power) b* itob(100)):
+        if proposal.quorum_threshold <= (proposal.for_voting_power + proposal.abstain_voting_power):
             proposal.is_quorum_reached = BYTES_TRUE
         end
 
@@ -363,18 +363,18 @@ block main:
         exit(1)
     end
 
-    block set_quorum_numerator:
+    block set_quorum_threshold:
         bytes user_address = Txn.Sender
         assert(user_address == app_global_get(PROPOSAL_MANAGER_KEY))
 
-        int new_quorum_numerator = btoi(Txn.ApplicationArgs[1])
+        int new_quorum_threshold = btoi(Txn.ApplicationArgs[1])
         
         # TODO: Set limits
-        # assert(1 <= new_quorum_numerator)
-        # assert(new_quorum_numerator <= 100)
+        # assert(1 <= new_quorum_threshold)
+        # assert(new_quorum_threshold <= 100_000_000_000)
 
-        app_global_put(QUORUM_NUMERATOR_KEY, new_quorum_numerator)
-        log(Concat(method("set_quorum_numerator(uint64)"), itob(new_quorum_numerator)))
+        app_global_put(QUORUM_THRESHOLD_KEY, new_quorum_threshold)
+        log(Concat(method("set_quorum_threshold(uint64)"), itob(new_quorum_threshold)))
         exit(1)
     end
 
