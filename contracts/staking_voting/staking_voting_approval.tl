@@ -21,7 +21,7 @@ const bytes BYTES_TRUE = "\x80"
 
 # Global States
 const bytes VAULT_APP_ID_KEY = "vault_app_id"
-const bytes PROPOSAL_ID_COUNTER_KEY = "proposal_id_counter"
+const bytes PROPOSAL_INDEX_COUNTER_KEY = "proposal_index_counter"
 const bytes VOTING_DELAY_KEY = "voting_delay"
 const bytes VOTING_DURATION_KEY = "voting_duration"
 const bytes MANAGER_KEY = "manager"
@@ -53,7 +53,7 @@ end
 
 block create_app:
     app_global_put(VAULT_APP_ID_KEY, btoi(Txn.ApplicationArgs[0]))
-    app_global_put(PROPOSAL_ID_COUNTER_KEY, 0)
+    app_global_put(PROPOSAL_INDEX_COUNTER_KEY, 0)
 
     app_global_put(VOTING_DELAY_KEY, 2)
     app_global_put(VOTING_DURATION_KEY, 7)
@@ -95,11 +95,11 @@ block main:
         int voting_end_timestamp = voting_start_timestamp + (app_global_get(VOTING_DURATION_KEY) * DAY)
 
         box<Proposal> proposal = CreateBox(proposal_box_name)
-        proposal.index = app_global_get(PROPOSAL_ID_COUNTER_KEY)
+        proposal.index = app_global_get(PROPOSAL_INDEX_COUNTER_KEY)
         proposal.creation_timestamp = Global.LatestTimestamp
         proposal.voting_start_timestamp = voting_start_timestamp
         proposal.voting_end_timestamp = voting_end_timestamp
-        app_global_put(PROPOSAL_ID_COUNTER_KEY, app_global_get(PROPOSAL_ID_COUNTER_KEY) + 1)
+        app_global_put(PROPOSAL_INDEX_COUNTER_KEY, app_global_get(PROPOSAL_INDEX_COUNTER_KEY) + 1)
 
         bytes proposal_data
         _, proposal_data = box_get(proposal_box_name)

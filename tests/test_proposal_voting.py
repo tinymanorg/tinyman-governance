@@ -9,29 +9,47 @@ from algosdk.abi import BoolType
 from algosdk.account import generate_account
 from algosdk.encoding import decode_address
 from algosdk.logic import get_application_address
-from tinyman.governance.constants import WEEK, DAY
-from tinyman.governance.event import decode_logs
 from tinyman.governance import proposal_voting
+from tinyman.governance.constants import DAY, WEEK
+from tinyman.governance.event import decode_logs
 from tinyman.governance.proposal_voting.events import proposal_voting_events
-from tinyman.governance.proposal_voting.storage import ProposalVotingAppGlobalState
-from tinyman.governance.proposal_voting.storage import get_proposal_box_name, Proposal, parse_box_proposal
-from tinyman.governance.proposal_voting.transactions import prepare_disable_approval_requirement_transactions, prepare_create_proposal_transactions, prepare_cast_vote_transactions, \
-    prepare_get_proposal_transactions, prepare_has_voted_transactions, prepare_cancel_proposal_transactions, prepare_execute_proposal_transactions, prepare_approve_proposal_transactions, \
-    prepare_set_proposal_manager_transactions, prepare_set_manager_transactions, prepare_set_voting_delay_transactions, prepare_set_voting_duration_transactions, \
-    prepare_set_proposal_threshold_transactions, prepare_set_quorum_threshold_transactions, generate_proposal_metadata, prepare_get_proposal_state_transactions, \
-    prepare_set_proposal_threshold_numerator_transactions
-from tinyman.governance.transactions import _prepare_budget_increase_transaction
-from tinyman.governance.utils import generate_cid_from_proposal_metadata, serialize_metadata
-from tinyman.governance.vault.transactions import prepare_create_lock_transactions, prepare_withdraw_transactions, prepare_increase_lock_amount_transactions
-from tinyman.governance.vault.utils import get_start_timestamp_of_week, get_bias, get_slope
-from tinyman.utils import int_to_bytes, bytes_to_int, TransactionGroup
+from tinyman.governance.proposal_voting.storage import (
+    Proposal, ProposalVotingAppGlobalState, get_proposal_box_name,
+    parse_box_proposal)
+from tinyman.governance.proposal_voting.transactions import (
+    generate_proposal_metadata, prepare_approve_proposal_transactions,
+    prepare_cancel_proposal_transactions, prepare_cast_vote_transactions,
+    prepare_create_proposal_transactions,
+    prepare_disable_approval_requirement_transactions,
+    prepare_execute_proposal_transactions,
+    prepare_get_proposal_state_transactions, prepare_get_proposal_transactions,
+    prepare_has_voted_transactions, prepare_set_manager_transactions,
+    prepare_set_proposal_manager_transactions,
+    prepare_set_proposal_threshold_numerator_transactions,
+    prepare_set_proposal_threshold_transactions,
+    prepare_set_quorum_threshold_transactions,
+    prepare_set_voting_delay_transactions,
+    prepare_set_voting_duration_transactions)
+from tinyman.governance.transactions import \
+    _prepare_budget_increase_transaction
+from tinyman.governance.utils import (generate_cid_from_proposal_metadata,
+                                      serialize_metadata)
+from tinyman.governance.vault.transactions import (
+    prepare_create_lock_transactions,
+    prepare_increase_lock_amount_transactions, prepare_withdraw_transactions)
+from tinyman.governance.vault.utils import (get_bias, get_slope,
+                                            get_start_timestamp_of_week)
+from tinyman.utils import TransactionGroup, bytes_to_int, int_to_bytes
 
-from tests.common import BaseTestCase, VaultAppMixin, ProposalVotingAppMixin
-from tests.constants import TINY_ASSET_ID, VAULT_APP_ID, PROPOSAL_VOTING_APP_ID, proposal_voting_approval_program, proposal_voting_clear_state_program
+from tests.common import BaseTestCase, ProposalVotingAppMixin, VaultAppMixin
+from tests.constants import (PROPOSAL_VOTING_APP_ID, TINY_ASSET_ID,
+                             VAULT_APP_ID, proposal_voting_approval_program,
+                             proposal_voting_clear_state_program)
 from tests.proposal_voting.utils import get_proposal_voting_app_global_state
-from tests.utils import get_first_app_call_txn
-from tests.utils import parse_box_account_power, get_account_power_index_at
-from tests.vault.utils import get_vault_app_global_state, get_account_state, get_slope_change_at
+from tests.utils import (get_account_power_index_at, get_first_app_call_txn,
+                         parse_box_account_power)
+from tests.vault.utils import (get_account_state, get_slope_change_at,
+                               get_vault_app_global_state)
 
 
 class ProposalVotingTestCase(VaultAppMixin, ProposalVotingAppMixin, BaseTestCase):
@@ -93,7 +111,7 @@ class ProposalVotingTestCase(VaultAppMixin, ProposalVotingAppMixin, BaseTestCase
             proposal_voting_app_global_state,
             ProposalVotingAppGlobalState(
                 vault_app_id=VAULT_APP_ID,
-                proposal_id_counter=0,
+                proposal_index_counter=0,
                 voting_delay=2,
                 voting_duration=7,
                 proposal_threshold=450_000_000_000,
@@ -266,7 +284,7 @@ class ProposalVotingTestCase(VaultAppMixin, ProposalVotingAppMixin, BaseTestCase
         
         # Global state
         proposal_voting_app_global_state = get_proposal_voting_app_global_state(self.ledger, PROPOSAL_VOTING_APP_ID)
-        self.assertEqual(proposal_voting_app_global_state.proposal_id_counter, 1)
+        self.assertEqual(proposal_voting_app_global_state.proposal_index_counter, 1)
 
         # Box
         proposal_box_name = get_proposal_box_name(proposal_id)

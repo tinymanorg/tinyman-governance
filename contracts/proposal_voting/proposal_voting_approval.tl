@@ -36,7 +36,7 @@ const int PROPOSAL_STATE_EXECUTED = 6
 
 # Global States
 const bytes VAULT_APP_ID_KEY = "vault_app_id"
-const bytes PROPOSAL_ID_COUNTER_KEY = "proposal_id_counter"
+const bytes PROPOSAL_INDEX_COUNTER_KEY = "proposal_index_counter"
 const bytes VOTING_DELAY_KEY = "voting_delay"
 const bytes VOTING_DURATION_KEY = "voting_duration"
 const bytes PROPOSAL_THRESHOLD_KEY = "proposal_threshold"
@@ -69,7 +69,7 @@ end
 
 block create_app:
     app_global_put(VAULT_APP_ID_KEY, btoi(Txn.ApplicationArgs[0]))
-    app_global_put(PROPOSAL_ID_COUNTER_KEY, 0)
+    app_global_put(PROPOSAL_INDEX_COUNTER_KEY, 0)
 
     # voting starts at the N'th midnight after creation time
     app_global_put(VOTING_DELAY_KEY, 2)
@@ -237,7 +237,7 @@ block main:
 
         # 3. Create Box
         box<Proposal> proposal = CreateBox(proposal_box_name)
-        proposal.index = app_global_get(PROPOSAL_ID_COUNTER_KEY)
+        proposal.index = app_global_get(PROPOSAL_INDEX_COUNTER_KEY)
         proposal.creation_timestamp = Global.LatestTimestamp
         proposal.snapshot_total_voting_power = total_voting_power
         proposal.proposer = Cast(user_address, bytes[32])
@@ -251,7 +251,7 @@ block main:
             proposal.voting_end_timestamp = voting_end_timestamp
         end
 
-        app_global_put(PROPOSAL_ID_COUNTER_KEY, app_global_get(PROPOSAL_ID_COUNTER_KEY) + 1)
+        app_global_put(PROPOSAL_INDEX_COUNTER_KEY, app_global_get(PROPOSAL_INDEX_COUNTER_KEY) + 1)
 
         bytes proposal_data
         _, proposal_data = box_get(proposal_box_name)
