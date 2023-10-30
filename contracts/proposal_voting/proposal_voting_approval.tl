@@ -283,6 +283,7 @@ block main:
 
         # Get voting power
         int account_voting_power = get_account_voting_power_at(user_address, proposal.creation_timestamp, account_power_index)
+        assert(account_voting_power)
 
         # Count Vote
         if vote == 0:
