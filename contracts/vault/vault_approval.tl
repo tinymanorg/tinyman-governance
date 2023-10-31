@@ -653,44 +653,44 @@ func create_checkpoints(account_bias_delta: int, account_slope_delta: bytes, has
     bytes slope = last_total_power.slope
     bytes cumulative_power = last_total_power.cumulative_power
 
-    int t_i = (last_checkpoint_timestamp / WEEK) * WEEK
-    bytes d_slope
-    int d_bias
+    int temp_checkpoint_timestamp = (last_checkpoint_timestamp / WEEK) * WEEK
+    bytes slope_delta
+    int bias_delta
     int time_delta
 
     int i = 0
     int stop = 9
     while i < stop:
-        t_i = t_i + WEEK
-        d_slope = itob(0)
+        temp_checkpoint_timestamp = temp_checkpoint_timestamp + WEEK
+        slope_delta = itob(0)
 
-        if t_i > Global.LatestTimestamp:
-            t_i = Global.LatestTimestamp
+        if temp_checkpoint_timestamp > Global.LatestTimestamp:
+            temp_checkpoint_timestamp = Global.LatestTimestamp
         end
-        if !(t_i % WEEK):
-            _, d_slope = box_get(Concat(SLOPE_CHANGE_BOX_PREFIX, itob(t_i)))
+        if !(temp_checkpoint_timestamp % WEEK):
+            _, slope_delta = box_get(Concat(SLOPE_CHANGE_BOX_PREFIX, itob(temp_checkpoint_timestamp)))
         end
 
-        time_delta = t_i - last_checkpoint_timestamp
-        d_bias = get_bias(slope, time_delta)
-        if d_bias > bias:
+        time_delta = temp_checkpoint_timestamp - last_checkpoint_timestamp
+        bias_delta = get_bias(slope, time_delta)
+        if bias_delta > bias:
             cumulative_power = cumulative_power b+ get_cumulative_power_2(bias, slope)
             slope = bzero(16)
             bias = 0
         else:
-            cumulative_power = cumulative_power b+ get_cumulative_power_1(bias, (bias - d_bias), time_delta)
-            bias = bias - d_bias
+            cumulative_power = cumulative_power b+ get_cumulative_power_1(bias, (bias - bias_delta), time_delta)
+            bias = bias - bias_delta
         end
 
-        if d_slope b>= slope:
+        if slope_delta b>= slope:
             slope = bzero(16)
             bias = 0
         else:
-            slope = slope b- d_slope
+            slope = slope b- slope_delta
         end
 
-        last_checkpoint_timestamp = t_i
-        if t_i == Global.LatestTimestamp:
+        last_checkpoint_timestamp = temp_checkpoint_timestamp
+        if temp_checkpoint_timestamp == Global.LatestTimestamp:
             i = stop
             if has_account_event:
                 save_total_power(construct_total_power(bias + account_bias_delta, last_checkpoint_timestamp, slope b+ account_slope_delta, cumulative_power))
@@ -702,7 +702,7 @@ func create_checkpoints(account_bias_delta: int, account_slope_delta: bytes, has
             save_total_power(construct_total_power(bias, last_checkpoint_timestamp, slope, cumulative_power))
         end
     end
-    assert(!(has_account_event && (t_i != Global.LatestTimestamp)))
+    assert(!(has_account_event && (temp_checkpoint_timestamp != Global.LatestTimestamp)))
     return
 end
 
