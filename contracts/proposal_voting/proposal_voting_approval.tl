@@ -2,7 +2,7 @@
 #tealish version git+https://github.com/Hipo/tealish.git@e8d1b27620220bc4e520d7d3b6d62523e13a7723
 
 # Name: <proposal_id>
-# Size: 123 bytes
+# Size: 116 bytes
 struct Proposal:
     index: int
     creation_timestamp: int
@@ -33,6 +33,10 @@ const int PROPOSAL_STATE_ACTIVE = 3
 const int PROPOSAL_STATE_DEFEATED = 4
 const int PROPOSAL_STATE_SUCCEEDED = 5
 const int PROPOSAL_STATE_EXECUTED = 6
+
+const int VOTE_AGAINST = 0
+const int VOTE_FOR = 1
+const int VOTE_ABSTAIN = 2
 
 # Global States
 const bytes VAULT_APP_ID_KEY = "vault_app_id"
@@ -136,9 +140,10 @@ block main:
         bytes user_address = Txn.Sender
         assert(user_address == app_global_get(MANAGER_KEY))
 
-        assert(len(Txn.ApplicationArgs[1]) == 32)
-        app_global_put(MANAGER_KEY, Txn.ApplicationArgs[1])
-        log(Concat(method("set_manager(address)"), Txn.ApplicationArgs[1]))
+        bytes new_manager = Txn.ApplicationArgs[1]
+        assert(len(new_manager) == 32)
+        app_global_put(MANAGER_KEY, new_manager)
+        log(Concat(method("set_manager(address)"), new_manager))
         exit(1)
     end
 
@@ -146,9 +151,10 @@ block main:
         bytes user_address = Txn.Sender
         assert(user_address == app_global_get(MANAGER_KEY))
 
-        assert(len(Txn.ApplicationArgs[1]) == 32)
-        app_global_put(PROPOSAL_MANAGER_KEY, Txn.ApplicationArgs[1])
-        log(Concat(method("set_proposal_manager(address)"), Txn.ApplicationArgs[1]))
+        bytes set_proposal_manager = Txn.ApplicationArgs[1]
+        assert(len(set_proposal_manager) == 32)
+        app_global_put(PROPOSAL_MANAGER_KEY, set_proposal_manager)
+        log(Concat(method("set_proposal_manager(address)"), set_proposal_manager))
         exit(1)
     end
 
@@ -163,7 +169,7 @@ block main:
         assert(!proposal.voting_start_timestamp)
         assert(proposal.is_cancelled == BYTES_FALSE)
 
-        int voting_start_timestamp = get_end_timestamp_of_day(Global.LatestTimestamp) + (app_global_get(VOTING_DELAY_KEY) * DAY)
+        int voting_start_timestamp = get_voting_start_timestamp()
         int voting_end_timestamp = voting_start_timestamp + (app_global_get(VOTING_DURATION_KEY) * DAY)
 
         proposal.is_approved = BYTES_TRUE
@@ -186,8 +192,9 @@ block main:
         box<Proposal> proposal = OpenBox(proposal_box_name)
         assert(proposal.is_cancelled == BYTES_FALSE)
         assert(proposal.is_executed == BYTES_FALSE)
+        assert((Global.LatestTimestamp < proposal.voting_end_timestamp) || !proposal.voting_end_timestamp)
         proposal.is_cancelled = BYTES_TRUE
-        
+
         bytes proposal_data
         _, proposal_data = box_get(proposal_box_name)
         log(Concat(method("proposal(byte[59],uint64,uint64,uint64,uint64,uint64,uint64,uint64,uint64,uint64,uint64,bool,bool,bool,bool,address)"), proposal_id, proposal_data))
@@ -231,7 +238,7 @@ block main:
         assert((itob(account_voting_power) b* itob(100)) b>= (itob(total_voting_power) b* itob(app_global_get(PROPOSAL_THRESHOLD_NUMERATOR_KEY))))
 
         # 2. Check proposal id
-        # proposal id will be calculated off-chian. it is base32 string representation of CID (base32 - cidv1 - raw - (sha2-256 : 256 : <metadata>))
+        # proposal id will be calculated off-chain. it is base32 string representation of CID (base32 - cidv1 - raw - (sha2-256 : 256 : <metadata>))
         assert(len(proposal_id) == 59)
         bytes proposal_box_name = Concat(PROPOSAL_BOX_PREFIX, proposal_id)
 
@@ -245,7 +252,7 @@ block main:
 
         # 4. Start & End time
         if !app_global_get(APPROVAL_REQUIREMENT_KEY):
-            int voting_start_timestamp = get_end_timestamp_of_day(Global.LatestTimestamp) + (app_global_get(VOTING_DELAY_KEY) * DAY)
+            int voting_start_timestamp = get_voting_start_timestamp()
             int voting_end_timestamp = voting_start_timestamp + (app_global_get(VOTING_DURATION_KEY) * DAY)
             proposal.voting_start_timestamp = voting_start_timestamp
             proposal.voting_end_timestamp = voting_end_timestamp
@@ -279,18 +286,18 @@ block main:
         assert(Global.LatestTimestamp < proposal.voting_end_timestamp)
 
         # Check attendance
-        set_user_as_voted(user_address, proposal.index)
+        check_and_set_user_as_voted(user_address, proposal.index)
 
         # Get voting power
         int account_voting_power = get_account_voting_power_at(user_address, proposal.creation_timestamp, account_power_index)
         assert(account_voting_power)
 
         # Count Vote
-        if vote == 0:
+        if vote == VOTE_AGAINST:
             proposal.against_voting_power = proposal.against_voting_power + account_voting_power
-        elif vote == 1:
+        elif vote == VOTE_FOR:
             proposal.for_voting_power = proposal.for_voting_power + account_voting_power
-        elif vote == 2:
+        elif vote == VOTE_ABSTAIN:
             proposal.abstain_voting_power = proposal.abstain_voting_power + account_voting_power
         else:
             Error()
@@ -315,11 +322,6 @@ block main:
         assert(user_address == app_global_get(PROPOSAL_MANAGER_KEY))
 
         int new_voting_delay = btoi(Txn.ApplicationArgs[1])
-        
-        # TODO: Set limits
-        # assert(1 <= new_voting_delay)
-        # assert(new_voting_delay <= 7)
-
         app_global_put(VOTING_DELAY_KEY, new_voting_delay)
         log(Concat(method("set_voting_delay(uint64)"), itob(new_voting_delay)))
         exit(1)
@@ -330,11 +332,7 @@ block main:
         assert(user_address == app_global_get(PROPOSAL_MANAGER_KEY))
 
         int new_voting_duration = btoi(Txn.ApplicationArgs[1])
-        
-        # TODO: Set limits
-        # assert(4 <= new_voting_duration)
-        # assert(new_voting_duration <= 10)
-
+        assert(new_voting_duration)
         app_global_put(VOTING_DURATION_KEY, new_voting_duration)
         log(Concat(method("set_voting_duration(uint64)"), itob(new_voting_duration)))
         exit(1)
@@ -345,7 +343,6 @@ block main:
         assert(user_address == app_global_get(PROPOSAL_MANAGER_KEY))
 
         int new_proposal_threshold = btoi(Txn.ApplicationArgs[1])
-
         app_global_put(PROPOSAL_THRESHOLD_KEY, new_proposal_threshold)
         log(Concat(method("set_proposal_threshold(uint64)"), itob(new_proposal_threshold)))
         exit(1)
@@ -357,7 +354,6 @@ block main:
 
         int new_proposal_threshold_numerator = btoi(Txn.ApplicationArgs[1])
         assert(new_proposal_threshold_numerator <= 100)
-
         app_global_put(PROPOSAL_THRESHOLD_NUMERATOR_KEY, new_proposal_threshold_numerator)
         log(Concat(method("set_proposal_threshold_numerator(uint64)"), itob(new_proposal_threshold_numerator)))
         exit(1)
@@ -368,11 +364,6 @@ block main:
         assert(user_address == app_global_get(PROPOSAL_MANAGER_KEY))
 
         int new_quorum_threshold = btoi(Txn.ApplicationArgs[1])
-        
-        # TODO: Set limits
-        # assert(1 <= new_quorum_threshold)
-        # assert(new_quorum_threshold <= 100_000_000_000)
-
         app_global_put(QUORUM_THRESHOLD_KEY, new_quorum_threshold)
         log(Concat(method("set_quorum_threshold(uint64)"), itob(new_quorum_threshold)))
         exit(1)
@@ -471,7 +462,7 @@ func has_voted(address: bytes, proposal_index: int) int:
     return 0
 end
 
-func set_user_as_voted(address: bytes, proposal_index: int):
+func check_and_set_user_as_voted(address: bytes, proposal_index: int):
     int box_index = proposal_index / (ACCOUNT_ATTENDANCE_SHEET_BOX_SIZE * 8)
     int array_index = proposal_index % (ACCOUNT_ATTENDANCE_SHEET_BOX_SIZE * 8)
     bytes box_name = Concat(ATTENDANCE_BOX_PREFIX, Concat(address, itob(box_index)))
@@ -485,8 +476,9 @@ func set_user_as_voted(address: bytes, proposal_index: int):
     return
 end
 
-func get_end_timestamp_of_day(timestamp: int) int:
-    return ((timestamp / DAY) * DAY) + DAY
+func get_voting_start_timestamp() int:
+    int end_timestamp_of_day = ((Global.LatestTimestamp / DAY) * DAY) + DAY
+    return end_timestamp_of_day + (app_global_get(VOTING_DELAY_KEY) * DAY)
 end
 
 # Inner App Calls

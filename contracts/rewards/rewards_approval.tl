@@ -148,7 +148,7 @@ block main:
 
             account_power_index_1 = extract3(account_power_indexes, (i * 8), 8)
             account_power_index_2 = extract3(account_power_indexes, ((i + 1) * 8), 8)
-            
+
             account_cumulative_power_delta = get_account_cumulative_power_delta(user_address, period_start_timestamp, period_end_timestamp, account_power_index_1, account_power_index_2)
 
             RewardPeriod reward_period = get_reward_period(period_index)
@@ -159,7 +159,7 @@ block main:
         end
 
         transfer(app_global_get(TINY_ASSET_ID_KEY), total_reward_amount, Global.CurrentApplicationAddress, user_address)
-        
+
         # claim_rewards(address, total_reward_amount, period_index_start, period_count, reward_amounts[])
         log(Concat(method("claim_rewards(address,uint64,uint64,uint64,uint64[])"), user_address, itob(total_reward_amount), itob(period_index_start), itob(period_count), extract(6, 2, itob(period_count)), reward_amounts))
         exit(1)
@@ -182,7 +182,7 @@ block main:
         log(Concat(method("init(uint64,uint64)"), itob(first_period_timestamp), itob(reward_amount)))
         exit(1)
     end
-    
+
     block set_reward_amount:
         bytes user_address = Txn.Sender
         assert(user_address == app_global_get(REWARDS_MANAGER_KEY))
@@ -201,19 +201,21 @@ block main:
         bytes user_address = Txn.Sender
         assert(user_address == app_global_get(MANAGER_KEY))
 
-        assert(len(Txn.ApplicationArgs[1]) == 32)
-        app_global_put(MANAGER_KEY, Txn.ApplicationArgs[1])
-        log(Concat(method("set_manager(address)"), Txn.ApplicationArgs[1]))
+        bytes new_manager = Txn.ApplicationArgs[1]
+        assert(len(new_manager) == 32)
+        app_global_put(MANAGER_KEY, new_manager)
+        log(Concat(method("set_manager(address)"), new_manager))
         exit(1)
     end
-    
+
     block set_rewards_manager:
         bytes user_address = Txn.Sender
         assert(user_address == app_global_get(MANAGER_KEY))
 
-        assert(len(Txn.ApplicationArgs[1]) == 32)
-        app_global_put(REWARDS_MANAGER_KEY, Txn.ApplicationArgs[1])
-        log(Concat(method("set_rewards_manager(address)"), Txn.ApplicationArgs[1]))
+        bytes new_rewards_manager = Txn.ApplicationArgs[1]
+        assert(len(new_rewards_manager) == 32)
+        app_global_put(REWARDS_MANAGER_KEY, new_rewards_manager)
+        log(Concat(method("set_rewards_manager(address)"), new_rewards_manager))
         exit(1)
     end
 
