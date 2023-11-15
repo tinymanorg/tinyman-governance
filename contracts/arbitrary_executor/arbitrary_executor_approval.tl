@@ -22,6 +22,11 @@ struct Proposal:
     execution_hash: bytes[128]
 end
 
+# 24 * 60 * 60
+const int DAY = 86400
+const bytes BYTES_FALSE = "\x00"
+const bytes BYTES_TRUE = "\x80"
+
 const bytes MANAGER_KEY = "manager"
 const bytes PROPOSAL_VOTING_APP_ID_KEY = "proposal_voting_app_id"
 
@@ -81,7 +86,7 @@ block main:
             Fee: 0
         end
 
-        bytes proposal = Cast(extract(4, 0, Itxn.LastLog), Proposal)
+        Proposal proposal = Cast(extract(4, 0, Itxn.LastLog), Proposal)
 
         inner_txn:
             TypeEnum: Appl
@@ -94,9 +99,9 @@ block main:
         int proposal_state = extract_uint64(Itxn.LastLog, 4)
 
         # proposal checks
-        assert(proposal.is_approved == 1)
-        assert(proposal.is_cancelled == 0)
-        assert(proposal.is_executed == 0)
+        assert(proposal.is_approved == BYTES_TRUE)
+        assert(proposal.is_cancelled == BYTES_FALSE)
+        assert(proposal.is_executed == BYTES_FALSE)
         assert(proposal_state == PROPOSAL_STATE_SUCCEEDED)
 
         # assert(proposal.proposer == Txn.Sender)
