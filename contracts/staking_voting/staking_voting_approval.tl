@@ -107,7 +107,7 @@ block main:
         log(Concat(method("create_proposal(address,byte[59])"), user_address, proposal_id))
         exit(1)
     end
-    
+
     block cancel_proposal:
         bytes user_address = Txn.Sender
         assert(user_address == app_global_get(PROPOSAL_MANAGER_KEY))
@@ -133,7 +133,7 @@ block main:
         bytes votes_as_percentage = Txn.ApplicationArgs[2]
         bytes asset_ids = Txn.ApplicationArgs[3]
         bytes account_power_index = Txn.ApplicationArgs[4]
-      
+
         bytes proposal_box_name = Concat(PROPOSAL_BOX_PREFIX, proposal_id)
         box<Proposal> proposal = OpenBox(proposal_box_name)
 
@@ -206,11 +206,6 @@ block main:
         assert(user_address == app_global_get(PROPOSAL_MANAGER_KEY))
 
         int new_voting_delay = btoi(Txn.ApplicationArgs[1])
-        
-        # TODO: Set limits
-        # assert(1 <= new_voting_delay)
-        # assert(new_voting_delay <= 7)
-
         app_global_put(VOTING_DELAY_KEY, new_voting_delay)
         log(Concat(method("set_voting_delay(uint64)"), itob(new_voting_delay)))
         exit(1)
@@ -221,11 +216,7 @@ block main:
         assert(user_address == app_global_get(PROPOSAL_MANAGER_KEY))
 
         int new_voting_duration = btoi(Txn.ApplicationArgs[1])
-        
-        # TODO: Set limits
-        # assert(4 <= new_voting_duration)
-        # assert(new_voting_duration <= 10)
-
+        assert(new_voting_duration)
         app_global_put(VOTING_DURATION_KEY, new_voting_duration)
         log(Concat(method("set_voting_duration(uint64)"), itob(new_voting_duration)))
         exit(1)

@@ -2,7 +2,7 @@
 #tealish version git+https://github.com/Hipo/tealish.git@e8d1b27620220bc4e520d7d3b6d62523e13a7723
 
 # Name: <proposal_id>
-# Size: 123 bytes
+# Size: 116 bytes
 struct Proposal:
     index: int
     creation_timestamp: int
@@ -33,6 +33,10 @@ const int PROPOSAL_STATE_ACTIVE = 3
 const int PROPOSAL_STATE_DEFEATED = 4
 const int PROPOSAL_STATE_SUCCEEDED = 5
 const int PROPOSAL_STATE_EXECUTED = 6
+
+const int VOTE_AGAINST = 0
+const int VOTE_FOR = 1
+const int VOTE_ABSTAIN = 2
 
 # Global States
 const bytes VAULT_APP_ID_KEY = "vault_app_id"
@@ -188,8 +192,9 @@ block main:
         box<Proposal> proposal = OpenBox(proposal_box_name)
         assert(proposal.is_cancelled == BYTES_FALSE)
         assert(proposal.is_executed == BYTES_FALSE)
+        assert((Global.LatestTimestamp < proposal.voting_end_timestamp) || !proposal.voting_end_timestamp)
         proposal.is_cancelled = BYTES_TRUE
-        
+
         bytes proposal_data
         _, proposal_data = box_get(proposal_box_name)
         log(Concat(method("proposal(byte[59],uint64,uint64,uint64,uint64,uint64,uint64,uint64,uint64,uint64,uint64,bool,bool,bool,bool,address)"), proposal_id, proposal_data))
@@ -288,11 +293,11 @@ block main:
         assert(account_voting_power)
 
         # Count Vote
-        if vote == 0:
+        if vote == VOTE_AGAINST:
             proposal.against_voting_power = proposal.against_voting_power + account_voting_power
-        elif vote == 1:
+        elif vote == VOTE_FOR:
             proposal.for_voting_power = proposal.for_voting_power + account_voting_power
-        elif vote == 2:
+        elif vote == VOTE_ABSTAIN:
             proposal.abstain_voting_power = proposal.abstain_voting_power + account_voting_power
         else:
             Error()
@@ -317,11 +322,6 @@ block main:
         assert(user_address == app_global_get(PROPOSAL_MANAGER_KEY))
 
         int new_voting_delay = btoi(Txn.ApplicationArgs[1])
-        
-        # TODO: Set limits
-        # assert(1 <= new_voting_delay)
-        # assert(new_voting_delay <= 7)
-
         app_global_put(VOTING_DELAY_KEY, new_voting_delay)
         log(Concat(method("set_voting_delay(uint64)"), itob(new_voting_delay)))
         exit(1)
@@ -332,11 +332,7 @@ block main:
         assert(user_address == app_global_get(PROPOSAL_MANAGER_KEY))
 
         int new_voting_duration = btoi(Txn.ApplicationArgs[1])
-        
-        # TODO: Set limits
-        # assert(4 <= new_voting_duration)
-        # assert(new_voting_duration <= 10)
-
+        assert(new_voting_duration)
         app_global_put(VOTING_DURATION_KEY, new_voting_duration)
         log(Concat(method("set_voting_duration(uint64)"), itob(new_voting_duration)))
         exit(1)
@@ -347,7 +343,6 @@ block main:
         assert(user_address == app_global_get(PROPOSAL_MANAGER_KEY))
 
         int new_proposal_threshold = btoi(Txn.ApplicationArgs[1])
-
         app_global_put(PROPOSAL_THRESHOLD_KEY, new_proposal_threshold)
         log(Concat(method("set_proposal_threshold(uint64)"), itob(new_proposal_threshold)))
         exit(1)
@@ -359,7 +354,6 @@ block main:
 
         int new_proposal_threshold_numerator = btoi(Txn.ApplicationArgs[1])
         assert(new_proposal_threshold_numerator <= 100)
-
         app_global_put(PROPOSAL_THRESHOLD_NUMERATOR_KEY, new_proposal_threshold_numerator)
         log(Concat(method("set_proposal_threshold_numerator(uint64)"), itob(new_proposal_threshold_numerator)))
         exit(1)
@@ -370,11 +364,6 @@ block main:
         assert(user_address == app_global_get(PROPOSAL_MANAGER_KEY))
 
         int new_quorum_threshold = btoi(Txn.ApplicationArgs[1])
-        
-        # TODO: Set limits
-        # assert(1 <= new_quorum_threshold)
-        # assert(new_quorum_threshold <= 100_000_000_000)
-
         app_global_put(QUORUM_THRESHOLD_KEY, new_quorum_threshold)
         log(Concat(method("set_quorum_threshold(uint64)"), itob(new_quorum_threshold)))
         exit(1)
