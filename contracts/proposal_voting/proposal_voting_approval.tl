@@ -19,6 +19,7 @@ struct Proposal:
     is_executed: bytes[1]
     is_quorum_reached: bytes[1]
     proposer: bytes[32]
+    execution_hash: bytes[128]
 end
 
 # 24 * 60 * 60
@@ -227,6 +228,7 @@ block main:
     block create_proposal:
         bytes user_address = Txn.Sender
         bytes proposal_id = Txn.ApplicationArgs[1]
+        bytes execution_hash = Txn.ApplicationArgs[2]
 
         # 1. Check voting power threshold
         int account_voting_power = get_account_voting_power(user_address)
@@ -249,6 +251,7 @@ block main:
         proposal.snapshot_total_voting_power = total_voting_power
         proposal.proposer = Cast(user_address, bytes[32])
         proposal.quorum_threshold = app_global_get(QUORUM_THRESHOLD_KEY)
+        proposal.execution_hash = Rpad(execution_hash, 128)
 
         # 4. Start & End time
         if !app_global_get(APPROVAL_REQUIREMENT_KEY):

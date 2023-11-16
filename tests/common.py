@@ -22,12 +22,17 @@ from tinyman.governance.vault.transactions import \
     prepare_create_checkpoints_transactions
 from tinyman.utils import int_to_bytes
 
-from tests.constants import (PROPOSAL_VOTING_APP_ID, REWARDS_APP_ID,
-                             STAKING_VOTING_APP_ID, TINY_ASSET_ID,
-                             VAULT_APP_ID, proposal_voting_approval_program,
+from tests.constants import (PROPOSAL_VOTING_APP_ID, 
+                             REWARDS_APP_ID,
+                             STAKING_VOTING_APP_ID, 
+                             TINY_ASSET_ID,
+                             VAULT_APP_ID,
+                             ARBITRARY_EXECUTOR_APP_ID,
+                             proposal_voting_approval_program,
                              rewards_approval_program,
                              staking_voting_approval_program,
-                             vault_approval_program)
+                             vault_approval_program,
+                             arbitrary_executor_approval_program)
 from tests.vault.utils import get_vault_app_global_state
 
 
@@ -273,3 +278,28 @@ class ProposalVotingAppMixin:
                 b'proposal_manager': decode_address(proposal_manager_address)
             }
         )
+
+class ArbitraryExecutorAppMixin:
+
+    def create_arbitrary_executor_app(self, app_creator_address):
+        if app_creator_address not in self.ledger.accounts:
+            self.ledger.set_account_balance(app_creator_address, 1_000_000)
+
+        self.ledger.create_app(
+            app_id=ARBITRARY_EXECUTOR_APP_ID,
+            approval_program=arbitrary_executor_approval_program,
+            creator=app_creator_address,
+            local_ints=0,
+            local_bytes=0,
+            global_ints=16,
+            global_bytes=16
+        )
+
+        self.ledger.set_global_state(
+            ARBITRARY_EXECUTOR_APP_ID,
+            {
+                b'proposal_voting_app_id': PROPOSAL_VOTING_APP_ID,
+                b'manager': decode_address(app_creator_address)
+            }
+        )
+
