@@ -251,7 +251,7 @@ block main:
         proposal.snapshot_total_voting_power = total_voting_power
         proposal.proposer = Cast(user_address, bytes[32])
         proposal.quorum_threshold = app_global_get(QUORUM_THRESHOLD_KEY)
-        proposal.execution_hash = Rpad(execution_hash, 128)
+        proposal.execution_hash = Lpad(execution_hash, 128)
 
         # 4. Start & End time
         if !app_global_get(APPROVAL_REQUIREMENT_KEY):
@@ -265,7 +265,7 @@ block main:
 
         bytes proposal_data
         _, proposal_data = box_get(proposal_box_name)
-        log(Concat(method("proposal(byte[59],uint64,uint64,uint64,uint64,uint64,uint64,uint64,uint64,uint64,uint64,bool,bool,bool,bool,address)"), proposal_id, proposal_data))
+        log(Concat(method("proposal(byte[59],uint64,uint64,uint64,uint64,uint64,uint64,uint64,uint64,uint64,uint64,bool,bool,bool,bool,address, byte[128])"), proposal_id, proposal_data))
         log(Concat(method("create_proposal(address,byte[59])"), user_address, proposal_id))
         exit(1)
     end

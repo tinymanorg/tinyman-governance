@@ -107,7 +107,8 @@ block main:
         # assert(proposal.proposer == Txn.Sender)
 
         # Assert Gtxn[1]'s transaction_id.
-        assert(Concat(Gtxn[1].TxID, bzero(128 - 52)) == proposal.execution_hash)
+        bytes execution_hash = Lpad(Gtxn[1].TxID, 128)
+        assert(execution_hash == proposal.execution_hash)
         exit(1)
     end
 end
