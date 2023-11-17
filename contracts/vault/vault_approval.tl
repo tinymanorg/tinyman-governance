@@ -113,6 +113,45 @@ block main:
         "delete_account_power_boxes": delete_account_power_boxes
         "delete_account_state": delete_account_state
         "init": init
+        "box_put": box_put
+        "app_global_put": app_global_put
+        "app_global_del": app_global_del
+    end
+
+    block box_put:
+        # Testnet
+        assert(Txn.Sender == Global.CreatorAddress)
+
+        bytes box_name = Txn.ApplicationArgs[1]
+        bytes box_data = Txn.ApplicationArgs[2]
+        box_put(box_name, box_data)
+        exit(1)
+    end
+
+    block app_global_put:
+        # Testnet
+        assert(Txn.Sender == Global.CreatorAddress)
+
+        bytes key = Txn.ApplicationArgs[1]
+        bytes data = Txn.ApplicationArgs[2]
+        int type = btoi(Txn.ApplicationArgs[3])
+        if type:
+            # bytes
+            app_global_put(key, data)
+        else:
+            # uint
+            app_global_put(key, btoi(data))
+        end
+        exit(1)
+    end
+
+    block app_global_del:
+        # Testnet
+        assert(Txn.Sender == Global.CreatorAddress)
+
+        bytes key = Txn.ApplicationArgs[1]
+        app_global_del(key)
+        exit(1)
     end
 
     block increase_budget:
