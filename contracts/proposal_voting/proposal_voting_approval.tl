@@ -267,6 +267,7 @@ block main:
         _, proposal_data = box_get(proposal_box_name)
         log(Concat(method("proposal(byte[59],uint64,uint64,uint64,uint64,uint64,uint64,uint64,uint64,uint64,uint64,bool,bool,bool,bool,address, byte[128])"), proposal_id, proposal_data))
         log(Concat(method("create_proposal(address,byte[59])"), user_address, proposal_id))
+        log(proposal.execution_hash)
         exit(1)
     end
 

@@ -109,6 +109,7 @@ block main:
         # Assert Gtxn[1]'s transaction_id.
         bytes execution_hash = Lpad(Gtxn[1].TxID, 128)
         assert(execution_hash == proposal.execution_hash)
+
         exit(1)
     end
 end

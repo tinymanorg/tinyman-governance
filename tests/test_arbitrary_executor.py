@@ -1,13 +1,14 @@
 import unittest.mock
+from base64 import b64encode, b64decode, b32decode
 from datetime import datetime
 from unittest.mock import ANY
 from zoneinfo import ZoneInfo
 
-from algojig import LogicEvalError
+from algojig import LogicEvalError, get_suggested_params
 from algosdk import transaction
 from algosdk.abi import BoolType
 from algosdk.account import generate_account
-from algosdk.encoding import decode_address
+from algosdk.encoding import decode_address, _correct_padding
 from algosdk.logic import get_application_address
 from tinyman.governance import proposal_voting
 from tinyman.governance.constants import DAY, WEEK
@@ -244,9 +245,15 @@ class ArbitraryExecutorTestCase(VaultAppMixin, ProposalVotingAppMixin, Arbitrary
         slope = get_slope(amount)
         user_4_bias = get_bias(slope, (lock_end_timestamp - block_timestamp))
 
+        # Create the arbitrary executor transactions
+        proposal_id = generate_cid_from_proposal_metadata({"name": "Proposal 1"})
+        proposal_box_name = get_proposal_box_name(proposal_id)
+
+        arbitrary_transaction_sp = get_suggested_params()
+        arbitrary_transaction_sp.fee = 10000
         arbitrary_transaction = transaction.AssetConfigTxn(
             sender=user_address,
-            sp=self.sp,
+            sp=arbitrary_transaction_sp,
             total=1000,
             default_frozen=False,
             unit_name="TINYRING",
@@ -259,21 +266,34 @@ class ArbitraryExecutorTestCase(VaultAppMixin, ProposalVotingAppMixin, Arbitrary
             decimals=0,
         )
 
+        executor_transaction = transaction.ApplicationNoOpTxn(
+            sender=user_address,
+            sp=self.sp,
+            index=ARBITRARY_EXECUTOR_APP_ID,
+            app_args=["validate_transaction", proposal_id],
+            foreign_apps=[PROPOSAL_VOTING_APP_ID],
+            boxes=[
+                (PROPOSAL_VOTING_APP_ID, proposal_box_name)
+            ],
+        )
+        arbitrary_executor_txn_group = TransactionGroup([
+            executor_transaction,
+            arbitrary_transaction
+        ])
+
         # Create proposal
-        proposal_id = generate_cid_from_proposal_metadata({"name": "Proposal 1"})
         txn_group = prepare_create_proposal_transactions(
             proposal_voting_app_id=PROPOSAL_VOTING_APP_ID,
             vault_app_id=VAULT_APP_ID,
             sender=user_address,
             proposal_id=proposal_id,
-            execution_hash=arbitrary_transaction.get_txid(),
+            execution_hash=b32decode(_correct_padding(arbitrary_transaction.get_txid())),
             vault_app_global_state=get_vault_app_global_state(self.ledger),
             suggested_params=self.sp
         )
         txn_group.sign_with_private_key(user_address, user_sk)
-        block = self.ledger.eval_transactions(txn_group.signed_transactions, block_timestamp=block_timestamp)
+        self.ledger.eval_transactions(txn_group.signed_transactions, block_timestamp=block_timestamp)
 
-        proposal_box_name = get_proposal_box_name(proposal_id)
         proposal = parse_box_proposal(self.ledger.boxes[PROPOSAL_VOTING_APP_ID][proposal_box_name])
 
         # Approve proposal
@@ -284,7 +304,7 @@ class ArbitraryExecutorTestCase(VaultAppMixin, ProposalVotingAppMixin, Arbitrary
             suggested_params=self.sp
         )
         txn_group.sign_with_private_key(self.proposal_manager_address, self.proposal_manager_sk)
-        block = self.ledger.eval_transactions(txn_group.signed_transactions, block_timestamp=block_timestamp)
+        self.ledger.eval_transactions(txn_group.signed_transactions, block_timestamp=block_timestamp)
 
         proposal = parse_box_proposal(self.ledger.boxes[PROPOSAL_VOTING_APP_ID][proposal_box_name])
 
@@ -379,7 +399,7 @@ class ArbitraryExecutorTestCase(VaultAppMixin, ProposalVotingAppMixin, Arbitrary
             suggested_params=self.sp,
         )
         txn_group.sign_with_private_key(user_address, user_sk)
-        block = self.ledger.eval_transactions(txn_group.signed_transactions, block_timestamp=block_timestamp)
+        self.ledger.eval_transactions(txn_group.signed_transactions, block_timestamp=block_timestamp)
 
         proposal = parse_box_proposal(self.ledger.boxes[PROPOSAL_VOTING_APP_ID][proposal_box_name])
         
@@ -389,20 +409,8 @@ class ArbitraryExecutorTestCase(VaultAppMixin, ProposalVotingAppMixin, Arbitrary
         # Execute proposal
         self.create_arbitrary_executor_app(self.manager_address)
 
-        self.sp.fee = 10_000
-        executor_txn = transaction.ApplicationNoOpTxn(
-            sender=user_address,
-            sp=self.sp,
-            index=ARBITRARY_EXECUTOR_APP_ID,
-            app_args=["validate_transaction", proposal_id],
-            foreign_apps=[PROPOSAL_VOTING_APP_ID],
-            boxes=[
-                (PROPOSAL_VOTING_APP_ID, proposal_box_name)
-            ],
-        )
-        txn_group = TransactionGroup([
-            executor_txn,
-            arbitrary_transaction
-        ])
-        txn_group.sign_with_private_key(user_address, user_sk)
-        block = self.ledger.eval_transactions(txn_group.signed_transactions, block_timestamp=proposal.voting_end_timestamp + 10)
+        arbitrary_executor_txn_group.sign_with_private_key(user_address, user_sk)
+        block = self.ledger.eval_transactions(arbitrary_executor_txn_group.signed_transactions, block_timestamp=proposal.voting_end_timestamp + 10)
+
+        # Logs
+        self.assertIsNotNone(self.ledger.assets[block[b"txns"][1][b"caid"]])
