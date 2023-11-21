@@ -16,6 +16,8 @@ rewards_clear_state_program = TealishProgram('contracts/rewards/rewards_clear_st
 arbitrary_executor_approval_program = TealishProgram('contracts/arbitrary_executor/arbitrary_executor_approval.tl')
 arbitrary_executor_clear_state_program = TealishProgram('contracts/arbitrary_executor/arbitrary_executor_clear_state.tl')
 
+arbitrary_executor_logic_signature = TealishProgram('contracts/arbitrary_executor_logic_signature/arbitrary_executor_logic_signature.tl')
+
 TINY_ASSET_ID = 12345
 
 VAULT_APP_ID = 6000
