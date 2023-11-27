@@ -1,6 +1,7 @@
 import unittest.mock
 from base64 import b64encode, b64decode, b32decode
 from datetime import datetime
+from hashlib import sha256
 from unittest.mock import ANY
 from zoneinfo import ZoneInfo
 
@@ -8,7 +9,7 @@ from algojig import LogicEvalError, get_suggested_params
 from algosdk import transaction
 from algosdk.abi import BoolType
 from algosdk.account import generate_account
-from algosdk.encoding import decode_address, _correct_padding
+from algosdk.encoding import decode_address, encode_address, _correct_padding
 from algosdk.logic import get_application_address
 from tinyman.governance import proposal_voting
 from tinyman.governance.constants import DAY, WEEK
@@ -61,14 +62,17 @@ from tests.common import (
     ProposalVotingAppMixin,
     VaultAppMixin,
     FeeManagementExecutorMixin,
+    get_rawbox_from_proposal,
 )
 from tests.constants import (
     AMM_V2_APP_ID,
     PROPOSAL_VOTING_APP_ID,
     TINY_ASSET_ID,
     VAULT_APP_ID,
+    FEE_MANAGEMENT_EXECUTOR_APP_ID,
+    amm_pool_template,
     fee_management_executor_approval_program,
-    fee_management_executor_clear_state_program
+    fee_management_executor_clear_state_program,
 )
 from tests.proposal_voting.utils import get_proposal_voting_app_global_state
 from tests.utils import (
@@ -165,14 +169,10 @@ class FeeManagementExecutorTestCase(
 
     def test_set_fee_setter_execution(self):
         user_sk, user_address = generate_account()
-        user_2_sk, user_2_address = generate_account()
-        user_3_sk, user_3_address = generate_account()
-        user_4_sk, user_4_address = generate_account()
+        new_fee_setter_address = user_address
 
         self.ledger.set_account_balance(user_address, 10_000_000)
-        self.ledger.set_account_balance(user_2_address, 10_000_000)
-        self.ledger.set_account_balance(user_3_address, 10_000_000)
-        self.ledger.set_account_balance(user_4_address, 10_000_000)
+
         self.create_proposal_voting_app(
             self.manager_address, self.proposal_manager_address
         )
@@ -184,320 +184,451 @@ class FeeManagementExecutorTestCase(
             proposal_voting.constants.PROPOSAL_VOTING_APP_MINIMUM_BALANCE_REQUIREMENT,
         )
 
-        block_timestamp = self.vault_app_creation_timestamp + 2 * WEEK
-        self.create_checkpoints(user_address, user_sk, block_timestamp)
+        # Create proposal
+        proposal_id = generate_cid_from_proposal_metadata({"name": "Proposal 1"})
+        proposal_box_name = get_proposal_box_name(proposal_id)
 
-        # Create lock 1
-        lock_end_timestamp = get_start_timestamp_of_week(block_timestamp) + 15 * WEEK
-        amount = 100_000_000
-        self.ledger.move(
-            amount,
-            asset_id=TINY_ASSET_ID,
-            sender=self.ledger.assets[TINY_ASSET_ID]["creator"],
-            receiver=user_address,
+        execution_hash = bytes("set_fee_setter", "utf-8") + decode_address(new_fee_setter_address)
+        execution_hash = sha256(execution_hash).digest()
+        execution_hash = b"\x00" * (128 - len(execution_hash)) + execution_hash  # Lpad
+
+        proposal = Proposal(
+            index=0,
+            creation_timestamp=1647302400,
+            voting_start_timestamp=1647561600,
+            voting_end_timestamp=1648166400,
+            snapshot_total_voting_power=7671231,
+            vote_count=4,
+            quorum_threshold=7000000,
+            against_voting_power=205479,
+            for_voting_power=7054794,
+            abstain_voting_power=410958,
+            is_approved=True,
+            is_cancelled=False,
+            is_executed=False,
+            is_quorum_reached=True,
+            proposer_address=user_address,
         )
 
-        with unittest.mock.patch("time.time", return_value=block_timestamp):
-            txn_group = prepare_create_lock_transactions(
-                vault_app_id=VAULT_APP_ID,
-                tiny_asset_id=TINY_ASSET_ID,
-                sender=user_address,
-                locked_amount=amount,
-                lock_end_time=lock_end_timestamp,
-                vault_app_global_state=get_vault_app_global_state(self.ledger),
-                account_state=get_account_state(self.ledger, user_address),
-                slope_change_at_lock_end_time=get_slope_change_at(
-                    self.ledger, lock_end_timestamp
-                ),
-                suggested_params=self.sp,
-            )
+        self.ledger.boxes[PROPOSAL_VOTING_APP_ID] = {
+            proposal_box_name: get_rawbox_from_proposal(proposal) + execution_hash
+        }
+
+        self.create_fee_management_executor_app(self.manager_address)
+
+        # Execute proposal
+        self.ledger.global_states[AMM_V2_APP_ID][b"fee_manager"] = decode_address(get_application_address(FEE_MANAGEMENT_EXECUTOR_APP_ID))
+
+        sp = get_suggested_params()
+        sp.fee = 10000
+        set_fee_setter_txn = transaction.ApplicationNoOpTxn(
+            sender=user_address,
+            sp=sp,
+            index=FEE_MANAGEMENT_EXECUTOR_APP_ID,
+            app_args=["set_fee_setter", proposal_id],
+            foreign_apps=[PROPOSAL_VOTING_APP_ID, AMM_V2_APP_ID],
+            boxes=[(PROPOSAL_VOTING_APP_ID, proposal_box_name)],
+        )
+        txn_group = TransactionGroup([set_fee_setter_txn])
+
         txn_group.sign_with_private_key(user_address, user_sk)
-        self.ledger.eval_transactions(
-            txn_group.signed_transactions, block_timestamp=block_timestamp
+        block = self.ledger.eval_transactions(
+            txn_group.signed_transactions,
+            block_timestamp=proposal.voting_end_timestamp + 10,
         )
-        slope = get_slope(amount)
-        user_1_bias = get_bias(slope, (lock_end_timestamp - block_timestamp))
+    
+    def test_set_fee_manager_execution(self):
+        user_sk, user_address = generate_account()
+        new_fee_manager_address = user_address
 
-        #  Create lock 2
-        lock_end_timestamp = get_start_timestamp_of_week(block_timestamp) + 5 * WEEK
-        amount = 10_000_000
-        self.ledger.move(
-            amount,
-            asset_id=TINY_ASSET_ID,
-            sender=self.ledger.assets[TINY_ASSET_ID]["creator"],
-            receiver=user_2_address,
+        self.ledger.set_account_balance(user_address, 10_000_000)
+
+        self.create_proposal_voting_app(
+            self.manager_address, self.proposal_manager_address
         )
-
-        with unittest.mock.patch("time.time", return_value=block_timestamp):
-            txn_group = prepare_create_lock_transactions(
-                vault_app_id=VAULT_APP_ID,
-                tiny_asset_id=TINY_ASSET_ID,
-                sender=user_2_address,
-                locked_amount=amount,
-                lock_end_time=lock_end_timestamp,
-                vault_app_global_state=get_vault_app_global_state(self.ledger),
-                account_state=get_account_state(self.ledger, user_2_address),
-                slope_change_at_lock_end_time=get_slope_change_at(
-                    self.ledger, lock_end_timestamp
-                ),
-                suggested_params=self.sp,
-            )
-
-        txn_group.sign_with_private_key(user_2_address, user_2_sk)
-        self.ledger.eval_transactions(
-            txn_group.signed_transactions, block_timestamp=block_timestamp
+        self.ledger.global_states[PROPOSAL_VOTING_APP_ID][
+            b"quorum_threshold"
+        ] = 7_000_000
+        self.ledger.set_account_balance(
+            get_application_address(PROPOSAL_VOTING_APP_ID),
+            proposal_voting.constants.PROPOSAL_VOTING_APP_MINIMUM_BALANCE_REQUIREMENT,
         )
-        slope = get_slope(amount)
-        user_2_bias = get_bias(slope, (lock_end_timestamp - block_timestamp))
-
-        # Create lock 3
-        lock_end_timestamp = get_start_timestamp_of_week(block_timestamp) + 5 * WEEK
-        amount = 20_000_000
-        self.ledger.move(
-            amount,
-            asset_id=TINY_ASSET_ID,
-            sender=self.ledger.assets[TINY_ASSET_ID]["creator"],
-            receiver=user_3_address,
-        )
-
-        with unittest.mock.patch("time.time", return_value=block_timestamp):
-            txn_group = prepare_create_lock_transactions(
-                vault_app_id=VAULT_APP_ID,
-                tiny_asset_id=TINY_ASSET_ID,
-                sender=user_3_address,
-                locked_amount=amount,
-                lock_end_time=lock_end_timestamp,
-                vault_app_global_state=get_vault_app_global_state(self.ledger),
-                account_state=get_account_state(self.ledger, user_3_address),
-                slope_change_at_lock_end_time=get_slope_change_at(
-                    self.ledger, lock_end_timestamp
-                ),
-                suggested_params=self.sp,
-            )
-        txn_group.sign_with_private_key(user_3_address, user_3_sk)
-        self.ledger.eval_transactions(
-            txn_group.signed_transactions, block_timestamp=block_timestamp
-        )
-        slope = get_slope(amount)
-        user_3_bias = get_bias(slope, (lock_end_timestamp - block_timestamp))
-
-        # Create lock 4
-        lock_end_timestamp = get_start_timestamp_of_week(block_timestamp) + 5 * WEEK
-        amount = 10_000_000
-        self.ledger.move(
-            amount,
-            asset_id=TINY_ASSET_ID,
-            sender=self.ledger.assets[TINY_ASSET_ID]["creator"],
-            receiver=user_4_address,
-        )
-
-        with unittest.mock.patch("time.time", return_value=block_timestamp):
-            txn_group = prepare_create_lock_transactions(
-                vault_app_id=VAULT_APP_ID,
-                tiny_asset_id=TINY_ASSET_ID,
-                sender=user_4_address,
-                locked_amount=amount,
-                lock_end_time=lock_end_timestamp,
-                vault_app_global_state=get_vault_app_global_state(self.ledger),
-                account_state=get_account_state(self.ledger, user_4_address),
-                slope_change_at_lock_end_time=get_slope_change_at(
-                    self.ledger, lock_end_timestamp
-                ),
-                suggested_params=self.sp,
-            )
-        txn_group.sign_with_private_key(user_4_address, user_4_sk)
-        self.ledger.eval_transactions(
-            txn_group.signed_transactions, block_timestamp=block_timestamp
-        )
-        slope = get_slope(amount)
-        user_4_bias = get_bias(slope, (lock_end_timestamp - block_timestamp))
 
         # Create proposal
         proposal_id = generate_cid_from_proposal_metadata({"name": "Proposal 1"})
         proposal_box_name = get_proposal_box_name(proposal_id)
 
-        txn_group = prepare_create_proposal_transactions(
-            proposal_voting_app_id=PROPOSAL_VOTING_APP_ID,
-            vault_app_id=VAULT_APP_ID,
-            sender=user_address,
-            proposal_id=proposal_id,
-            execution_hash=None,
-            vault_app_global_state=get_vault_app_global_state(self.ledger),
-            suggested_params=self.sp,
-        )
-        txn_group.sign_with_private_key(user_address, user_sk)
-        self.ledger.eval_transactions(
-            txn_group.signed_transactions, block_timestamp=block_timestamp
+        execution_hash = bytes("set_fee_manager", "utf-8") + decode_address(new_fee_manager_address)
+        execution_hash = sha256(execution_hash).digest()
+        execution_hash = b"\x00" * (128 - len(execution_hash)) + execution_hash  # Lpad
+
+        proposal = Proposal(
+            index=0,
+            creation_timestamp=1647302400,
+            voting_start_timestamp=1647561600,
+            voting_end_timestamp=1648166400,
+            snapshot_total_voting_power=7671231,
+            vote_count=4,
+            quorum_threshold=7000000,
+            against_voting_power=205479,
+            for_voting_power=7054794,
+            abstain_voting_power=410958,
+            is_approved=True,
+            is_cancelled=False,
+            is_executed=False,
+            is_quorum_reached=True,
+            proposer_address=user_address,
         )
 
-        proposal = parse_box_proposal(
-            self.ledger.boxes[PROPOSAL_VOTING_APP_ID][proposal_box_name]
-        )
+        self.ledger.boxes[PROPOSAL_VOTING_APP_ID] = {
+            proposal_box_name: get_rawbox_from_proposal(proposal) + execution_hash
+        }
 
-        # Approve proposal
-        txn_group = prepare_approve_proposal_transactions(
-            proposal_voting_app_id=PROPOSAL_VOTING_APP_ID,
-            sender=self.proposal_manager_address,
-            proposal_id=proposal_id,
-            suggested_params=self.sp,
-        )
-        txn_group.sign_with_private_key(
-            self.proposal_manager_address, self.proposal_manager_sk
-        )
-        self.ledger.eval_transactions(
-            txn_group.signed_transactions, block_timestamp=block_timestamp
-        )
-
-        proposal = parse_box_proposal(
-            self.ledger.boxes[PROPOSAL_VOTING_APP_ID][proposal_box_name]
-        )
-
-        # Cast Vote
-        proposal_creation_timestamp = proposal.creation_timestamp
-        block_timestamp = proposal.voting_start_timestamp
-
-        with unittest.mock.patch(
-            "time.time", return_value=proposal.voting_start_timestamp
-        ):
-            self.assertEqual(
-                proposal.state, proposal_voting.constants.PROPOSAL_STATE_ACTIVE
-            )
-            self.assert_on_check_proposal_state(
-                proposal_id,
-                proposal_voting.constants.PROPOSAL_STATE_ACTIVE,
-                user_address,
-                user_sk,
-                block_timestamp=proposal.voting_start_timestamp,
-            )
-
-        # User 4
-        vote = 1
-        txn_group = prepare_cast_vote_transactions(
-            proposal_voting_app_id=PROPOSAL_VOTING_APP_ID,
-            vault_app_id=VAULT_APP_ID,
-            sender=user_4_address,
-            proposal_id=proposal_id,
-            proposal=proposal,
-            vote=vote,
-            account_power_index=get_account_power_index_at(
-                self.ledger, VAULT_APP_ID, user_4_address, proposal_creation_timestamp
-            ),
-            create_attendance_sheet_box=True,
-            suggested_params=self.sp,
-        )
-        txn_group.sign_with_private_key(user_4_address, user_4_sk)
-        self.ledger.eval_transactions(
-            txn_group.signed_transactions, block_timestamp=block_timestamp
-        )
-
-        proposal = parse_box_proposal(
-            self.ledger.boxes[PROPOSAL_VOTING_APP_ID][proposal_box_name]
-        )
-        self.assertEqual(proposal.against_voting_power, 0)
-        self.assertEqual(proposal.for_voting_power, user_4_bias)
-        self.assertEqual(proposal.abstain_voting_power, 0)
-        self.assertEqual(proposal.is_quorum_reached, False)
-
-        # User 2
-        vote = 0
-        txn_group = prepare_cast_vote_transactions(
-            proposal_voting_app_id=PROPOSAL_VOTING_APP_ID,
-            vault_app_id=VAULT_APP_ID,
-            sender=user_2_address,
-            proposal_id=proposal_id,
-            proposal=proposal,
-            vote=vote,
-            account_power_index=get_account_power_index_at(
-                self.ledger, VAULT_APP_ID, user_2_address, proposal_creation_timestamp
-            ),
-            create_attendance_sheet_box=True,
-            suggested_params=self.sp,
-        )
-        txn_group.sign_with_private_key(user_2_address, user_2_sk)
-        self.ledger.eval_transactions(
-            txn_group.signed_transactions, block_timestamp=block_timestamp
-        )
-
-        proposal = parse_box_proposal(
-            self.ledger.boxes[PROPOSAL_VOTING_APP_ID][proposal_box_name]
-        )
-        self.assertEqual(proposal.against_voting_power, user_2_bias)
-        self.assertEqual(proposal.for_voting_power, user_4_bias)
-        self.assertEqual(proposal.abstain_voting_power, 0)
-        self.assertEqual(proposal.is_quorum_reached, False)
-
-        # User 3
-        vote = 2
-        txn_group = prepare_cast_vote_transactions(
-            proposal_voting_app_id=PROPOSAL_VOTING_APP_ID,
-            vault_app_id=VAULT_APP_ID,
-            sender=user_3_address,
-            proposal_id=proposal_id,
-            proposal=proposal,
-            vote=vote,
-            account_power_index=get_account_power_index_at(
-                self.ledger, VAULT_APP_ID, user_3_address, proposal_creation_timestamp
-            ),
-            create_attendance_sheet_box=True,
-            suggested_params=self.sp,
-        )
-        txn_group.sign_with_private_key(user_3_address, user_3_sk)
-        self.ledger.eval_transactions(
-            txn_group.signed_transactions, block_timestamp=block_timestamp
-        )
-
-        proposal = parse_box_proposal(
-            self.ledger.boxes[PROPOSAL_VOTING_APP_ID][proposal_box_name]
-        )
-        self.assertEqual(proposal.against_voting_power, user_2_bias)
-        self.assertEqual(proposal.for_voting_power, user_4_bias)
-        self.assertEqual(proposal.abstain_voting_power, user_3_bias)
-        self.assertEqual(proposal.is_quorum_reached, False)
-
-        with unittest.mock.patch(
-            "time.time", return_value=proposal.voting_end_timestamp + 10
-        ):
-            self.assert_on_check_proposal_state(
-                proposal_id,
-                proposal_voting.constants.PROPOSAL_STATE_DEFEATED,
-                user_address,
-                user_sk,
-                block_timestamp=proposal.voting_end_timestamp + 10,
-            )
-
-        # User 1
-        vote = 1
-        txn_group = prepare_cast_vote_transactions(
-            proposal_voting_app_id=PROPOSAL_VOTING_APP_ID,
-            vault_app_id=VAULT_APP_ID,
-            sender=user_address,
-            proposal_id=proposal_id,
-            proposal=proposal,
-            vote=vote,
-            account_power_index=get_account_power_index_at(
-                self.ledger, VAULT_APP_ID, user_address, proposal_creation_timestamp
-            ),
-            create_attendance_sheet_box=True,
-            suggested_params=self.sp,
-        )
-        txn_group.sign_with_private_key(user_address, user_sk)
-        self.ledger.eval_transactions(
-            txn_group.signed_transactions, block_timestamp=block_timestamp
-        )
-
-        proposal = parse_box_proposal(
-            self.ledger.boxes[PROPOSAL_VOTING_APP_ID][proposal_box_name]
-        )
-
-        with unittest.mock.patch(
-            "time.time", return_value=proposal.voting_end_timestamp + 10
-        ):
-            self.assert_on_check_proposal_state(
-                proposal_id,
-                proposal_voting.constants.PROPOSAL_STATE_SUCCEEDED,
-                user_address,
-                user_sk,
-                block_timestamp=proposal.voting_end_timestamp + 10,
-            )
+        self.create_fee_management_executor_app(self.manager_address)
 
         # Execute proposal
+        self.ledger.global_states[AMM_V2_APP_ID][b"fee_manager"] = decode_address(get_application_address(FEE_MANAGEMENT_EXECUTOR_APP_ID))
+
+        sp = get_suggested_params()
+        sp.fee = 10000
+        set_fee_manager_txn = transaction.ApplicationNoOpTxn(
+            sender=user_address,
+            sp=sp,
+            index=FEE_MANAGEMENT_EXECUTOR_APP_ID,
+            app_args=["set_fee_manager", proposal_id],
+            foreign_apps=[PROPOSAL_VOTING_APP_ID, AMM_V2_APP_ID],
+            boxes=[(PROPOSAL_VOTING_APP_ID, proposal_box_name)],
+        )
+        txn_group = TransactionGroup([set_fee_manager_txn])
+
+        txn_group.sign_with_private_key(user_address, user_sk)
+        block = self.ledger.eval_transactions(
+            txn_group.signed_transactions,
+            block_timestamp=proposal.voting_end_timestamp + 10,
+        )
+    
+    def test_set_fee_collector_execution(self):
+        user_sk, user_address = generate_account()
+        new_fee_collector_address = user_address
+
+        self.ledger.set_account_balance(user_address, 10_000_000)
+
+        self.create_proposal_voting_app(
+            self.manager_address, self.proposal_manager_address
+        )
+        self.ledger.global_states[PROPOSAL_VOTING_APP_ID][
+            b"quorum_threshold"
+        ] = 7_000_000
+        self.ledger.set_account_balance(
+            get_application_address(PROPOSAL_VOTING_APP_ID),
+            proposal_voting.constants.PROPOSAL_VOTING_APP_MINIMUM_BALANCE_REQUIREMENT,
+        )
+
+        # Create proposal
+        proposal_id = generate_cid_from_proposal_metadata({"name": "Proposal 1"})
+        proposal_box_name = get_proposal_box_name(proposal_id)
+
+        execution_hash = bytes("set_fee_collector", "utf-8") + decode_address(new_fee_collector_address)
+        execution_hash = sha256(execution_hash).digest()
+        execution_hash = b"\x00" * (128 - len(execution_hash)) + execution_hash  # Lpad
+
+        proposal = Proposal(
+            index=0,
+            creation_timestamp=1647302400,
+            voting_start_timestamp=1647561600,
+            voting_end_timestamp=1648166400,
+            snapshot_total_voting_power=7671231,
+            vote_count=4,
+            quorum_threshold=7000000,
+            against_voting_power=205479,
+            for_voting_power=7054794,
+            abstain_voting_power=410958,
+            is_approved=True,
+            is_cancelled=False,
+            is_executed=False,
+            is_quorum_reached=True,
+            proposer_address=user_address,
+        )
+
+        self.ledger.boxes[PROPOSAL_VOTING_APP_ID] = {
+            proposal_box_name: get_rawbox_from_proposal(proposal) + execution_hash
+        }
+
+        self.create_fee_management_executor_app(self.manager_address)
+
+        # Execute proposal
+        self.ledger.global_states[AMM_V2_APP_ID][b"fee_manager"] = decode_address(get_application_address(FEE_MANAGEMENT_EXECUTOR_APP_ID))
+
+        sp = get_suggested_params()
+        sp.fee = 10000
+        set_fee_collector_txn = transaction.ApplicationNoOpTxn(
+            sender=user_address,
+            sp=sp,
+            index=FEE_MANAGEMENT_EXECUTOR_APP_ID,
+            app_args=["set_fee_collector", proposal_id],
+            foreign_apps=[PROPOSAL_VOTING_APP_ID, AMM_V2_APP_ID],
+            boxes=[(PROPOSAL_VOTING_APP_ID, proposal_box_name)],
+        )
+        txn_group = TransactionGroup([set_fee_collector_txn])
+
+        txn_group.sign_with_private_key(user_address, user_sk)
+        block = self.ledger.eval_transactions(
+            txn_group.signed_transactions,
+            block_timestamp=proposal.voting_end_timestamp + 10,
+        )
+    
+    def test_set_fee_manager_execution(self):
+        user_sk, user_address = generate_account()
+        new_fee_manager_address = user_address
+
+        self.ledger.set_account_balance(user_address, 10_000_000)
+
+        self.create_proposal_voting_app(
+            self.manager_address, self.proposal_manager_address
+        )
+        self.ledger.global_states[PROPOSAL_VOTING_APP_ID][
+            b"quorum_threshold"
+        ] = 7_000_000
+        self.ledger.set_account_balance(
+            get_application_address(PROPOSAL_VOTING_APP_ID),
+            proposal_voting.constants.PROPOSAL_VOTING_APP_MINIMUM_BALANCE_REQUIREMENT,
+        )
+
+        # Create proposal
+        proposal_id = generate_cid_from_proposal_metadata({"name": "Proposal 1"})
+        proposal_box_name = get_proposal_box_name(proposal_id)
+
+        execution_hash = bytes("set_fee_manager", "utf-8") + decode_address(new_fee_manager_address)
+        execution_hash = sha256(execution_hash).digest()
+        execution_hash = b"\x00" * (128 - len(execution_hash)) + execution_hash  # Lpad
+
+        proposal = Proposal(
+            index=0,
+            creation_timestamp=1647302400,
+            voting_start_timestamp=1647561600,
+            voting_end_timestamp=1648166400,
+            snapshot_total_voting_power=7671231,
+            vote_count=4,
+            quorum_threshold=7000000,
+            against_voting_power=205479,
+            for_voting_power=7054794,
+            abstain_voting_power=410958,
+            is_approved=True,
+            is_cancelled=False,
+            is_executed=False,
+            is_quorum_reached=True,
+            proposer_address=user_address,
+        )
+
+        self.ledger.boxes[PROPOSAL_VOTING_APP_ID] = {
+            proposal_box_name: get_rawbox_from_proposal(proposal) + execution_hash
+        }
+
+        self.create_fee_management_executor_app(self.manager_address)
+
+        # Execute proposal
+        self.ledger.global_states[AMM_V2_APP_ID][b"fee_manager"] = decode_address(get_application_address(FEE_MANAGEMENT_EXECUTOR_APP_ID))
+
+        sp = get_suggested_params()
+        sp.fee = 10000
+        set_fee_manager_txn = transaction.ApplicationNoOpTxn(
+            sender=user_address,
+            sp=sp,
+            index=FEE_MANAGEMENT_EXECUTOR_APP_ID,
+            app_args=["set_fee_manager", proposal_id],
+            foreign_apps=[PROPOSAL_VOTING_APP_ID, AMM_V2_APP_ID],
+            boxes=[(PROPOSAL_VOTING_APP_ID, proposal_box_name)],
+        )
+        txn_group = TransactionGroup([set_fee_manager_txn])
+
+        txn_group.sign_with_private_key(user_address, user_sk)
+        block = self.ledger.eval_transactions(
+            txn_group.signed_transactions,
+            block_timestamp=proposal.voting_end_timestamp + 10,
+        )
+
+    def test_set_fee_collector_execution(self):
+        user_sk, user_address = generate_account()
+        new_fee_collector_address = user_address
+
+        self.ledger.set_account_balance(user_address, 10_000_000)
+
+        self.create_proposal_voting_app(
+            self.manager_address, self.proposal_manager_address
+        )
+        self.ledger.global_states[PROPOSAL_VOTING_APP_ID][
+            b"quorum_threshold"
+        ] = 7_000_000
+        self.ledger.set_account_balance(
+            get_application_address(PROPOSAL_VOTING_APP_ID),
+            proposal_voting.constants.PROPOSAL_VOTING_APP_MINIMUM_BALANCE_REQUIREMENT,
+        )
+
+        # Create proposal
+        proposal_id = generate_cid_from_proposal_metadata({"name": "Proposal 1"})
+        proposal_box_name = get_proposal_box_name(proposal_id)
+
+        execution_hash = bytes("set_fee_collector", "utf-8") + decode_address(new_fee_collector_address)
+        execution_hash = sha256(execution_hash).digest()
+        execution_hash = b"\x00" * (128 - len(execution_hash)) + execution_hash  # Lpad
+
+        proposal = Proposal(
+            index=0,
+            creation_timestamp=1647302400,
+            voting_start_timestamp=1647561600,
+            voting_end_timestamp=1648166400,
+            snapshot_total_voting_power=7671231,
+            vote_count=4,
+            quorum_threshold=7000000,
+            against_voting_power=205479,
+            for_voting_power=7054794,
+            abstain_voting_power=410958,
+            is_approved=True,
+            is_cancelled=False,
+            is_executed=False,
+            is_quorum_reached=True,
+            proposer_address=user_address,
+        )
+
+        self.ledger.boxes[PROPOSAL_VOTING_APP_ID] = {
+            proposal_box_name: get_rawbox_from_proposal(proposal) + execution_hash
+        }
+
+        self.create_fee_management_executor_app(self.manager_address)
+
+        # Execute proposal
+        self.ledger.global_states[AMM_V2_APP_ID][b"fee_manager"] = decode_address(get_application_address(FEE_MANAGEMENT_EXECUTOR_APP_ID))
+
+        sp = get_suggested_params()
+        sp.fee = 10000
+        set_fee_collector_txn = transaction.ApplicationNoOpTxn(
+            sender=user_address,
+            sp=sp,
+            index=FEE_MANAGEMENT_EXECUTOR_APP_ID,
+            app_args=["set_fee_collector", proposal_id],
+            foreign_apps=[PROPOSAL_VOTING_APP_ID, AMM_V2_APP_ID],
+            boxes=[(PROPOSAL_VOTING_APP_ID, proposal_box_name)],
+        )
+        txn_group = TransactionGroup([set_fee_collector_txn])
+
+        txn_group.sign_with_private_key(user_address, user_sk)
+        block = self.ledger.eval_transactions(
+            txn_group.signed_transactions,
+            block_timestamp=proposal.voting_end_timestamp + 10,
+        )
+
+    def get_pool_logicsig_bytecode(self, pool_template, app_id, asset_1_id, asset_2_id):
+        # These are the bytes of the logicsig template. This needs to be updated if the logicsig is updated.
+        program = bytearray(pool_template.bytecode)
+
+        template = b'\x06\x80\x18\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x81\x00[5\x004\x001\x18\x12D1\x19\x81\x01\x12D\x81\x01C'
+        assert program == bytearray(template)
+
+        program[3:11] = app_id.to_bytes(8, 'big')
+        program[11:19] = asset_1_id.to_bytes(8, 'big')
+        program[19:27] = asset_2_id.to_bytes(8, 'big')
+        return transaction.LogicSigAccount(program)
+
+    def test_set_fee_for_pool_execution(self):
+        user_sk, user_address = generate_account()
+
+        total_fee_share = 50
+        protocol_fee_ratio = 4
+
+        self.ledger.set_account_balance(user_address, 10_000_000)
+        self.ledger.set_account_balance(get_application_address(AMM_V2_APP_ID), 10_000_000)
+
+        self.create_proposal_voting_app(
+            self.manager_address, self.proposal_manager_address
+        )
+        self.ledger.global_states[PROPOSAL_VOTING_APP_ID][
+            b"quorum_threshold"
+        ] = 7_000_000
+        self.ledger.set_account_balance(
+            get_application_address(PROPOSAL_VOTING_APP_ID),
+            proposal_voting.constants.PROPOSAL_VOTING_APP_MINIMUM_BALANCE_REQUIREMENT,
+        )
+
+        # Opt-in pool
+        self.asset_1_id = self.ledger.create_asset(asset_id=5, params=dict(unit_name="BTC"))
+        self.asset_2_id = self.ledger.create_asset(asset_id=2, params=dict(unit_name="USD"))
+        # self.ledger.set_account_balance(user_address, 0, asset_id=self.asset_1_id)
+        # self.ledger.set_account_balance(user_address, 0, asset_id=self.asset_2_id)
+
+        lsig = self.get_pool_logicsig_bytecode(amm_pool_template, AMM_V2_APP_ID, self.asset_1_id, self.asset_2_id)
+        pool_address = lsig.address()
+        # self.ledger.set_account_balance(pool_address, 100_000_000)
+        # sp = get_suggested_params()
+        # sp.fee = 7000
+        # transactions = [
+        #     transaction.LogicSigTransaction(
+        #         transaction.ApplicationOptInTxn(
+        #             sender=lsig.address(),
+        #             sp=sp,
+        #             index=AMM_V2_APP_ID,
+        #             app_args=["bootstrap"],
+        #             foreign_assets=[self.asset_1_id, self.asset_2_id],
+        #             rekey_to=get_application_address(AMM_V2_APP_ID),
+        #         ),
+        #         lsig
+        #     )
+        # ]
+        # block = self.ledger.eval_transactions(transactions)
+
+        # Create proposal
+        proposal_id = generate_cid_from_proposal_metadata({"name": "Proposal 1"})
+        proposal_box_name = get_proposal_box_name(proposal_id)
+
+        execution_hash = bytes("set_fee_for_pool", "utf-8") + decode_address(pool_address) + int_to_bytes(total_fee_share) + int_to_bytes(protocol_fee_ratio)
+        execution_hash = sha256(execution_hash).digest()
+        execution_hash = b"\x00" * (128 - len(execution_hash)) + execution_hash  # Lpad
+
+        proposal = Proposal(
+            index=0,
+            creation_timestamp=1647302400,
+            voting_start_timestamp=1647561600,
+            voting_end_timestamp=1648166400,
+            snapshot_total_voting_power=7671231,
+            vote_count=4,
+            quorum_threshold=7000000,
+            against_voting_power=205479,
+            for_voting_power=7054794,
+            abstain_voting_power=410958,
+            is_approved=True,
+            is_cancelled=False,
+            is_executed=False,
+            is_quorum_reached=True,
+            proposer_address=user_address,
+        )
+
+        self.ledger.boxes[PROPOSAL_VOTING_APP_ID] = {
+            proposal_box_name: get_rawbox_from_proposal(proposal) + execution_hash
+        }
+
+        self.create_fee_management_executor_app(self.manager_address)
+        self.ledger.set_account_balance(pool_address, 100_000)
+
+        self.ledger.global_states[AMM_V2_APP_ID][b"fee_setter"] = decode_address(get_application_address(FEE_MANAGEMENT_EXECUTOR_APP_ID))
+        self.ledger.accounts[pool_address][AMM_V2_APP_ID] = {
+            b"total_fee_share": int_to_bytes(30),
+            b"protocol_fee_ratio": int_to_bytes(3)
+        }
+
+        sp = get_suggested_params()
+        sp.fee = 10000
+        set_fee_for_pool_txn = transaction.ApplicationNoOpTxn(
+            sender=user_address,
+            sp=sp,
+            index=FEE_MANAGEMENT_EXECUTOR_APP_ID,
+            app_args=["set_fee_for_pool", proposal_id, int_to_bytes(total_fee_share), int_to_bytes(protocol_fee_ratio)],
+            foreign_apps=[PROPOSAL_VOTING_APP_ID, AMM_V2_APP_ID],
+            boxes=[(PROPOSAL_VOTING_APP_ID, proposal_box_name)],
+            accounts=[pool_address]
+        )
+        txn_group = TransactionGroup([set_fee_for_pool_txn])
+
+        txn_group.sign_with_private_key(user_address, user_sk)
+        block = self.ledger.eval_transactions(
+            txn_group.signed_transactions,
+            block_timestamp=proposal.voting_end_timestamp + 10,
+        )

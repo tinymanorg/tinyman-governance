@@ -2,7 +2,6 @@
 #tealish version git+https://github.com/Hipo/tealish.git@e8d1b27620220bc4e520d7d3b6d62523e13a7723
 
 # Taken from Proposal Voting App
-# Size: 123 bytes
 struct Proposal:
     index: int
     creation_timestamp: int
@@ -10,7 +9,7 @@ struct Proposal:
     voting_end_timestamp: int
     snapshot_total_voting_power: int
     vote_count: int
-    quorum_threshold: int 
+    quorum_threshold: int
     against_voting_power: int
     for_voting_power: int
     abstain_voting_power: int
@@ -85,17 +84,15 @@ block main:
 
         # Assert proposal.execution_hash
         # hash(method_name, address)
-        bytes method_name = extract(0, 13, proposal.execution_hash)
-        assert(method_name == "set_fee_setter")
 
-        bytes fee_setter_address = extract(13, 0, proposal.execution_hash)
-        assert(Txn.Accounts[1] == fee_setter_address)
+        bytes execution_hash = Lpad(sha256(Concat("set_fee_setter", Txn.Accounts[0])), 128)
+        assert(proposal.execution_hash == execution_hash)
 
         inner_txn:
             TypeEnum: Appl
             ApplicationID: app_global_get(AMM_APP_ID_KEY)
             ApplicationArgs[0]: "set_fee_setter"
-            Accounts: Txn.Sender
+            Accounts[0]: Txn.Accounts[0]
             Fee: 0
         end
         exit(1)
@@ -108,17 +105,14 @@ block main:
 
         # Assert proposal.execution_hash
         # hash(method_name, address)
-        bytes method_name = extract(0, 14, proposal.execution_hash)
-        assert(method_name == "set_fee_manager")
-
-        bytes fee_manager_address = extract(14, 0, proposal.execution_hash)
-        assert(Txn.Accounts[1] == fee_manager_address)
+        bytes execution_hash = Lpad(sha256(Concat("set_fee_manager", Txn.Accounts[0])), 128)
+        assert(proposal.execution_hash == execution_hash)
 
         inner_txn:
             TypeEnum: Appl
             ApplicationID: app_global_get(AMM_APP_ID_KEY)
             ApplicationArgs[0]: "set_fee_manager"
-            Accounts: fee_manager_address
+            Accounts[0]: Txn.Accounts[0]
             Fee: 0
         end
         exit(1)
@@ -131,17 +125,14 @@ block main:
 
         # Assert proposal.execution_hash
         # hash(method_name, address)
-        bytes method_name = extract(0, 16, proposal.execution_hash)
-        assert(method_name == "set_fee_collector")
-
-        bytes fee_collector_address = extract(16, 0, proposal.execution_hash)
-        assert(Txn.Accounts[1] == fee_collector_address)
+        bytes execution_hash = Lpad(sha256(Concat("set_fee_collector", Txn.Accounts[0])), 128)
+        assert(proposal.execution_hash == execution_hash)
 
         inner_txn:
             TypeEnum: Appl
             ApplicationID: app_global_get(AMM_APP_ID_KEY)
             ApplicationArgs[0]: "set_fee_manager"
-            Accounts: fee_collector_address
+            Accounts[0]: Txn.Accounts[0]
             Fee: 0
         end
         exit(1)
@@ -149,29 +140,26 @@ block main:
 
     block set_fee_for_pool:
         bytes proposal_id = Txn.ApplicationArgs[1]
+        bytes total_fee_share = Txn.ApplicationArgs[2]
+        bytes protocol_fee_ratio = Txn.ApplicationArgs[3]
 
         Proposal proposal = check_and_get_proposal(proposal_id)
 
         # Assert proposal.execution_hash
         # hash(method_name, pool_address: address, total_fee_share, protocol_fee_ratio)
-        bytes method_name = extract(0, 15, proposal.execution_hash)
-        assert(method_name == "set_fee_for_pool")
-
-        bytes pool_address = extract(16, 47, proposal.execution_hash)
-
-        int total_fee_share = extract_uint64(proposal.execution_hash, 48)
-        int protocol_fee_ratio = extract_uint64(proposal.execution_hash, 56)
+        
+        bytes execution_hash = Lpad(sha256(Concat(Concat(Concat("set_fee_for_pool", Txn.Accounts[1]), total_fee_share), protocol_fee_ratio)), 128)
+        assert(proposal.execution_hash == execution_hash)
 
         inner_txn:
             TypeEnum: Appl
             ApplicationID: app_global_get(AMM_APP_ID_KEY)
             ApplicationArgs[0]: "set_fee"
-            ApplicationArgs[1]: itob(total_fee_share)
-            ApplicationArgs[2]: itob(protocol_fee_ratio)
-            Accounts: pool_address
+            ApplicationArgs[1]: total_fee_share
+            ApplicationArgs[2]: protocol_fee_ratio
+            Accounts[0]: Txn.Accounts[1]
             Fee: 0
         end
-        
         exit(1)
     end
 end
@@ -200,9 +188,6 @@ func check_and_get_proposal(proposal_id: bytes) Proposal:
     int proposal_state = extract_uint64(Itxn.LastLog, 4)
 
     # proposal checks
-    assert(proposal.is_approved == BYTES_TRUE)
-    assert(proposal.is_cancelled == BYTES_FALSE)
-    assert(proposal.is_executed == BYTES_FALSE)
     assert(proposal_state == PROPOSAL_STATE_SUCCEEDED)
 
     return proposal

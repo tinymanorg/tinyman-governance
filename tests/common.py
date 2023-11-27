@@ -8,6 +8,7 @@ from tinyman.governance.constants import (TINY_ASSET_ID_KEY, VAULT_APP_ID_KEY,
                                           WEEK)
 from tinyman.governance.proposal_voting.constants import \
     APPROVAL_REQUIREMENT_KEY
+from tinyman.governance.proposal_voting.storage import Proposal
 from tinyman.governance.rewards.constants import (
     FIRST_PERIOD_TIMESTAMP, MANAGER_KEY, REWARD_HISTORY_BOX_ARRAY_LEN,
     REWARD_HISTORY_BOX_PREFIX, REWARD_HISTORY_BOX_SIZE,
@@ -38,6 +39,35 @@ from tests.constants import (AMM_V2_APP_ID,
                              fee_management_executor_approval_program,
                              amm_approval_program)
 from tests.vault.utils import get_vault_app_global_state
+
+BYTES_TRUE = b"\x80"
+BYTES_FALSE = b"\x00"
+
+
+def bool_to_bytes(boolean: bool):
+    if boolean:
+        return BYTES_TRUE
+    return BYTES_FALSE
+
+def get_rawbox_from_proposal(proposal: Proposal) -> bytes:
+    raw_box = (
+        int_to_bytes(proposal.index, 8) +
+        int_to_bytes(proposal.creation_timestamp, 8) +
+        int_to_bytes(proposal.voting_start_timestamp, 8) +
+        int_to_bytes(proposal.voting_end_timestamp, 8) +
+        int_to_bytes(proposal.snapshot_total_voting_power, 8) +
+        int_to_bytes(proposal.vote_count, 8) +
+        int_to_bytes(proposal.quorum_threshold, 8) +
+        int_to_bytes(proposal.against_voting_power, 8) +
+        int_to_bytes(proposal.for_voting_power, 8) +
+        int_to_bytes(proposal.abstain_voting_power, 8) +
+        bool_to_bytes(proposal.is_approved) +
+        bool_to_bytes(proposal.is_cancelled) +
+        bool_to_bytes(proposal.is_executed) +
+        bool_to_bytes(proposal.is_quorum_reached) +
+        decode_address(proposal.proposer_address)
+    )
+    return raw_box
 
 
 class BaseTestCase(unittest.TestCase):
@@ -327,11 +357,12 @@ class FeeManagementExecutorMixin:
         self.ledger.set_global_state(
             FEE_MANAGEMENT_EXECUTOR_APP_ID,
             {
-                b'vault_app_id': AMM_V2_APP_ID,
+                b'amm_app_id': AMM_V2_APP_ID,
                 b'proposal_voting_app_id': PROPOSAL_VOTING_APP_ID,
                 b'manager': decode_address(app_creator_address)
             }
         )
+        self.ledger.set_account_balance(get_application_address(FEE_MANAGEMENT_EXECUTOR_APP_ID), 10_000_000)
 
     # Taken from amm v2 repo.
     def create_amm_app(self, app_creator_address):

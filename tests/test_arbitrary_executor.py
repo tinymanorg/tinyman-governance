@@ -728,7 +728,7 @@ class ArbitraryExecutorTestCase(
         arbitrary_transaction_sp = get_suggested_params()
         arbitrary_transaction_sp.fee = 10000
         arbitrary_transaction = transaction.AssetConfigTxn(
-            sender=logic_sig_account.address(),
+            sender=tinyman_algo_address,
             sp=arbitrary_transaction_sp,
             total=1000,
             default_frozen=False,
@@ -945,11 +945,9 @@ class ArbitraryExecutorTestCase(
         self.create_arbitrary_executor_app(self.manager_address)
 
         arbitrary_executor_txn_group.sign_with_private_key(user_address, user_sk)
-        arbitrary_executor_txn_group.sign_with_logicsig(logic_sig_account)
+        arbitrary_executor_txn_group.sign_with_logicsig(logic_sig_account, address=tinyman_algo_address)
 
         block = self.ledger.eval_transactions(
             arbitrary_executor_txn_group.signed_transactions,
             block_timestamp=proposal.voting_end_timestamp + 10,
         )
-
-

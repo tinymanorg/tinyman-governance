@@ -71,6 +71,7 @@ end
 block main:
     switch Txn.ApplicationArgs[0]:
         "validate_transaction": validate_transaction
+        "validate_group": validate_group
     end
 
     block validate_transaction:
@@ -99,15 +100,44 @@ block main:
         int proposal_state = extract_uint64(Itxn.LastLog, 4)
 
         # proposal checks
-        assert(proposal.is_approved == BYTES_TRUE)
-        assert(proposal.is_cancelled == BYTES_FALSE)
-        assert(proposal.is_executed == BYTES_FALSE)
         assert(proposal_state == PROPOSAL_STATE_SUCCEEDED)
-
-        # assert(proposal.proposer == Txn.Sender)
 
         # Assert Gtxn[1]'s transaction_id.
         bytes execution_hash = Lpad(Gtxn[1].TxID, 128)
+        assert(execution_hash == proposal.execution_hash)
+
+        exit(1)
+    end
+
+    block validate_group:
+        bytes proposal_id = Txn.ApplicationArgs[1]
+
+        # read proposal from proposal_voting app
+        inner_txn:
+            TypeEnum: Appl
+            ApplicationID: app_global_get(PROPOSAL_VOTING_APP_ID_KEY)
+            ApplicationArgs[0]: "get_proposal"
+            ApplicationArgs[1]: proposal_id
+            Fee: 0
+        end
+
+        Proposal proposal = Cast(extract(4, 0, Itxn.LastLog), Proposal)
+
+        inner_txn:
+            TypeEnum: Appl
+            ApplicationID: app_global_get(PROPOSAL_VOTING_APP_ID_KEY)
+            ApplicationArgs[0]: "get_proposal_state"
+            ApplicationArgs[1]: proposal_id
+            Fee: 0
+        end
+
+        int proposal_state = extract_uint64(Itxn.LastLog, 4)
+
+        # proposal checks
+        assert(proposal_state == PROPOSAL_STATE_SUCCEEDED)
+
+        # Assert Gtxn[1]'s transaction_id.
+        bytes execution_hash = Lpad(Global.GroupID, 128)
         assert(execution_hash == proposal.execution_hash)
 
         exit(1)
