@@ -21,6 +21,9 @@ arbitrary_executor_logic_signature = TealishProgram('contracts/arbitrary_executo
 fee_management_executor_approval_program = TealishProgram("contracts/fee_management_executor/fee_management_executor_approval.tl")
 fee_management_executor_clear_state_program = TealishProgram("contracts/fee_management_executor/fee_management_executor_clear_state.tl")
 
+treasury_management_executor_approval_program = TealishProgram("contracts/treasury_management_executor/treasury_management_executor_approval.tl")
+treasury_management_executor_clear_state_program = TealishProgram("contracts/treasury_management_executor/treasury_management_clear_state_approval.tl")
+
 # Read Teal from AMM repo
 amm_pool_template = TealProgram(teal=requests.get("https://github.com/tinymanorg/tinyman-amm-contracts-v2/blob/main/contracts/build/pool_template.teal?raw=True").text)
 amm_approval_program = TealProgram(teal=requests.get("https://github.com/tinymanorg/tinyman-amm-contracts-v2/blob/main/contracts/build/amm_approval.teal?raw=True").text)
