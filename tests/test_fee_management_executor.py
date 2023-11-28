@@ -517,6 +517,7 @@ class FeeManagementExecutorTestCase(
             block_timestamp=proposal.voting_end_timestamp + 10,
         )
 
+    # Taken from AMM V2 tests.
     def get_pool_logicsig_bytecode(self, pool_template, app_id, asset_1_id, asset_2_id):
         # These are the bytes of the logicsig template. This needs to be updated if the logicsig is updated.
         program = bytearray(pool_template.bytecode)
@@ -552,28 +553,15 @@ class FeeManagementExecutorTestCase(
         # Opt-in pool
         self.asset_1_id = self.ledger.create_asset(asset_id=5, params=dict(unit_name="BTC"))
         self.asset_2_id = self.ledger.create_asset(asset_id=2, params=dict(unit_name="USD"))
-        # self.ledger.set_account_balance(user_address, 0, asset_id=self.asset_1_id)
-        # self.ledger.set_account_balance(user_address, 0, asset_id=self.asset_2_id)
 
         lsig = self.get_pool_logicsig_bytecode(amm_pool_template, AMM_V2_APP_ID, self.asset_1_id, self.asset_2_id)
         pool_address = lsig.address()
-        # self.ledger.set_account_balance(pool_address, 100_000_000)
-        # sp = get_suggested_params()
-        # sp.fee = 7000
-        # transactions = [
-        #     transaction.LogicSigTransaction(
-        #         transaction.ApplicationOptInTxn(
-        #             sender=lsig.address(),
-        #             sp=sp,
-        #             index=AMM_V2_APP_ID,
-        #             app_args=["bootstrap"],
-        #             foreign_assets=[self.asset_1_id, self.asset_2_id],
-        #             rekey_to=get_application_address(AMM_V2_APP_ID),
-        #         ),
-        #         lsig
-        #     )
-        # ]
-        # block = self.ledger.eval_transactions(transactions)
+
+        self.ledger.set_account_balance(pool_address, 1_000_000)
+        self.ledger.accounts[pool_address]["local_states"][AMM_V2_APP_ID] = {
+            b"total_fee_share": 30,
+            b"protocol_fee_ratio": 3
+        }
 
         # Create proposal
         proposal_id = generate_cid_from_proposal_metadata({"name": "Proposal 1"})
@@ -609,10 +597,6 @@ class FeeManagementExecutorTestCase(
         self.ledger.set_account_balance(pool_address, 100_000)
 
         self.ledger.global_states[AMM_V2_APP_ID][b"fee_setter"] = decode_address(get_application_address(FEE_MANAGEMENT_EXECUTOR_APP_ID))
-        self.ledger.accounts[pool_address][AMM_V2_APP_ID] = {
-            b"total_fee_share": int_to_bytes(30),
-            b"protocol_fee_ratio": int_to_bytes(3)
-        }
 
         sp = get_suggested_params()
         sp.fee = 10000
@@ -632,3 +616,6 @@ class FeeManagementExecutorTestCase(
             txn_group.signed_transactions,
             block_timestamp=proposal.voting_end_timestamp + 10,
         )
+
+        self.assertEqual(self.ledger.accounts[pool_address]["local_states"][AMM_V2_APP_ID][b"total_fee_share"], 50)
+        self.assertEqual(self.ledger.accounts[pool_address]["local_states"][AMM_V2_APP_ID][b"protocol_fee_ratio"], 4)
