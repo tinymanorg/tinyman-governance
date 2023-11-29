@@ -70,52 +70,41 @@ end
 
 block main:
     switch Txn.ApplicationArgs[0]:
-        "send_algo": send_algo
-        "send_asa": send_asa
+        "send": send
     end
 
-    block send_algo:
+    block send:
         bytes proposal_id = Txn.ApplicationArgs[1]
-        bytes amount_as_bytes = Txn.ApplicationArgs[2]
+        int amount = btoi(Txn.ApplicationArgs[2])
+        int asset_id = btoi(Txn.ApplicationArgs[3])
 
         Proposal proposal = check_and_get_proposal(proposal_id)
 
         # Assert proposal.execution_hash
-        # hash(method_name, address, amount)
+        # hash(method_name, sender, receiver, amount, asset_id)
 
-        bytes execution_hash = Lpad(sha256(Concat(Concat("send_algo", Txn.Accounts[0]), amount_as_bytes), 128)
+        bytes execution_hash = Lpad(sha256(Concat("send", Txn.Accounts[1], Txn.Accounts[2], itob(amount), itob(asset_id))), 128)
         assert(proposal.execution_hash == execution_hash)
 
-        inner_txn:
-            TypeEnum: Pay
-            Sender: Global.CurrentApplicationAddress
-            Receiver: Txn.Accounts[0]
-            Amount: btoi(amount_as_bytes)
-            Fee: 0
-        end
-        exit(1)
-    end
-
-    block send_asa:
-        bytes proposal_id = Txn.ApplicationArgs[1]
-        bytes amount_as_bytes = Txn.ApplicationArgs[2]
-        bytes asset_id_as_bytes = Txn.ApplicationArgs[3]
-
-        Proposal proposal = check_and_get_proposal(proposal_id)
-
-        # Assert proposal.execution_hash
-        # hash(method_name, address, amount, asset_id)
-
-        bytes execution_hash = Lpad(sha256(Concat(Concat(Concat("send_asa", Txn.Accounts[0]), amount_as_bytes), asset_id_as_bytes), 128)
-        assert(proposal.execution_hash == execution_hash)
-
-        inner_txn:
-            TypeEnum: Axfer
-            Sender: Global.CurrentApplicationAddress
-            Receiver: Txn.Accounts[0]
-            Amount: btoi(amount_as_bytes)
-            XferAsset: btoi(asset_id_as_bytes)
-            Fee: 0
+        if asset_id == 0:
+            inner_txn:
+                TypeEnum: Pay
+                Sender: Txn.Accounts[1]
+                Receiver: Txn.Accounts[2]
+                Amount: amount
+                Fee: 0
+            end
+        elif asset_id > 0:
+            inner_txn:
+                TypeEnum: Axfer
+                Sender: Txn.Accounts[1]
+                Receiver: Txn.Accounts[2]
+                Amount: amount
+                XferAsset: asset_id
+                Fee: 0
+            end
+        else:
+            exit(0)
         end
         exit(1)
     end

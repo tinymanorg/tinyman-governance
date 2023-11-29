@@ -108,26 +108,6 @@ class FeeManagementExecutorTestCase(
         self.init_vault_app(self.vault_app_creation_timestamp + 30)
         self.create_proposal_voting_app(self.manager_address)
 
-    def assert_on_check_proposal_state(
-        self, proposal_id, expected_state, sender, sender_sk, block_timestamp
-    ):
-        txn_group = prepare_get_proposal_state_transactions(
-            proposal_voting_app_id=PROPOSAL_VOTING_APP_ID,
-            sender=sender,
-            proposal_id=proposal_id,
-            suggested_params=self.sp,
-        )
-        txn_group.sign_with_private_key(sender, sender_sk)
-
-        block = self.ledger.eval_transactions(
-            txn_group.signed_transactions, block_timestamp
-        )
-        app_call_txn = get_first_app_call_txn(block[b"txns"])
-        logs = app_call_txn[b"dt"][b"lg"]
-        self.assertEqual(len(logs), 1)
-        proposal_state = logs[0][4:]
-        self.assertEqual(bytes_to_int(proposal_state), expected_state)
-
     def test_create_app(self):
         block_datetime = datetime(year=2022, month=3, day=2, tzinfo=ZoneInfo("UTC"))
         block_timestamp = int(block_datetime.timestamp())

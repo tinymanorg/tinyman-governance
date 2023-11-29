@@ -31,12 +31,14 @@ from tests.constants import (AMM_V2_APP_ID,
                              VAULT_APP_ID,
                              ARBITRARY_EXECUTOR_APP_ID,
                              FEE_MANAGEMENT_EXECUTOR_APP_ID,
+                             TREASURY_MANAGEMENT_EXECUTOR_APP_ID,
                              proposal_voting_approval_program,
                              rewards_approval_program,
                              staking_voting_approval_program,
                              vault_approval_program,
                              arbitrary_executor_approval_program,
                              fee_management_executor_approval_program,
+                             treasury_management_executor_approval_program,
                              amm_approval_program)
 from tests.vault.utils import get_vault_app_global_state
 
@@ -389,3 +391,29 @@ class FeeManagementExecutorMixin:
                 b'fee_setter': decode_address(app_creator_address),
             }
         )
+
+
+class TreasuryManagementExecutorMixin:
+
+    def create_treasury_management_executor_app(self, app_creator_address):
+        if app_creator_address not in self.ledger.accounts:
+            self.ledger.set_account_balance(app_creator_address, 1_000_000)
+
+        self.ledger.create_app(
+            app_id=TREASURY_MANAGEMENT_EXECUTOR_APP_ID,
+            approval_program=treasury_management_executor_approval_program,
+            creator=app_creator_address,
+            local_ints=0,
+            local_bytes=0,
+            global_ints=16,
+            global_bytes=16
+        )
+
+        self.ledger.set_global_state(
+            TREASURY_MANAGEMENT_EXECUTOR_APP_ID,
+            {
+                b'proposal_voting_app_id': PROPOSAL_VOTING_APP_ID,
+                b'manager': decode_address(app_creator_address)
+            }
+        )
+        self.ledger.set_account_balance(get_application_address(TREASURY_MANAGEMENT_EXECUTOR_APP_ID), 10_000_000)

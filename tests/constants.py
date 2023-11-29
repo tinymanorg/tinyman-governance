@@ -22,7 +22,7 @@ fee_management_executor_approval_program = TealishProgram("contracts/fee_managem
 fee_management_executor_clear_state_program = TealishProgram("contracts/fee_management_executor/fee_management_executor_clear_state.tl")
 
 treasury_management_executor_approval_program = TealishProgram("contracts/treasury_management_executor/treasury_management_executor_approval.tl")
-treasury_management_executor_clear_state_program = TealishProgram("contracts/treasury_management_executor/treasury_management_clear_state_approval.tl")
+treasury_management_executor_clear_state_program = TealishProgram("contracts/treasury_management_executor/treasury_management_executor_clear_state.tl")
 
 # Read Teal from AMM repo
 amm_pool_template = TealProgram(teal=requests.get("https://github.com/tinymanorg/tinyman-amm-contracts-v2/blob/main/contracts/build/pool_template.teal?raw=True").text)
@@ -38,3 +38,4 @@ STAKING_VOTING_APP_ID = 8000
 PROPOSAL_VOTING_APP_ID = 9000
 ARBITRARY_EXECUTOR_APP_ID = 10000
 FEE_MANAGEMENT_EXECUTOR_APP_ID = 11000
+TREASURY_MANAGEMENT_EXECUTOR_APP_ID = 12000
