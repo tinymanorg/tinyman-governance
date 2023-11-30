@@ -63,6 +63,7 @@ from tests.common import (
     VaultAppMixin,
     TreasuryManagementExecutorMixin,
     get_rawbox_from_proposal,
+    lpad,
 )
 from tests.constants import (
     AMM_V2_APP_ID,
@@ -172,7 +173,7 @@ class TreasuryManagementExecutorTestCase(
 
         execution_hash = bytes("send", "utf-8") + decode_address(get_application_address(TREASURY_MANAGEMENT_EXECUTOR_APP_ID)) + decode_address(receiver_address) + int_to_bytes(amount) + int_to_bytes(asset_id)
         execution_hash = sha256(execution_hash).digest()
-        execution_hash = b"\x00" * (128 - len(execution_hash)) + execution_hash  # Lpad
+        execution_hash = lpad(execution_hash, 128)
 
         proposal = Proposal(
             index=0,

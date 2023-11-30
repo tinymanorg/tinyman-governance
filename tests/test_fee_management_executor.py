@@ -63,6 +63,7 @@ from tests.common import (
     VaultAppMixin,
     FeeManagementExecutorMixin,
     get_rawbox_from_proposal,
+    lpad,
 )
 from tests.constants import (
     AMM_V2_APP_ID,
@@ -170,7 +171,7 @@ class FeeManagementExecutorTestCase(
 
         execution_hash = bytes("set_fee_setter", "utf-8") + decode_address(new_fee_setter_address)
         execution_hash = sha256(execution_hash).digest()
-        execution_hash = b"\x00" * (128 - len(execution_hash)) + execution_hash  # Lpad
+        execution_hash = lpad(execution_hash, 128)
 
         proposal = Proposal(
             index=0,
@@ -310,7 +311,7 @@ class FeeManagementExecutorTestCase(
 
         execution_hash = bytes("set_fee_collector", "utf-8") + decode_address(new_fee_collector_address)
         execution_hash = sha256(execution_hash).digest()
-        execution_hash = b"\x00" * (128 - len(execution_hash)) + execution_hash  # Lpad
+        execution_hash = lpad(execution_hash, 128)
 
         proposal = Proposal(
             index=0,
@@ -380,7 +381,7 @@ class FeeManagementExecutorTestCase(
 
         execution_hash = bytes("set_fee_manager", "utf-8") + decode_address(new_fee_manager_address)
         execution_hash = sha256(execution_hash).digest()
-        execution_hash = b"\x00" * (128 - len(execution_hash)) + execution_hash  # Lpad
+        execution_hash = lpad(execution_hash, 128)
 
         proposal = Proposal(
             index=0,
@@ -450,7 +451,7 @@ class FeeManagementExecutorTestCase(
 
         execution_hash = bytes("set_fee_collector", "utf-8") + decode_address(new_fee_collector_address)
         execution_hash = sha256(execution_hash).digest()
-        execution_hash = b"\x00" * (128 - len(execution_hash)) + execution_hash  # Lpad
+        execution_hash = lpad(execution_hash, 128)
 
         proposal = Proposal(
             index=0,
@@ -549,7 +550,7 @@ class FeeManagementExecutorTestCase(
 
         execution_hash = bytes("set_fee_for_pool", "utf-8") + decode_address(pool_address) + int_to_bytes(total_fee_share) + int_to_bytes(protocol_fee_ratio)
         execution_hash = sha256(execution_hash).digest()
-        execution_hash = b"\x00" * (128 - len(execution_hash)) + execution_hash  # Lpad
+        execution_hash = lpad(execution_hash, 128)
 
         proposal = Proposal(
             index=0,

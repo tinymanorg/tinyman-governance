@@ -15,8 +15,7 @@ rewards_clear_state_program = TealishProgram('contracts/rewards/rewards_clear_st
 
 arbitrary_executor_approval_program = TealishProgram('contracts/arbitrary_executor/arbitrary_executor_approval.tl')
 arbitrary_executor_clear_state_program = TealishProgram('contracts/arbitrary_executor/arbitrary_executor_clear_state.tl')
-
-arbitrary_executor_logic_signature = TealishProgram('contracts/arbitrary_executor_logic_signature/arbitrary_executor_logic_signature.tl')
+arbitrary_executor_logic_signature = TealishProgram('contracts/arbitrary_executor/arbitrary_executor_logic_signature.tl')
 
 fee_management_executor_approval_program = TealishProgram("contracts/fee_management_executor/fee_management_executor_approval.tl")
 fee_management_executor_clear_state_program = TealishProgram("contracts/fee_management_executor/fee_management_executor_clear_state.tl")

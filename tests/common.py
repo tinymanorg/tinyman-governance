@@ -51,6 +51,7 @@ def bool_to_bytes(boolean: bool):
         return BYTES_TRUE
     return BYTES_FALSE
 
+
 def get_rawbox_from_proposal(proposal: Proposal) -> bytes:
     raw_box = (
         int_to_bytes(proposal.index, 8) +
@@ -70,6 +71,12 @@ def get_rawbox_from_proposal(proposal: Proposal) -> bytes:
         decode_address(proposal.proposer_address)
     )
     return raw_box
+
+
+def lpad(string: bytes, n: int) -> bytes:
+    assert(n > 0)
+
+    return b"\x00" * (128 - len(string)) + string
 
 
 class BaseTestCase(unittest.TestCase):
