@@ -197,7 +197,6 @@ class ArbitraryExecutorTestCase(
         )
 
         execution_hash = b32decode(_correct_padding(arbitrary_transaction.get_txid()))
-        execution_hash = sha256(execution_hash).digest()
         execution_hash = lpad(execution_hash, 128)
 
         # Create proposal
@@ -311,7 +310,6 @@ class ArbitraryExecutorTestCase(
         )
 
         execution_hash = b32decode(_correct_padding(arbitrary_transaction.get_txid()))
-        execution_hash = sha256(execution_hash).digest()
         execution_hash = lpad(execution_hash, 128)
 
         # Create proposal

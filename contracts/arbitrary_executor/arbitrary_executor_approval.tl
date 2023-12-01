@@ -103,8 +103,7 @@ block main:
         assert(proposal_state == PROPOSAL_STATE_SUCCEEDED)
 
         # Assert Gtxn[1]'s transaction_id.
-        bytes execution_hash = sha256(Gtxn[1].TxID)
-        execution_hash = Lpad(execution_hash, 128)
+        bytes execution_hash = Lpad(Gtxn[1].TxID, 128)
         assert(execution_hash == proposal.execution_hash)
 
         exit(1)
@@ -138,8 +137,7 @@ block main:
         assert(proposal_state == PROPOSAL_STATE_SUCCEEDED)
 
         # Assert Gtxn[1]'s transaction_id.
-        bytes execution_hash = sha256(Global.GroupID)
-        execution_hash = Lpad(execution_hash, 128)
+        bytes execution_hash = Lpad(Global.GroupID, 128)
         assert(execution_hash == proposal.execution_hash)
 
         exit(1)
