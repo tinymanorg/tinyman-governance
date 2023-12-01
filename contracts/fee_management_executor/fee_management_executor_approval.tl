@@ -79,20 +79,20 @@ block main:
 
     block set_fee_setter:
         bytes proposal_id = Txn.ApplicationArgs[1]
+        bytes new_fee_setter = Txn.ApplicationArgs[2]
 
         Proposal proposal = check_and_get_proposal(proposal_id)
 
         # Assert proposal.execution_hash
         # hash(method_name, address)
-
-        bytes execution_hash = Lpad(sha256(Concat("set_fee_setter", Txn.Accounts[0])), 128)
+        bytes execution_hash = Lpad(sha256(Concat("set_fee_setter", new_fee_setter)), 128)
         assert(proposal.execution_hash == execution_hash)
 
         inner_txn:
             TypeEnum: Appl
             ApplicationID: app_global_get(AMM_APP_ID_KEY)
             ApplicationArgs[0]: "set_fee_setter"
-            Accounts[0]: Txn.Accounts[0]
+            Accounts[0]: new_fee_setter
             Fee: 0
         end
         exit(1)
@@ -100,19 +100,20 @@ block main:
 
     block set_fee_manager:
         bytes proposal_id = Txn.ApplicationArgs[1]
+        bytes new_fee_manager = Txn.ApplicationArgs[2]
 
         Proposal proposal = check_and_get_proposal(proposal_id)
 
         # Assert proposal.execution_hash
         # hash(method_name, address)
-        bytes execution_hash = Lpad(sha256(Concat("set_fee_manager", Txn.Accounts[0])), 128)
+        bytes execution_hash = Lpad(sha256(Concat("set_fee_manager", new_fee_manager)), 128)
         assert(proposal.execution_hash == execution_hash)
 
         inner_txn:
             TypeEnum: Appl
             ApplicationID: app_global_get(AMM_APP_ID_KEY)
             ApplicationArgs[0]: "set_fee_manager"
-            Accounts[0]: Txn.Accounts[0]
+            Accounts[0]: new_fee_manager
             Fee: 0
         end
         exit(1)
@@ -120,19 +121,20 @@ block main:
 
     block set_fee_collector:
         bytes proposal_id = Txn.ApplicationArgs[1]
+        bytes new_fee_collector = Txn.ApplicationArgs[2]
 
         Proposal proposal = check_and_get_proposal(proposal_id)
 
         # Assert proposal.execution_hash
         # hash(method_name, address)
-        bytes execution_hash = Lpad(sha256(Concat("set_fee_collector", Txn.Accounts[0])), 128)
+        bytes execution_hash = Lpad(sha256(Concat("set_fee_collector", new_fee_collector)), 128)
         assert(proposal.execution_hash == execution_hash)
 
         inner_txn:
             TypeEnum: Appl
             ApplicationID: app_global_get(AMM_APP_ID_KEY)
             ApplicationArgs[0]: "set_fee_manager"
-            Accounts[0]: Txn.Accounts[0]
+            Accounts[0]: new_fee_collector
             Fee: 0
         end
         exit(1)
@@ -140,15 +142,16 @@ block main:
 
     block set_fee_for_pool:
         bytes proposal_id = Txn.ApplicationArgs[1]
-        bytes total_fee_share = Txn.ApplicationArgs[2]
-        bytes protocol_fee_ratio = Txn.ApplicationArgs[3]
+        bytes pool_address = Txn.ApplicationArgs[2]
+        bytes total_fee_share = Txn.ApplicationArgs[3]
+        bytes protocol_fee_ratio = Txn.ApplicationArgs[4]
 
         Proposal proposal = check_and_get_proposal(proposal_id)
 
         # Assert proposal.execution_hash
         # hash(method_name, pool_address: address, total_fee_share, protocol_fee_ratio)
         
-        bytes execution_hash = Lpad(sha256(Concat(Concat(Concat("set_fee_for_pool", Txn.Accounts[1]), total_fee_share), protocol_fee_ratio)), 128)
+        bytes execution_hash = Lpad(sha256(Concat("set_fee_for_pool", pool_address, total_fee_share, protocol_fee_ratio)), 128)
         assert(proposal.execution_hash == execution_hash)
 
         inner_txn:
@@ -157,7 +160,7 @@ block main:
             ApplicationArgs[0]: "set_fee"
             ApplicationArgs[1]: total_fee_share
             ApplicationArgs[2]: protocol_fee_ratio
-            Accounts[0]: Txn.Accounts[1]
+            Accounts[0]: pool_address
             Fee: 0
         end
         exit(1)
