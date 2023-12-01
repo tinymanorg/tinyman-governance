@@ -148,12 +148,14 @@ class TreasuryManagementExecutorTestCase(
     
     def test_send_transaction(self):
         user_sk, user_address = generate_account()
+        sender_sk, sender_address = generate_account()
         _, receiver_address = generate_account()
 
         amount = 1000
         asset_id = 0
 
         self.ledger.set_account_balance(user_address, 10_000_000)
+        self.ledger.set_account_balance(sender_address, 10_000_000)
         self.ledger.set_account_balance(receiver_address, 1_000_000)
 
         self.create_proposal_voting_app(
@@ -167,11 +169,27 @@ class TreasuryManagementExecutorTestCase(
             proposal_voting.constants.PROPOSAL_VOTING_APP_MINIMUM_BALANCE_REQUIREMENT,
         )
 
+        # Rekey sender account to application account
+        txn_group =  TransactionGroup([
+            transaction.PaymentTxn(
+                sender=sender_address,
+                sp=self.sp,
+                receiver=get_application_address(TREASURY_MANAGEMENT_EXECUTOR_APP_ID),
+                amt=0,
+                rekey_to=get_application_address(TREASURY_MANAGEMENT_EXECUTOR_APP_ID),
+            )
+        ])
+        txn_group.sign_with_private_key(sender_address, sender_sk)
+        self.ledger.eval_transactions(
+            txn_group.signed_transactions,
+            block_timestamp=1647561600,
+        )
+
         # Create proposal
         proposal_id = generate_cid_from_proposal_metadata({"name": "Proposal 1"})
         proposal_box_name = get_proposal_box_name(proposal_id)
 
-        execution_hash = bytes("send", "utf-8") + decode_address(get_application_address(TREASURY_MANAGEMENT_EXECUTOR_APP_ID)) + decode_address(receiver_address) + int_to_bytes(amount) + int_to_bytes(asset_id)
+        execution_hash = bytes("send", "utf-8") + decode_address(sender_address) + decode_address(receiver_address) + int_to_bytes(amount) + int_to_bytes(asset_id)
         execution_hash = sha256(execution_hash).digest()
         execution_hash = lpad(execution_hash, 128)
 
@@ -206,15 +224,15 @@ class TreasuryManagementExecutorTestCase(
             sender=user_address,
             sp=sp,
             index=TREASURY_MANAGEMENT_EXECUTOR_APP_ID,
-            app_args=["send", proposal_id, amount, asset_id],
+            app_args=["send", proposal_id, decode_address(sender_address), decode_address(receiver_address), amount, asset_id],
             foreign_apps=[PROPOSAL_VOTING_APP_ID],
             boxes=[(PROPOSAL_VOTING_APP_ID, proposal_box_name)],
-            accounts=[get_application_address(TREASURY_MANAGEMENT_EXECUTOR_APP_ID), receiver_address]
+            accounts=[sender_address, receiver_address]
         )
         txn_group = TransactionGroup([send_transaction])
 
         txn_group.sign_with_private_key(user_address, user_sk)
-        block = self.ledger.eval_transactions(
+        self.ledger.eval_transactions(
             txn_group.signed_transactions,
             block_timestamp=proposal.voting_end_timestamp + 10,
         )
