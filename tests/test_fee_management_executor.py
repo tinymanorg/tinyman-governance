@@ -193,7 +193,7 @@ class FeeManagementExecutorTestCase(
         )
 
         self.ledger.boxes[PROPOSAL_VOTING_APP_ID] = {
-            proposal_box_name: get_rawbox_from_proposal(proposal) + execution_hash
+            proposal_box_name: get_rawbox_from_proposal(proposal) + execution_hash + decode_address(get_application_address(FEE_MANAGEMENT_EXECUTOR_APP_ID))
         }
 
         self.create_fee_management_executor_app(self.manager_address)
@@ -219,6 +219,9 @@ class FeeManagementExecutorTestCase(
             txn_group.signed_transactions,
             block_timestamp=proposal.voting_end_timestamp + 10,
         )
+    
+        proposal = parse_box_proposal(self.ledger.boxes[PROPOSAL_VOTING_APP_ID][proposal_box_name])
+        self.assertTrue(proposal.is_executed)
     
     def test_set_fee_manager_execution(self):
         user_sk, user_address = generate_account()
@@ -265,7 +268,7 @@ class FeeManagementExecutorTestCase(
         )
 
         self.ledger.boxes[PROPOSAL_VOTING_APP_ID] = {
-            proposal_box_name: get_rawbox_from_proposal(proposal) + execution_hash
+            proposal_box_name: get_rawbox_from_proposal(proposal) + execution_hash + decode_address(get_application_address(FEE_MANAGEMENT_EXECUTOR_APP_ID))
         }
 
         self.create_fee_management_executor_app(self.manager_address)
@@ -337,78 +340,7 @@ class FeeManagementExecutorTestCase(
         )
 
         self.ledger.boxes[PROPOSAL_VOTING_APP_ID] = {
-            proposal_box_name: get_rawbox_from_proposal(proposal) + execution_hash
-        }
-
-        self.create_fee_management_executor_app(self.manager_address)
-
-        # Execute proposal
-        self.ledger.global_states[AMM_V2_APP_ID][b"fee_manager"] = decode_address(get_application_address(FEE_MANAGEMENT_EXECUTOR_APP_ID))
-
-        sp = get_suggested_params()
-        sp.fee = 10000
-        set_fee_collector_txn = transaction.ApplicationNoOpTxn(
-            sender=user_address,
-            sp=sp,
-            index=FEE_MANAGEMENT_EXECUTOR_APP_ID,
-            app_args=["set_fee_collector", proposal_id, decode_address(new_fee_collector_address)],
-            accounts=[new_fee_collector_address],
-            foreign_apps=[PROPOSAL_VOTING_APP_ID, AMM_V2_APP_ID],
-            boxes=[(PROPOSAL_VOTING_APP_ID, proposal_box_name)],
-        )
-        txn_group = TransactionGroup([set_fee_collector_txn])
-
-        txn_group.sign_with_private_key(user_address, user_sk)
-        block = self.ledger.eval_transactions(
-            txn_group.signed_transactions,
-            block_timestamp=proposal.voting_end_timestamp + 10,
-        )
-
-    def test_set_fee_collector_execution(self):
-        user_sk, user_address = generate_account()
-        _, new_fee_collector_address = generate_account()
-
-        self.ledger.set_account_balance(user_address, 10_000_000)
-
-        self.create_proposal_voting_app(
-            self.manager_address, self.proposal_manager_address
-        )
-        self.ledger.global_states[PROPOSAL_VOTING_APP_ID][
-            b"quorum_threshold"
-        ] = 7_000_000
-        self.ledger.set_account_balance(
-            get_application_address(PROPOSAL_VOTING_APP_ID),
-            proposal_voting.constants.PROPOSAL_VOTING_APP_MINIMUM_BALANCE_REQUIREMENT,
-        )
-
-        # Create proposal
-        proposal_id = generate_cid_from_proposal_metadata({"name": "Proposal 1"})
-        proposal_box_name = get_proposal_box_name(proposal_id)
-
-        execution_hash = bytes("set_fee_collector", "utf-8") + decode_address(new_fee_collector_address)
-        execution_hash = sha256(execution_hash).digest()
-        execution_hash = lpad(execution_hash, 128)
-
-        proposal = Proposal(
-            index=0,
-            creation_timestamp=1647302400,
-            voting_start_timestamp=1647561600,
-            voting_end_timestamp=1648166400,
-            snapshot_total_voting_power=7671231,
-            vote_count=4,
-            quorum_threshold=7000000,
-            against_voting_power=205479,
-            for_voting_power=7054794,
-            abstain_voting_power=410958,
-            is_approved=True,
-            is_cancelled=False,
-            is_executed=False,
-            is_quorum_reached=True,
-            proposer_address=user_address,
-        )
-
-        self.ledger.boxes[PROPOSAL_VOTING_APP_ID] = {
-            proposal_box_name: get_rawbox_from_proposal(proposal) + execution_hash
+            proposal_box_name: get_rawbox_from_proposal(proposal) + execution_hash + decode_address(get_application_address(FEE_MANAGEMENT_EXECUTOR_APP_ID))
         }
 
         self.create_fee_management_executor_app(self.manager_address)
@@ -508,7 +440,7 @@ class FeeManagementExecutorTestCase(
         )
 
         self.ledger.boxes[PROPOSAL_VOTING_APP_ID] = {
-            proposal_box_name: get_rawbox_from_proposal(proposal) + execution_hash
+            proposal_box_name: get_rawbox_from_proposal(proposal) + execution_hash + decode_address(get_application_address(FEE_MANAGEMENT_EXECUTOR_APP_ID))
         }
 
         self.create_fee_management_executor_app(self.manager_address)

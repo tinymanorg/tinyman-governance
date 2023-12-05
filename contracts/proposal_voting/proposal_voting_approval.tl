@@ -20,6 +20,7 @@ struct Proposal:
     is_quorum_reached: bytes[1]
     proposer: bytes[32]
     execution_hash: bytes[128]
+    executor: bytes[32]
 end
 
 # 24 * 60 * 60
@@ -205,7 +206,6 @@ block main:
 
     block execute_proposal:
         bytes user_address = Txn.Sender
-        assert(user_address == app_global_get(PROPOSAL_MANAGER_KEY))
 
         bytes proposal_id = Txn.ApplicationArgs[1]
         bytes proposal_box_name = Concat(PROPOSAL_BOX_PREFIX, proposal_id)
@@ -216,6 +216,7 @@ block main:
         assert(proposal.is_executed == BYTES_FALSE)
         assert(proposal.is_quorum_reached == BYTES_TRUE)
         assert(proposal.for_voting_power > proposal.against_voting_power)
+        assert(proposal.executor == user_address)
         proposal.is_executed = BYTES_TRUE
 
         bytes proposal_data
@@ -229,6 +230,7 @@ block main:
         bytes user_address = Txn.Sender
         bytes proposal_id = Txn.ApplicationArgs[1]
         bytes execution_hash = Txn.ApplicationArgs[2]
+        bytes executor = Txn.ApplicationArgs[3]
 
         # 1. Check voting power threshold
         int account_voting_power = get_account_voting_power(user_address)
@@ -252,6 +254,7 @@ block main:
         proposal.proposer = Cast(user_address, bytes[32])
         proposal.quorum_threshold = app_global_get(QUORUM_THRESHOLD_KEY)
         proposal.execution_hash = Lpad(execution_hash, 128)
+        proposal.executor = Cast(executor, bytes[32])
 
         # 4. Start & End time
         if !app_global_get(APPROVAL_REQUIREMENT_KEY):
@@ -265,7 +268,7 @@ block main:
 
         bytes proposal_data
         _, proposal_data = box_get(proposal_box_name)
-        log(Concat(method("proposal(byte[59],uint64,uint64,uint64,uint64,uint64,uint64,uint64,uint64,uint64,uint64,bool,bool,bool,bool,address, byte[128])"), proposal_id, proposal_data))
+        log(Concat(method("proposal(byte[59],uint64,uint64,uint64,uint64,uint64,uint64,uint64,uint64,uint64,uint64,bool,bool,bool,bool,address, byte[128], byte[32])"), proposal_id, proposal_data))
         log(Concat(method("create_proposal(address,byte[59])"), user_address, proposal_id))
         log(proposal.execution_hash)
         exit(1)

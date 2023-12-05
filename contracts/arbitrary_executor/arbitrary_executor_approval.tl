@@ -20,6 +20,7 @@ struct Proposal:
     is_quorum_reached: bytes[1]
     proposer: bytes[32]
     execution_hash: bytes[128]
+    executor: bytes[32]
 end
 
 # 24 * 60 * 60
@@ -106,6 +107,7 @@ block main:
         bytes execution_hash = Lpad(Gtxn[1].TxID, 128)
         assert(execution_hash == proposal.execution_hash)
 
+        set_proposal_as_executed(proposal_id)
         exit(1)
     end
 
@@ -140,6 +142,18 @@ block main:
         bytes execution_hash = Lpad(Global.GroupID, 128)
         assert(execution_hash == proposal.execution_hash)
 
+        set_proposal_as_executed(proposal_id)
         exit(1)
     end
+end
+
+func set_proposal_as_executed(proposal_id: bytes):
+    inner_txn:
+        TypeEnum: Appl
+        ApplicationID: app_global_get(PROPOSAL_VOTING_APP_ID_KEY)
+        ApplicationArgs[0]: "execute_proposal"
+        ApplicationArgs[1]: proposal_id
+        Fee: 0
+    end
+    return
 end

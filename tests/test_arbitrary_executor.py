@@ -168,7 +168,7 @@ class ArbitraryExecutorTestCase(
         proposal_box_name = get_proposal_box_name(proposal_id)
 
         arbitrary_transaction_sp = get_suggested_params()
-        arbitrary_transaction_sp.fee = 10000
+        arbitrary_transaction_sp.fee = 15000
         arbitrary_transaction = transaction.AssetConfigTxn(
             sender=user_address,
             sp=arbitrary_transaction_sp,
@@ -219,7 +219,7 @@ class ArbitraryExecutorTestCase(
         )
 
         self.ledger.boxes[PROPOSAL_VOTING_APP_ID] = {
-            proposal_box_name: get_rawbox_from_proposal(proposal) + execution_hash
+            proposal_box_name: get_rawbox_from_proposal(proposal) + execution_hash + decode_address(get_application_address(ARBITRARY_EXECUTOR_APP_ID))
         }
 
         # Execute proposal
@@ -281,7 +281,7 @@ class ArbitraryExecutorTestCase(
         proposal_box_name = get_proposal_box_name(proposal_id)
 
         arbitrary_transaction_sp = get_suggested_params()
-        arbitrary_transaction_sp.fee = 10000
+        arbitrary_transaction_sp.fee = 15000
         arbitrary_transaction = transaction.AssetConfigTxn(
             sender=tinyman_algo_address,
             sp=arbitrary_transaction_sp,
@@ -332,7 +332,7 @@ class ArbitraryExecutorTestCase(
         )
 
         self.ledger.boxes[PROPOSAL_VOTING_APP_ID] = {
-            proposal_box_name: get_rawbox_from_proposal(proposal) + execution_hash
+            proposal_box_name: get_rawbox_from_proposal(proposal) + execution_hash + decode_address(get_application_address(ARBITRARY_EXECUTOR_APP_ID))
         }
 
         # Execute proposal
@@ -345,3 +345,6 @@ class ArbitraryExecutorTestCase(
             arbitrary_executor_txn_group.signed_transactions,
             block_timestamp=proposal.voting_end_timestamp + 10,
         )
+
+        proposal = parse_box_proposal(self.ledger.boxes[PROPOSAL_VOTING_APP_ID][proposal_box_name])
+        self.assertTrue(proposal.is_executed)

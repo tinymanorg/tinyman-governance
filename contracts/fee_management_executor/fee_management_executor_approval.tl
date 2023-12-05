@@ -19,6 +19,7 @@ struct Proposal:
     is_quorum_reached: bytes[1]
     proposer: bytes[32]
     execution_hash: bytes[128]
+    executor: bytes[32]
 end
 
 # 24 * 60 * 60
@@ -95,6 +96,8 @@ block main:
             Accounts[0]: new_fee_setter
             Fee: 0
         end
+
+        set_proposal_as_executed(proposal_id)
         exit(1)
     end
 
@@ -116,6 +119,8 @@ block main:
             Accounts[0]: new_fee_manager
             Fee: 0
         end
+
+        set_proposal_as_executed(proposal_id)
         exit(1)
     end
 
@@ -137,6 +142,8 @@ block main:
             Accounts[0]: new_fee_collector
             Fee: 0
         end
+
+        set_proposal_as_executed(proposal_id)
         exit(1)
     end
 
@@ -163,6 +170,8 @@ block main:
             Accounts[0]: pool_address
             Fee: 0
         end
+
+        set_proposal_as_executed(proposal_id)
         exit(1)
     end
 end
@@ -194,4 +203,15 @@ func check_and_get_proposal(proposal_id: bytes) Proposal:
     assert(proposal_state == PROPOSAL_STATE_SUCCEEDED)
 
     return proposal
+end
+
+func set_proposal_as_executed(proposal_id: bytes):
+    inner_txn:
+        TypeEnum: Appl
+        ApplicationID: app_global_get(PROPOSAL_VOTING_APP_ID_KEY)
+        ApplicationArgs[0]: "execute_proposal"
+        ApplicationArgs[1]: proposal_id
+        Fee: 0
+    end
+    return
 end

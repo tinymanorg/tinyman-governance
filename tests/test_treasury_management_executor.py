@@ -212,7 +212,7 @@ class TreasuryManagementExecutorTestCase(
         )
 
         self.ledger.boxes[PROPOSAL_VOTING_APP_ID] = {
-            proposal_box_name: get_rawbox_from_proposal(proposal) + execution_hash
+            proposal_box_name: get_rawbox_from_proposal(proposal) + execution_hash + decode_address(get_application_address(TREASURY_MANAGEMENT_EXECUTOR_APP_ID))
         }
 
         self.create_treasury_management_executor_app(self.manager_address)
@@ -238,3 +238,6 @@ class TreasuryManagementExecutorTestCase(
         )
 
         self.assertEqual(self.ledger.accounts[receiver_address]["balances"][0][0], 1_001_000)
+
+        proposal = parse_box_proposal(self.ledger.boxes[PROPOSAL_VOTING_APP_ID][proposal_box_name])
+        self.assertTrue(proposal.is_executed)
