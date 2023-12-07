@@ -68,7 +68,9 @@ def get_rawbox_from_proposal(proposal: Proposal) -> bytes:
         bool_to_bytes(proposal.is_cancelled) +
         bool_to_bytes(proposal.is_executed) +
         bool_to_bytes(proposal.is_quorum_reached) +
-        decode_address(proposal.proposer_address)
+        decode_address(proposal.proposer_address) +
+        proposal.execution_hash +
+        decode_address(proposal.executor_address)
     )
     return raw_box
 

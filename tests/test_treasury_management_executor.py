@@ -1,60 +1,19 @@
-import unittest.mock
-from base64 import b64encode, b64decode, b32decode
 from datetime import datetime
-from hashlib import sha256
-from unittest.mock import ANY
 from zoneinfo import ZoneInfo
 
-from algojig import LogicEvalError, get_suggested_params
+from algojig import get_suggested_params
 from algosdk import transaction
-from algosdk.abi import BoolType
 from algosdk.account import generate_account
-from algosdk.encoding import decode_address, encode_address, _correct_padding
+from algosdk.encoding import decode_address
 from algosdk.logic import get_application_address
 from tinyman.governance import proposal_voting
-from tinyman.governance.constants import DAY, WEEK
-from tinyman.governance.event import decode_logs
-from tinyman.governance.proposal_voting.events import proposal_voting_events
 from tinyman.governance.proposal_voting.storage import (
     Proposal,
-    ProposalVotingAppGlobalState,
     get_proposal_box_name,
     parse_box_proposal,
 )
-from tinyman.governance.proposal_voting.transactions import (
-    generate_proposal_metadata,
-    prepare_approve_proposal_transactions,
-    prepare_cancel_proposal_transactions,
-    prepare_cast_vote_transactions,
-    prepare_create_proposal_transactions,
-    prepare_disable_approval_requirement_transactions,
-    prepare_execute_proposal_transactions,
-    prepare_get_proposal_state_transactions,
-    prepare_get_proposal_transactions,
-    prepare_has_voted_transactions,
-    prepare_set_manager_transactions,
-    prepare_set_proposal_manager_transactions,
-    prepare_set_proposal_threshold_numerator_transactions,
-    prepare_set_proposal_threshold_transactions,
-    prepare_set_quorum_threshold_transactions,
-    prepare_set_voting_delay_transactions,
-    prepare_set_voting_duration_transactions,
-)
-from tinyman.governance.transactions import _prepare_budget_increase_transaction
-from tinyman.governance.utils import (
-    generate_cid_from_proposal_metadata,
-    serialize_metadata,
-)
-from tinyman.governance.vault.transactions import (
-    prepare_create_lock_transactions,
-    prepare_increase_lock_amount_transactions,
-    prepare_withdraw_transactions,
-)
-from tinyman.governance.vault.utils import (
-    get_bias,
-    get_slope,
-    get_start_timestamp_of_week,
-)
+from tinyman.governance.proposal_voting.executor_transactions import get_send_transactions_execution_hash, prepare_send_transactions
+from tinyman.governance.utils import generate_cid_from_proposal_metadata
 from tinyman.utils import TransactionGroup, bytes_to_int, int_to_bytes
 
 from tests.common import (
@@ -66,25 +25,10 @@ from tests.common import (
     lpad,
 )
 from tests.constants import (
-    AMM_V2_APP_ID,
     PROPOSAL_VOTING_APP_ID,
-    TINY_ASSET_ID,
-    VAULT_APP_ID,
     TREASURY_MANAGEMENT_EXECUTOR_APP_ID,
-    amm_pool_template,
     treasury_management_executor_approval_program,
     treasury_management_executor_clear_state_program,
-)
-from tests.proposal_voting.utils import get_proposal_voting_app_global_state
-from tests.utils import (
-    get_account_power_index_at,
-    get_first_app_call_txn,
-    parse_box_account_power,
-)
-from tests.vault.utils import (
-    get_account_state,
-    get_slope_change_at,
-    get_vault_app_global_state,
 )
 
 
@@ -189,9 +133,7 @@ class TreasuryManagementExecutorTestCase(
         proposal_id = generate_cid_from_proposal_metadata({"name": "Proposal 1"})
         proposal_box_name = get_proposal_box_name(proposal_id)
 
-        execution_hash = bytes("send", "utf-8") + decode_address(sender_address) + decode_address(receiver_address) + int_to_bytes(amount) + int_to_bytes(asset_id)
-        execution_hash = sha256(execution_hash).digest()
-        execution_hash = lpad(execution_hash, 128)
+        execution_hash = get_send_transactions_execution_hash(sender_address, receiver_address, amount, asset_id)
 
         proposal = Proposal(
             index=0,
@@ -209,10 +151,12 @@ class TreasuryManagementExecutorTestCase(
             is_executed=False,
             is_quorum_reached=True,
             proposer_address=user_address,
+            execution_hash=execution_hash,
+            executor_address=get_application_address(TREASURY_MANAGEMENT_EXECUTOR_APP_ID)
         )
 
         self.ledger.boxes[PROPOSAL_VOTING_APP_ID] = {
-            proposal_box_name: get_rawbox_from_proposal(proposal) + execution_hash + decode_address(get_application_address(TREASURY_MANAGEMENT_EXECUTOR_APP_ID))
+            proposal_box_name: get_rawbox_from_proposal(proposal)
         }
 
         self.create_treasury_management_executor_app(self.manager_address)
@@ -220,16 +164,18 @@ class TreasuryManagementExecutorTestCase(
         # Execute proposal
         sp = get_suggested_params()
         sp.fee = 10000
-        send_transaction = transaction.ApplicationNoOpTxn(
+
+        txn_group = prepare_send_transactions(
+            treasury_management_executor_app_id=TREASURY_MANAGEMENT_EXECUTOR_APP_ID,
+            proposal_voting_app_id=PROPOSAL_VOTING_APP_ID,
+            proposal_id=proposal_id,
+            treasure_sender=sender_address,
+            treasure_receiver=receiver_address,
+            asset_id=asset_id,
+            amount=amount,
             sender=user_address,
-            sp=sp,
-            index=TREASURY_MANAGEMENT_EXECUTOR_APP_ID,
-            app_args=["send", proposal_id, decode_address(sender_address), decode_address(receiver_address), amount, asset_id],
-            foreign_apps=[PROPOSAL_VOTING_APP_ID],
-            boxes=[(PROPOSAL_VOTING_APP_ID, proposal_box_name)],
-            accounts=[sender_address, receiver_address]
+            suggested_params=sp
         )
-        txn_group = TransactionGroup([send_transaction])
 
         txn_group.sign_with_private_key(user_address, user_sk)
         self.ledger.eval_transactions(

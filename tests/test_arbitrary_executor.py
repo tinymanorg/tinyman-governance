@@ -1,61 +1,20 @@
-import unittest.mock
-from base64 import b64encode, b64decode, b32decode
 from datetime import datetime
-from hashlib import sha256
-from unittest.mock import ANY
 from zoneinfo import ZoneInfo
 
-from algojig import LogicEvalError, get_suggested_params
+from algojig import get_suggested_params
 from algosdk import transaction
-from algosdk.abi import BoolType
 from algosdk.account import generate_account
 from algosdk.encoding import decode_address, _correct_padding
 from algosdk.logic import get_application_address
 from tinyman.governance import proposal_voting
-from tinyman.governance.constants import DAY, WEEK
-from tinyman.governance.event import decode_logs
-from tinyman.governance.proposal_voting.events import proposal_voting_events
+from tinyman.governance.proposal_voting.executor_transactions import get_arbitrary_transaction_execution_hash, prepare_validate_transaction_transactions
 from tinyman.governance.proposal_voting.storage import (
     Proposal,
-    ProposalVotingAppGlobalState,
     get_proposal_box_name,
     parse_box_proposal,
 )
-from tinyman.governance.proposal_voting.transactions import (
-    generate_proposal_metadata,
-    prepare_approve_proposal_transactions,
-    prepare_cancel_proposal_transactions,
-    prepare_cast_vote_transactions,
-    prepare_create_proposal_transactions,
-    prepare_disable_approval_requirement_transactions,
-    prepare_execute_proposal_transactions,
-    prepare_get_proposal_state_transactions,
-    prepare_get_proposal_transactions,
-    prepare_has_voted_transactions,
-    prepare_set_manager_transactions,
-    prepare_set_proposal_manager_transactions,
-    prepare_set_proposal_threshold_numerator_transactions,
-    prepare_set_proposal_threshold_transactions,
-    prepare_set_quorum_threshold_transactions,
-    prepare_set_voting_delay_transactions,
-    prepare_set_voting_duration_transactions,
-)
-from tinyman.governance.transactions import _prepare_budget_increase_transaction
-from tinyman.governance.utils import (
-    generate_cid_from_proposal_metadata,
-    serialize_metadata,
-)
-from tinyman.governance.vault.transactions import (
-    prepare_create_lock_transactions,
-    prepare_increase_lock_amount_transactions,
-    prepare_withdraw_transactions,
-)
-from tinyman.governance.vault.utils import (
-    get_bias,
-    get_slope,
-    get_start_timestamp_of_week,
-)
-from tinyman.utils import TransactionGroup, bytes_to_int, int_to_bytes
+from tinyman.governance.utils import generate_cid_from_proposal_metadata
+from tinyman.utils import TransactionGroup
 
 from tests.common import (
     BaseTestCase,
@@ -67,25 +26,10 @@ from tests.common import (
 )
 from tests.constants import (
     PROPOSAL_VOTING_APP_ID,
-    TINY_ASSET_ID,
-    VAULT_APP_ID,
     ARBITRARY_EXECUTOR_APP_ID,
-    proposal_voting_approval_program,
-    proposal_voting_clear_state_program,
     arbitrary_executor_approval_program,
     arbitrary_executor_clear_state_program,
     arbitrary_executor_logic_signature
-)
-from tests.proposal_voting.utils import get_proposal_voting_app_global_state
-from tests.utils import (
-    get_account_power_index_at,
-    get_first_app_call_txn,
-    parse_box_account_power,
-)
-from tests.vault.utils import (
-    get_account_state,
-    get_slope_change_at,
-    get_vault_app_global_state,
 )
 
 
@@ -184,20 +128,16 @@ class ArbitraryExecutorTestCase(
             decimals=0,
         )
 
-        executor_transaction = transaction.ApplicationNoOpTxn(
+        arbitrary_executor_txn_group = prepare_validate_transaction_transactions(
+            arbitrary_executor_app_id=ARBITRARY_EXECUTOR_APP_ID,
+            proposal_voting_app_id=PROPOSAL_VOTING_APP_ID,
+            proposal_id=proposal_id,
+            transaction_to_validate=arbitrary_transaction,
             sender=user_address,
-            sp=self.sp,
-            index=ARBITRARY_EXECUTOR_APP_ID,
-            app_args=["validate_transaction", proposal_id],
-            foreign_apps=[PROPOSAL_VOTING_APP_ID],
-            boxes=[(PROPOSAL_VOTING_APP_ID, proposal_box_name)],
-        )
-        arbitrary_executor_txn_group = TransactionGroup(
-            [executor_transaction, arbitrary_transaction]
+            suggested_params=self.sp
         )
 
-        execution_hash = b32decode(_correct_padding(arbitrary_transaction.get_txid()))
-        execution_hash = lpad(execution_hash, 128)
+        execution_hash = get_arbitrary_transaction_execution_hash(arbitrary_transaction)
 
         # Create proposal
         proposal = Proposal(
@@ -216,10 +156,12 @@ class ArbitraryExecutorTestCase(
             is_executed=False,
             is_quorum_reached=True,
             proposer_address=user_address,
+            execution_hash=execution_hash,
+            executor_address=get_application_address(ARBITRARY_EXECUTOR_APP_ID)
         )
 
         self.ledger.boxes[PROPOSAL_VOTING_APP_ID] = {
-            proposal_box_name: get_rawbox_from_proposal(proposal) + execution_hash + decode_address(get_application_address(ARBITRARY_EXECUTOR_APP_ID))
+            proposal_box_name: get_rawbox_from_proposal(proposal)
         }
 
         # Execute proposal
@@ -297,20 +239,16 @@ class ArbitraryExecutorTestCase(
             decimals=0,
         )
 
-        executor_transaction = transaction.ApplicationNoOpTxn(
+        arbitrary_executor_txn_group = prepare_validate_transaction_transactions(
+            arbitrary_executor_app_id=ARBITRARY_EXECUTOR_APP_ID,
+            proposal_voting_app_id=PROPOSAL_VOTING_APP_ID,
+            proposal_id=proposal_id,
+            transaction_to_validate=arbitrary_transaction,
             sender=user_address,
-            sp=self.sp,
-            index=ARBITRARY_EXECUTOR_APP_ID,
-            app_args=["validate_transaction", proposal_id],
-            foreign_apps=[PROPOSAL_VOTING_APP_ID],
-            boxes=[(PROPOSAL_VOTING_APP_ID, proposal_box_name)],
-        )
-        arbitrary_executor_txn_group = TransactionGroup(
-            [executor_transaction, arbitrary_transaction]
+            suggested_params=self.sp
         )
 
-        execution_hash = b32decode(_correct_padding(arbitrary_transaction.get_txid()))
-        execution_hash = lpad(execution_hash, 128)
+        execution_hash = get_arbitrary_transaction_execution_hash(arbitrary_transaction)
 
         # Create proposal
         proposal = Proposal(
@@ -329,10 +267,12 @@ class ArbitraryExecutorTestCase(
             is_executed=False,
             is_quorum_reached=True,
             proposer_address=user_address,
+            execution_hash=execution_hash,
+            executor_address=get_application_address(ARBITRARY_EXECUTOR_APP_ID)
         )
 
         self.ledger.boxes[PROPOSAL_VOTING_APP_ID] = {
-            proposal_box_name: get_rawbox_from_proposal(proposal) + execution_hash + decode_address(get_application_address(ARBITRARY_EXECUTOR_APP_ID))
+            proposal_box_name: get_rawbox_from_proposal(proposal)
         }
 
         # Execute proposal
