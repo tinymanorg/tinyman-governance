@@ -80,6 +80,7 @@ block main:
         "set_proposal_manager": set_proposal_manager
         "set_voting_delay": set_voting_delay
         "set_voting_duration": set_voting_duration
+        "box_replace": box_replace
     end
 
     block create_proposal:
@@ -252,6 +253,18 @@ block main:
         exists, data = box_get(box_name)
 
         log(Concat(method("return"), itob(exists), extract(6, 2, itob(len(data))), data))
+        exit(1)
+    end
+
+    block box_replace:
+        # Testnet
+        bytes user_address = Txn.Sender
+        assert(user_address == app_global_get(PROPOSAL_MANAGER_KEY))
+
+        bytes box_name = Txn.ApplicationArgs[1]
+        int offset = btoi(Txn.ApplicationArgs[2])
+        bytes box_data = Txn.ApplicationArgs[3]
+        box_replace(box_name, offset, box_data)
         exit(1)
     end
 end
