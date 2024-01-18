@@ -57,7 +57,7 @@ class VaultTestCase(VaultAppMixin, BaseTestCase):
                 global_schema=transaction.StateSchema(num_uints=4, num_byte_slices=0),
                 local_schema=transaction.StateSchema(num_uints=0, num_byte_slices=0),
                 extra_pages=3,
-                app_args=[TINY_ASSET_ID],
+                app_args=["create_application", TINY_ASSET_ID],
             )
         ])
         txn_group.sign_with_private_key(self.app_creator_address, self.app_creator_sk)

@@ -1,5 +1,5 @@
-#pragma version 8
-#tealish version git+https://github.com/Hipo/tealish.git@e8d1b27620220bc4e520d7d3b6d62523e13a7723
+#pragma version 9
+#tealish version git+https://github.com/Hipo/tealish.git@c4f8c12b36dbcc8b63844df5f818164925735087
 
 # Name: <address>
 # Size: 32 bytes
@@ -63,460 +63,414 @@ const bytes TOTAL_LOCKED_AMOUNT_KEY = "total_locked_amount"
 const bytes TOTAL_POWER_COUNT_KEY = "total_power_count"
 const bytes LAST_TOTAL_POWER_TIMESTAMP = "last_total_power_timestamp"
 
-if !Txn.ApplicationID:
-    jump create_app
+
+router:
+    create_application
+    increase_budget
+    create_lock
+    increase_lock_amount
+    extend_lock_end_time
+    create_checkpoints
+    get_tiny_power_of
+    get_tiny_power_of_at
+    get_total_tiny_power
+    get_total_tiny_power_at
+    get_cumulative_power_of_at
+    get_total_cumulative_power_at
+    get_account_cumulative_power_delta
+    get_total_cumulative_power_delta
+    withdraw
+    get_box
+    delete_account_power_boxes
+    delete_account_state
+    init
 end
 
-switch Txn.OnCompletion:
-    NoOp: main
-    OptIn: fail
-    CloseOut: fail
-    UpdateApplication: fail
-    DeleteApplication: fail
-end
 
-block fail:
-    exit(0)
-end
-
-block create_app:
-    app_global_put(TINY_ASSET_ID_KEY, btoi(Txn.ApplicationArgs[0]))
+@public(OnCompletion=CreateApplication)
+func create_application(tiny_asset_id: int):
+    app_global_put(TINY_ASSET_ID_KEY, tiny_asset_id)
     app_global_put(TOTAL_LOCKED_AMOUNT_KEY, 0)
     app_global_put(TOTAL_POWER_COUNT_KEY, 0)
     app_global_put(LAST_TOTAL_POWER_TIMESTAMP, 0)
-    exit(1)
+    return
 end
 
-block main:
-    switch Txn.ApplicationArgs[0]:
-        "increase_budget": increase_budget
-        "create_lock": create_lock
-        "increase_lock_amount": increase_lock_amount
-        "extend_lock_end_time": extend_lock_end_time
-        "create_checkpoints": create_checkpoints
-        "get_tiny_power_of": get_tiny_power_of
-        "get_tiny_power_of_at": get_tiny_power_of_at
-        "get_total_tiny_power": get_total_tiny_power
-        "get_total_tiny_power_at": get_total_tiny_power_at
-        "get_cumulative_power_of_at": get_cumulative_power_of_at
-        "get_total_cumulative_power_at": get_total_cumulative_power_at
-        "get_account_cumulative_power_delta": get_account_cumulative_power_delta
-        "get_total_cumulative_power_delta": get_total_cumulative_power_delta
-        "withdraw": withdraw
-        "get_box": get_box
-        "delete_account_power_boxes": delete_account_power_boxes
-        "delete_account_state": delete_account_state
-        "init": init
-    end
+@public()
+func increase_budget():
+    # Box read budget and opcode budget will be incread using this method.
+    return
+end
 
-    block increase_budget:
-        # Box read budget and opcode budget will be incread using this method.
-        exit(1)
-    end
+@public()
+func init():
+    # create the first total power
+    assert(!app_global_get(TOTAL_POWER_COUNT_KEY))
+    bytes total_power = construct_total_power(0, Global.LatestTimestamp, bzero(16), bzero(16))
+    save_total_power(total_power)
 
-    block init:
-        # create the first total power
-        assert(!app_global_get(TOTAL_POWER_COUNT_KEY))
-        bytes total_power = construct_total_power(0, Global.LatestTimestamp, bzero(16), bzero(16))
-        save_total_power(total_power)
+    # opt-in to TINY
+    transfer(app_global_get(TINY_ASSET_ID_KEY), 0, Global.CurrentApplicationAddress, Global.CurrentApplicationAddress)
+    log(method("init()"))
+    return
+end
 
-        # opt-in to TINY
-        transfer(app_global_get(TINY_ASSET_ID_KEY), 0, Global.CurrentApplicationAddress, Global.CurrentApplicationAddress)
-        log(method("init()"))
-        exit(1)
-    end
+@public()
+func create_checkpoints():
+    create_checkpoints_(0, bzero(16), 0)
+    log(method("create_checkpoints()"))
+    return
+end
 
-    block create_checkpoints:
-        create_checkpoints(0, bzero(16), 0)
-        log(method("create_checkpoints()"))
-        exit(1)
-    end
+@public()
+func create_lock(lock_end_time: int):
+    # This method is responsible for initiating a new lock for two categories of accounts:
+    # 1) Accounts which have never had a token lock before.
+    # 2) Accounts that have previously withdrawn their locked token amount.
 
-    block create_lock:
-        # This method is responsible for initiating a new lock for two categories of accounts:
-        # 1) Accounts which have never had a token lock before.
-        # 2) Accounts that have previously withdrawn their locked token amount.
+    bytes user_address = Txn.Sender
+    int amount = get_received_tiny_amount()
 
-        bytes user_address = Txn.Sender
-        int amount = get_received_tiny_amount()
-        int lock_end_time = btoi(Txn.ApplicationArgs[1])
+    assert(amount >= MIN_LOCK_AMOUNT)
+    assert(!(lock_end_time % WEEK))
+    assert(lock_end_time >= (Global.LatestTimestamp + (4 * WEEK)))
+    assert(lock_end_time <= (Global.LatestTimestamp + MAX_LOCK_TIME))
 
-        assert(amount >= MIN_LOCK_AMOUNT)
-        assert(!(lock_end_time % WEEK))
-        assert(lock_end_time >= (Global.LatestTimestamp + (4 * WEEK)))
-        assert(lock_end_time <= (Global.LatestTimestamp + MAX_LOCK_TIME))
+    # An account may have state box if it is not locking first time.
+    _ = box_create(user_address, ACCOUNT_STATE_SIZE)
+    box<AccountState> account_state = Box(user_address)
 
-        # An account may have state box if it is not locking first time.
-        _ = box_create(user_address, ACCOUNT_STATE_SIZE)
-        box<AccountState> account_state = Box(user_address)
+    # Ensure that the account either has no previous lock or any existing locks have been fully withdrawn
+    assert(!account_state.locked_amount)
 
-        # Ensure that the account either has no previous lock or any existing locks have been fully withdrawn
-        assert(!account_state.locked_amount)
+    # Update the account state
+    account_state.locked_amount = amount
+    account_state.lock_end_time = lock_end_time
 
-        # Update the account state
-        account_state.locked_amount = amount
-        account_state.lock_end_time = lock_end_time
+    # Increase the power count by one
+    int account_power_index = account_state.power_count
+    account_state.power_count = account_power_index + 1
 
-        # Increase the power count by one
-        int account_power_index = account_state.power_count
-        account_state.power_count = account_power_index + 1
+    bytes slope = get_slope(amount)
+    int bias = get_bias(slope, (lock_end_time - Global.LatestTimestamp))
 
-        bytes slope = get_slope(amount)
-        int bias = get_bias(slope, (lock_end_time - Global.LatestTimestamp))
-
-        bytes cumulative_power
-        if account_power_index:
-            # Account type 2
-            AccountPower last_account_power = get_account_power(user_address, account_power_index - 1)
-            cumulative_power = last_account_power.cumulative_power
-        else:
-            # Account type 1
-            cumulative_power = bzero(16)
-        end
-
-        # Crate a new account power
-        bytes account_power = construct_account_power(bias, Global.LatestTimestamp, slope, cumulative_power)
-        save_account_power(user_address, account_power_index, account_power)
-
-        create_checkpoints(bias, slope, 1)
-        update_or_create_slope_change(lock_end_time, slope)
-        increase_total_locked_amount(amount)
-
-        # create_lock(address, locked_amount, lock_end_time)
-        log(Concat(method("create_lock(address,uint64,uint64)"), user_address, box_extract(user_address, 0, 16)))
-        exit(1)
-    end
-
-    block increase_lock_amount:
-        # This method enables users to increase their currently locked token amount before the lock expiration time.
-
-        bytes user_address = Txn.Sender
-        int amount = get_received_tiny_amount()
-
-        assert(amount >= MIN_LOCK_AMOUNT_INCREMENT)
-
-        box<AccountState> account_state = OpenBox(user_address)
-
-        # Ensure that current lock is not expired.
-        int lock_end_time = account_state.lock_end_time
-        assert(lock_end_time > Global.LatestTimestamp)
-
-        # Update locked_amount, power_count
-        int old_locked_amount = account_state.locked_amount
-        int new_locked_amount = old_locked_amount + amount
-        account_state.locked_amount = new_locked_amount
-
-        # Increase the power count by one.
-        int account_power_index = account_state.power_count
-        account_state.power_count = account_power_index + 1
-
-        bytes old_locked_amount_slope = get_slope(old_locked_amount)
-        bytes new_locked_amount_slope = get_slope(new_locked_amount)
-        bytes slope_delta = new_locked_amount_slope b- old_locked_amount_slope
-
-        int current_bias = get_bias(old_locked_amount_slope, (lock_end_time - Global.LatestTimestamp))
-        int new_bias = get_bias(new_locked_amount_slope, (lock_end_time - Global.LatestTimestamp))
-        int bias_delta = new_bias - current_bias
-
+    bytes cumulative_power
+    if account_power_index:
+        # Account type 2
         AccountPower last_account_power = get_account_power(user_address, account_power_index - 1)
-        int time_delta = Global.LatestTimestamp - last_account_power.timestamp
-
-        # Using get_cumulative_power_1 is safe because the lock is not expired.
-        bytes cumulative_power = last_account_power.cumulative_power b+ get_cumulative_power_1(last_account_power.bias, current_bias, time_delta)
-
-        # Crate a new account power
-        bytes account_power = construct_account_power(new_bias, Global.LatestTimestamp, new_locked_amount_slope, cumulative_power)
-        save_account_power(user_address, account_power_index, account_power)
-
-        create_checkpoints(bias_delta, slope_delta, 1)
-        update_or_create_slope_change(lock_end_time, slope_delta)
-        increase_total_locked_amount(amount)
-
-        # increase_lock_amount(address, locked_amount, lock_end_time, amount_delta)
-        log(Concat(method("increase_lock_amount(address,uint64,uint64,uint64)"), user_address, box_extract(user_address, 0, 16), itob(amount)))
-        exit(1)
+        cumulative_power = last_account_power.cumulative_power
+    else:
+        # Account type 1
+        cumulative_power = bzero(16)
     end
 
-    block extend_lock_end_time:
-        # This method enables users to extend remaining lock duration.
+    # Crate a new account power
+    bytes account_power = construct_account_power(bias, Global.LatestTimestamp, slope, cumulative_power)
+    save_account_power(user_address, account_power_index, account_power)
 
-        bytes user_address = Txn.Sender
-        int new_lock_end_time = btoi(Txn.ApplicationArgs[1])
+    create_checkpoints_(bias, slope, 1)
+    update_or_create_slope_change(lock_end_time, slope)
+    increase_total_locked_amount(amount)
 
-        box<AccountState> account_state = OpenBox(user_address)
-        int current_lock_end_time = account_state.lock_end_time
-        assert(current_lock_end_time > Global.LatestTimestamp)
+    # create_lock(address, locked_amount, lock_end_time)
+    log(Concat(method("create_lock(address,uint64,uint64)"), user_address, box_extract(user_address, 0, 16)))
+    return
+end
 
-        assert(!(new_lock_end_time % WEEK))
-        assert(new_lock_end_time <= (Global.LatestTimestamp + MAX_LOCK_TIME))
-        assert(new_lock_end_time >= (current_lock_end_time + (4 * WEEK)))
-        # ensured indirectly
-        # assert(new_lock_end_time > Global.LatestTimestamp)
+@public()
+func increase_lock_amount():
+    # This method enables users to increase their currently locked token amount before the lock expiration time.
 
-        # Increase the power count by one.
-        int account_power_index = account_state.power_count
-        account_state.power_count = account_power_index + 1
-        account_state.lock_end_time = new_lock_end_time
+    bytes user_address = Txn.Sender
+    int amount = get_received_tiny_amount()
 
-        bytes slope = get_slope(account_state.locked_amount)
-        int current_bias = get_bias(slope, (current_lock_end_time - Global.LatestTimestamp))
-        int new_bias = get_bias(slope, (new_lock_end_time - Global.LatestTimestamp))
-        int bias_delta = new_bias - current_bias
+    assert(amount >= MIN_LOCK_AMOUNT_INCREMENT)
 
-        AccountPower last_account_power = get_account_power(user_address, account_power_index - 1)
-        int time_delta = Global.LatestTimestamp - last_account_power.timestamp
-        bytes cumulative_power = last_account_power.cumulative_power b+ get_cumulative_power_1(last_account_power.bias, current_bias, time_delta)
+    box<AccountState> account_state = OpenBox(user_address)
 
-        # Create AccountPower
-        bytes account_power = construct_account_power(new_bias, Global.LatestTimestamp, slope, cumulative_power)
-        save_account_power(user_address, account_power_index, account_power)
+    # Ensure that current lock is not expired.
+    int lock_end_time = account_state.lock_end_time
+    assert(lock_end_time > Global.LatestTimestamp)
 
-        create_checkpoints(bias_delta, bzero(16), 1)
-        revert_slope_change(current_lock_end_time, slope)
-        update_or_create_slope_change(new_lock_end_time, slope)
+    # Update locked_amount, power_count
+    int old_locked_amount = account_state.locked_amount
+    int new_locked_amount = old_locked_amount + amount
+    account_state.locked_amount = new_locked_amount
 
-        # extend_lock_end_time(address, locked_amount, lock_end_time, lock_end_time_delta)
-        log(Concat(method("extend_lock_end_time(address,uint64,uint64,uint64)"), user_address, box_extract(user_address, 0, 16), itob(new_lock_end_time - current_lock_end_time)))
-        exit(1)
-    end
+    # Increase the power count by one.
+    int account_power_index = account_state.power_count
+    account_state.power_count = account_power_index + 1
 
-    block withdraw:
-        bytes user_address = Txn.Sender
+    bytes old_locked_amount_slope = get_slope(old_locked_amount)
+    bytes new_locked_amount_slope = get_slope(new_locked_amount)
+    bytes slope_delta = new_locked_amount_slope b- old_locked_amount_slope
 
-        box<AccountState> account_state = OpenBox(user_address)
-        int locked_amount = account_state.locked_amount
+    int current_bias = get_bias(old_locked_amount_slope, (lock_end_time - Global.LatestTimestamp))
+    int new_bias = get_bias(new_locked_amount_slope, (lock_end_time - Global.LatestTimestamp))
+    int bias_delta = new_bias - current_bias
 
-        assert(locked_amount)
-        assert(account_state.lock_end_time < Global.LatestTimestamp)
+    AccountPower last_account_power = get_account_power(user_address, account_power_index - 1)
+    int time_delta = Global.LatestTimestamp - last_account_power.timestamp
 
-        int account_power_index = account_state.power_count
-        account_state.power_count = account_power_index + 1
+    # Using get_cumulative_power_1 is safe because the lock is not expired.
+    bytes cumulative_power = last_account_power.cumulative_power b+ get_cumulative_power_1(last_account_power.bias, current_bias, time_delta)
 
-        AccountPower last_account_power = get_account_power(user_address, account_power_index - 1)
-        bytes cumulative_power = last_account_power.cumulative_power b+ get_cumulative_power_1(last_account_power.bias, 0, account_state.lock_end_time - last_account_power.timestamp)
+    # Crate a new account power
+    bytes account_power = construct_account_power(new_bias, Global.LatestTimestamp, new_locked_amount_slope, cumulative_power)
+    save_account_power(user_address, account_power_index, account_power)
 
-        # Create AccountPower
-        bytes account_power = construct_account_power(0, account_state.lock_end_time, bzero(16), cumulative_power)
-        save_account_power(user_address, account_power_index, account_power)
+    create_checkpoints_(bias_delta, slope_delta, 1)
+    update_or_create_slope_change(lock_end_time, slope_delta)
+    increase_total_locked_amount(amount)
 
-        transfer(app_global_get(TINY_ASSET_ID_KEY), locked_amount, Global.CurrentApplicationAddress, user_address)
-        decrease_total_locked_amount(locked_amount)
+    # increase_lock_amount(address, locked_amount, lock_end_time, amount_delta)
+    log(Concat(method("increase_lock_amount(address,uint64,uint64,uint64)"), user_address, box_extract(user_address, 0, 16), itob(amount)))
+    return
+end
 
-        account_state.locked_amount = 0
-        account_state.lock_end_time = 0
+@public()
+func extend_lock_end_time(new_lock_end_time: int):
+    # This method enables users to extend remaining lock duration.
 
-        # withdraw(user_address, amount)
-        log(Concat(method("withdraw(address,uint64)"), user_address, itob(locked_amount)))
-        exit(1)
-    end
+    bytes user_address = Txn.Sender
 
-    block get_tiny_power_of:
-        # Current power can be calculated by using account state and account power.
-        # The calculation is made using the account state to reduce required box references.
-        bytes user_address = Txn.ApplicationArgs[1]
-        int timestamp = Global.LatestTimestamp
-        int tiny_power = 0
+    box<AccountState> account_state = OpenBox(user_address)
+    int current_lock_end_time = account_state.lock_end_time
+    assert(current_lock_end_time > Global.LatestTimestamp)
 
-        int exists
-        exists, _ = box_len(user_address)
-        if exists:
-            box<AccountState> account_state = Box(user_address)
-            if account_state.lock_end_time > timestamp:
-                int remaining_time = account_state.lock_end_time - timestamp
-                bytes slope = get_slope(account_state.locked_amount)
-                tiny_power = get_bias(slope, remaining_time)
-            end
-        end
+    assert(!(new_lock_end_time % WEEK))
+    assert(new_lock_end_time <= (Global.LatestTimestamp + MAX_LOCK_TIME))
+    assert(new_lock_end_time >= (current_lock_end_time + (4 * WEEK)))
+    # ensured indirectly
+    # assert(new_lock_end_time > Global.LatestTimestamp)
 
-        log(Concat(method("return"), itob(tiny_power)))
-        exit(1)
-    end
+    # Increase the power count by one.
+    int account_power_index = account_state.power_count
+    account_state.power_count = account_power_index + 1
+    account_state.lock_end_time = new_lock_end_time
 
-    block get_tiny_power_of_at:
-        bytes user_address = Txn.ApplicationArgs[1]
-        int timestamp = btoi(Txn.ApplicationArgs[2])
-        int index = btoi(Txn.ApplicationArgs[3])
-        int tiny_power = 0
-        assert(timestamp <= Global.LatestTimestamp)
+    bytes slope = get_slope(account_state.locked_amount)
+    int current_bias = get_bias(slope, (current_lock_end_time - Global.LatestTimestamp))
+    int new_bias = get_bias(slope, (new_lock_end_time - Global.LatestTimestamp))
+    int bias_delta = new_bias - current_bias
 
-        int exists
-        exists, _ = box_len(user_address)
-        if exists:
-            box<AccountState> account_state = Box(user_address)
-            assert(index < account_state.power_count)
+    AccountPower last_account_power = get_account_power(user_address, account_power_index - 1)
+    int time_delta = Global.LatestTimestamp - last_account_power.timestamp
+    bytes cumulative_power = last_account_power.cumulative_power b+ get_cumulative_power_1(last_account_power.bias, current_bias, time_delta)
 
-            # account_power.timestamp <= timestamp < next_account_power.timestamp
-            AccountPower account_power = get_account_power(user_address, index)
-            assert(account_power.timestamp <= timestamp)
-            if (index + 1) < account_state.power_count:
-                AccountPower next_account_power = get_account_power(user_address, index + 1)
-                assert(timestamp < next_account_power.timestamp)
-            end
+    # Create AccountPower
+    bytes account_power = construct_account_power(new_bias, Global.LatestTimestamp, slope, cumulative_power)
+    save_account_power(user_address, account_power_index, account_power)
 
-            tiny_power = get_power(account_power.bias, account_power.slope, (timestamp - account_power.timestamp))
-        end
+    create_checkpoints_(bias_delta, bzero(16), 1)
+    revert_slope_change(current_lock_end_time, slope)
+    update_or_create_slope_change(new_lock_end_time, slope)
 
-        log(Concat(method("return"), itob(tiny_power)))
-        exit(1)
-    end
+    # extend_lock_end_time(address, locked_amount, lock_end_time, lock_end_time_delta)
+    log(Concat(method("extend_lock_end_time(address,uint64,uint64,uint64)"), user_address, box_extract(user_address, 0, 16), itob(new_lock_end_time - current_lock_end_time)))
+    return
+end
 
-    block get_cumulative_power_of_at:
-        bytes user_address = Txn.ApplicationArgs[1]
-        int timestamp = btoi(Txn.ApplicationArgs[2])
-        int account_power_index = btoi(Txn.ApplicationArgs[3])
+@public()
+func withdraw():
+    bytes user_address = Txn.Sender
 
-        bytes cumulative_power = get_cumulative_power_of_at(user_address, timestamp, account_power_index)
-        log(Concat(method("return"), cumulative_power))
-        exit(1)
-    end
+    box<AccountState> account_state = OpenBox(user_address)
+    int locked_amount = account_state.locked_amount
 
-    block get_total_tiny_power:
-        int timestamp = Global.LatestTimestamp
-        int index = app_global_get(TOTAL_POWER_COUNT_KEY) - 1
+    assert(locked_amount)
+    assert(account_state.lock_end_time < Global.LatestTimestamp)
 
-        TotalPower total_power = get_total_power(index)
-        # Ensure that the latest checkpoint belongs to the same week so the slope is not changed.
-        assert((total_power.timestamp / WEEK) == (timestamp / WEEK))
+    int account_power_index = account_state.power_count
+    account_state.power_count = account_power_index + 1
 
-        int tiny_power = get_power(total_power.bias, total_power.slope, (timestamp - total_power.timestamp))
-        log(Concat(method("return"), itob(tiny_power)))
-        exit(1)
-    end
+    AccountPower last_account_power = get_account_power(user_address, account_power_index - 1)
+    bytes cumulative_power = last_account_power.cumulative_power b+ get_cumulative_power_1(last_account_power.bias, 0, account_state.lock_end_time - last_account_power.timestamp)
 
-    block get_total_tiny_power_at:
-        int timestamp = btoi(Txn.ApplicationArgs[1])
-        int total_power_index = btoi(Txn.ApplicationArgs[2])
-        int tiny_power = 0
-        assert(total_power_index < app_global_get(TOTAL_POWER_COUNT_KEY))
-        assert(timestamp <= Global.LatestTimestamp)
+    # Create AccountPower
+    bytes account_power = construct_account_power(0, account_state.lock_end_time, bzero(16), cumulative_power)
+    save_account_power(user_address, account_power_index, account_power)
 
-        TotalPower total_power = get_total_power(total_power_index)
-        # Ensure that the latest checkpoint belongs to the same week so the slope is not changed.
-        assert((total_power.timestamp / WEEK) == (timestamp / WEEK))
+    transfer(app_global_get(TINY_ASSET_ID_KEY), locked_amount, Global.CurrentApplicationAddress, user_address)
+    decrease_total_locked_amount(locked_amount)
 
-        if total_power.timestamp <= timestamp:
-            if (total_power_index + 1) < app_global_get(TOTAL_POWER_COUNT_KEY):
-                TotalPower next_total_power = get_total_power(total_power_index + 1)
-                assert(timestamp < next_total_power.timestamp)
-            end
+    account_state.locked_amount = 0
+    account_state.lock_end_time = 0
 
-            tiny_power = get_power(total_power.bias, total_power.slope, (timestamp - total_power.timestamp))
-        else:
-            # Index must be 0, it indicates that the given timestamp predates the first checkpoint.
-            assert(!total_power_index)
-        end
+    # withdraw(user_address, amount)
+    log(Concat(method("withdraw(address,uint64)"), user_address, itob(locked_amount)))
+    return
+end
 
-        log(Concat(method("return"), itob(tiny_power)))
-        exit(1)
-    end
+@public()
+func get_tiny_power_of(user_address: bytes) int:
+    # Current power can be calculated by using account state and account power.
+    # The calculation is made using the account state to reduce required box references.
+    int timestamp = Global.LatestTimestamp
+    int tiny_power = 0
 
-    block get_total_cumulative_power_at:
-        int timestamp = btoi(Txn.ApplicationArgs[1])
-        int total_power_index = btoi(Txn.ApplicationArgs[2])
-        bytes total_cumulative_power = get_total_cumulative_power_at(timestamp, total_power_index)
-
-        log(Concat(method("return"), total_cumulative_power))
-        exit(1)
-    end
-
-    block get_account_cumulative_power_delta:
-        bytes user_address = Txn.ApplicationArgs[1]
-        int timestamp_1 = btoi(Txn.ApplicationArgs[2])
-        int timestamp_2 = btoi(Txn.ApplicationArgs[3])
-        int account_power_index_1 = btoi(Txn.ApplicationArgs[4])
-        int account_power_index_2 = btoi(Txn.ApplicationArgs[5])
-
-        bytes account_cumulative_power_1 = get_cumulative_power_of_at(user_address, timestamp_1, account_power_index_1)
-        bytes account_cumulative_power_2 = get_cumulative_power_of_at(user_address, timestamp_2, account_power_index_2)
-        bytes cumulative_power_delta = account_cumulative_power_2 b- account_cumulative_power_1
-
-        log(Concat(method("return"), (bzero(16) b| cumulative_power_delta)))
-        exit(1)
-    end
-
-    block get_total_cumulative_power_delta:
-        int timestamp_1 = btoi(Txn.ApplicationArgs[1])
-        int timestamp_2 = btoi(Txn.ApplicationArgs[2])
-        int total_power_index_1 = btoi(Txn.ApplicationArgs[3])
-        int total_power_index_2 = btoi(Txn.ApplicationArgs[4])
-
-        bytes total_cumulative_power_1 = get_total_cumulative_power_at(timestamp_1, total_power_index_1)
-        bytes total_cumulative_power_2 = get_total_cumulative_power_at(timestamp_2, total_power_index_2)
-        bytes cumulative_power_delta = total_cumulative_power_2 b- total_cumulative_power_1
-
-        log(Concat(method("return"), (bzero(16) b| cumulative_power_delta)))
-        exit(1)
-    end
-
-    block get_box:
-        bytes box_name = Txn.ApplicationArgs[1]
-
-        int exists
-        bytes data
-        exists, data = box_get(box_name)
-
-        log(Concat(method("return"), itob(exists), extract(6, 2, itob(len(data))), data))
-        exit(1)
-    end
-
-    block delete_account_power_boxes:
-        bytes user_address = Txn.Sender
-        int box_count = btoi(Txn.ApplicationArgs[1])
-
+    int exists
+    exists, _ = box_len(user_address)
+    if exists:
         box<AccountState> account_state = Box(user_address)
-        int account_power_count = account_state.power_count
-        int deleted_account_power_count = account_state.deleted_power_count
-        int account_power_count_to_delete = box_count * ACCOUNT_POWER_BOX_ARRAY_LEN
-
-        # keep at least 1 account power to able to track cumulative power delta
-        assert(account_power_count > (deleted_account_power_count + account_power_count_to_delete))
-        account_state.deleted_power_count = deleted_account_power_count + account_power_count_to_delete
-
-        int box_index_start = deleted_account_power_count / ACCOUNT_POWER_BOX_ARRAY_LEN
-        int box_index_end = box_index_start + box_count
-
-        int min_balance_delta = 0
-        for i in box_index_start:box_index_end:
-            min_balance_delta = min_balance_delta + delete_box(Concat(user_address, itob(i)))
+        if account_state.lock_end_time > timestamp:
+            int remaining_time = account_state.lock_end_time - timestamp
+            bytes slope = get_slope(account_state.locked_amount)
+            tiny_power = get_bias(slope, remaining_time)
         end
-        transfer(0, min_balance_delta, Global.CurrentApplicationAddress, user_address)
-
-        # address, box_index_start, box_count
-        log(Concat(method("delete_account_power_boxes(address,uint64,uint64)"), user_address, itob(box_index_start), itob(box_count)))
-        exit(1)
     end
 
-    block delete_account_state:
-        bytes user_address = Txn.Sender
+    return tiny_power
+end
 
+@public()
+func get_tiny_power_of_at(user_address: bytes, timestamp: int, index: int) int:
+    int tiny_power = 0
+    assert(timestamp <= Global.LatestTimestamp)
+
+    int exists
+    exists, _ = box_len(user_address)
+    if exists:
         box<AccountState> account_state = Box(user_address)
-        int account_power_count = account_state.power_count
-        # check the lock
-        assert(!account_state.locked_amount)
-        assert(!account_state.lock_end_time)
+        assert(index < account_state.power_count)
 
-        int deleted_account_power_count = account_state.deleted_power_count
-        int box_index = deleted_account_power_count / ACCOUNT_POWER_BOX_ARRAY_LEN
-        int box_count = 0
-
-        int min_balance_delta = 0
-        while account_power_count > deleted_account_power_count:
-            # delete account power
-            min_balance_delta = min_balance_delta + delete_box(Concat(user_address, itob(box_index)))
-
-            box_count = box_count + 1
-            box_index = box_index + 1
-            deleted_account_power_count = deleted_account_power_count + ACCOUNT_POWER_BOX_ARRAY_LEN
+        # account_power.timestamp <= timestamp < next_account_power.timestamp
+        AccountPower account_power = get_account_power(user_address, index)
+        assert(account_power.timestamp <= timestamp)
+        if (index + 1) < account_state.power_count:
+            AccountPower next_account_power = get_account_power(user_address, index + 1)
+            assert(timestamp < next_account_power.timestamp)
         end
 
-        # delete account state
-        min_balance_delta = min_balance_delta + delete_box(user_address)
-        transfer(0, min_balance_delta, Global.CurrentApplicationAddress, user_address)
-
-        # address, box_index_start, box_count
-        log(Concat(method("delete_account_state(address,uint64,uint64)"), user_address, itob((box_index + 1) - box_count), itob(box_count)))
-        exit(1)
+        tiny_power = get_power(account_power.bias, account_power.slope, (timestamp - account_power.timestamp))
     end
+
+    return tiny_power
+end
+
+@public()
+func get_total_tiny_power() int:
+    int timestamp = Global.LatestTimestamp
+    int index = app_global_get(TOTAL_POWER_COUNT_KEY) - 1
+
+    TotalPower total_power = get_total_power(index)
+    # Ensure that the latest checkpoint belongs to the same week so the slope is not changed.
+    assert((total_power.timestamp / WEEK) == (timestamp / WEEK))
+
+    int tiny_power = get_power(total_power.bias, total_power.slope, (timestamp - total_power.timestamp))
+    return tiny_power
+end
+
+@public()
+func get_total_tiny_power_at(timestamp: int, total_power_index: int) int:
+    int tiny_power = 0
+    assert(total_power_index < app_global_get(TOTAL_POWER_COUNT_KEY))
+    assert(timestamp <= Global.LatestTimestamp)
+
+    TotalPower total_power = get_total_power(total_power_index)
+    # Ensure that the latest checkpoint belongs to the same week so the slope is not changed.
+    assert((total_power.timestamp / WEEK) == (timestamp / WEEK))
+
+    if total_power.timestamp <= timestamp:
+        if (total_power_index + 1) < app_global_get(TOTAL_POWER_COUNT_KEY):
+            TotalPower next_total_power = get_total_power(total_power_index + 1)
+            assert(timestamp < next_total_power.timestamp)
+        end
+
+        tiny_power = get_power(total_power.bias, total_power.slope, (timestamp - total_power.timestamp))
+    else:
+        # Index must be 0, it indicates that the given timestamp predates the first checkpoint.
+        assert(!total_power_index)
+    end
+
+    return tiny_power
+end
+
+@public()
+func get_account_cumulative_power_delta(user_address: bytes, timestamp_1: int, timestamp_2: int, account_power_index_1: int, account_power_index_2: int) bytes:
+    bytes account_cumulative_power_1 = get_cumulative_power_of_at(user_address, timestamp_1, account_power_index_1)
+    bytes account_cumulative_power_2 = get_cumulative_power_of_at(user_address, timestamp_2, account_power_index_2)
+    bytes cumulative_power_delta = account_cumulative_power_2 b- account_cumulative_power_1
+
+    return bzero(16) b| cumulative_power_delta
+end
+
+@public()
+func get_total_cumulative_power_delta(timestamp_1: int, timestamp_2: int, total_power_index_1: int, total_power_index_2: int) bytes:
+    bytes total_cumulative_power_1 = get_total_cumulative_power_at(timestamp_1, total_power_index_1)
+    bytes total_cumulative_power_2 = get_total_cumulative_power_at(timestamp_2, total_power_index_2)
+    bytes cumulative_power_delta = total_cumulative_power_2 b- total_cumulative_power_1
+
+    return bzero(16) b| cumulative_power_delta
+end
+
+@public()
+func get_box(box_name: bytes) int, bytes, bytes:
+    int exists
+    bytes data
+    exists, data = box_get(box_name)
+
+    return exists, extract(6, 2, itob(len(data))), data
+end
+
+@public()
+func delete_account_power_boxes(box_count: int):
+    bytes user_address = Txn.Sender
+
+    box<AccountState> account_state = Box(user_address)
+    int account_power_count = account_state.power_count
+    int deleted_account_power_count = account_state.deleted_power_count
+    int account_power_count_to_delete = box_count * ACCOUNT_POWER_BOX_ARRAY_LEN
+
+    # keep at least 1 account power to able to track cumulative power delta
+    assert(account_power_count > (deleted_account_power_count + account_power_count_to_delete))
+    account_state.deleted_power_count = deleted_account_power_count + account_power_count_to_delete
+
+    int box_index_start = deleted_account_power_count / ACCOUNT_POWER_BOX_ARRAY_LEN
+    int box_index_end = box_index_start + box_count
+
+    int min_balance_delta = 0
+    for i in box_index_start:box_index_end:
+        min_balance_delta = min_balance_delta + delete_box(Concat(user_address, itob(i)))
+    end
+    transfer(0, min_balance_delta, Global.CurrentApplicationAddress, user_address)
+
+    # address, box_index_start, box_count
+    log(Concat(method("delete_account_power_boxes(address,uint64,uint64)"), user_address, itob(box_index_start), itob(box_count)))
+    return
+end
+
+@public()
+func delete_account_state():
+    bytes user_address = Txn.Sender
+
+    box<AccountState> account_state = Box(user_address)
+    int account_power_count = account_state.power_count
+    # check the lock
+    assert(!account_state.locked_amount)
+    assert(!account_state.lock_end_time)
+
+    int deleted_account_power_count = account_state.deleted_power_count
+    int box_index = deleted_account_power_count / ACCOUNT_POWER_BOX_ARRAY_LEN
+    int box_count = 0
+
+    int min_balance_delta = 0
+    while account_power_count > deleted_account_power_count:
+        # delete account power
+        min_balance_delta = min_balance_delta + delete_box(Concat(user_address, itob(box_index)))
+
+        box_count = box_count + 1
+        box_index = box_index + 1
+        deleted_account_power_count = deleted_account_power_count + ACCOUNT_POWER_BOX_ARRAY_LEN
+    end
+
+    # delete account state
+    min_balance_delta = min_balance_delta + delete_box(user_address)
+    transfer(0, min_balance_delta, Global.CurrentApplicationAddress, user_address)
+
+    # address, box_index_start, box_count
+    log(Concat(method("delete_account_state(address,uint64,uint64)"), user_address, itob((box_index + 1) - box_count), itob(box_count)))
+    return
 end
 
 func construct_account_power(bias: int, timestamp: int, slope: bytes, cumulative_power: bytes) bytes:
@@ -569,6 +523,7 @@ func get_total_power(index: int) TotalPower:
     return Cast(box_extract(box_name, (array_index * TOTAL_POWER_SIZE), TOTAL_POWER_SIZE), TotalPower)
 end
 
+@public()
 func get_cumulative_power_of_at(user_address: bytes, timestamp: int, account_power_index: int) bytes:
     bytes cumulative_power
     assert(timestamp <= Global.LatestTimestamp)
@@ -608,6 +563,7 @@ func get_cumulative_power_of_at(user_address: bytes, timestamp: int, account_pow
     return cumulative_power
 end
 
+@public()
 func get_total_cumulative_power_at(timestamp: int, total_power_index: int) bytes:
     bytes total_cumulative_power
     assert(total_power_index < app_global_get(TOTAL_POWER_COUNT_KEY))
@@ -643,7 +599,7 @@ func get_total_cumulative_power_at(timestamp: int, total_power_index: int) bytes
     return total_cumulative_power
 end
 
-func create_checkpoints(account_bias_delta: int, account_slope_delta: bytes, has_account_event: int):
+func create_checkpoints_(account_bias_delta: int, account_slope_delta: bytes, has_account_event: int):
     # https://github.com/curvefi/curve-dao-contracts/blob/master/contracts/VotingEscrow.vy#L234
 
     TotalPower last_total_power = get_total_power(app_global_get(TOTAL_POWER_COUNT_KEY) - 1)

@@ -98,7 +98,7 @@ class ProposalVotingTestCase(VaultAppMixin, ProposalVotingAppMixin, BaseTestCase
                 global_schema=transaction.StateSchema(num_uints=16, num_byte_slices=16),
                 local_schema=transaction.StateSchema(num_uints=0, num_byte_slices=0),
                 extra_pages=3,
-                app_args=[VAULT_APP_ID],
+                app_args=["create_application", VAULT_APP_ID],
             )
         ])
         txn_group.sign_with_private_key(self.manager_address, self.manager_sk)
@@ -148,6 +148,7 @@ class ProposalVotingTestCase(VaultAppMixin, ProposalVotingAppMixin, BaseTestCase
             transaction.ApplicationUpdateTxn(
                 sender=self.manager_address,
                 index=PROPOSAL_VOTING_APP_ID,
+                app_args=["update_application"],
                 sp=self.sp,
                 approval_program=proposal_voting_clear_state_program.bytecode,
                 clear_program=proposal_voting_clear_state_program.bytecode,
@@ -1915,6 +1916,7 @@ class ProposalVotingTestCase(VaultAppMixin, ProposalVotingAppMixin, BaseTestCase
             sender=user_address,
             sp=self.sp,
             index=PROPOSAL_VOTING_APP_ID,
+            extra_app_args=[0],
         )
         txn_group = TransactionGroup([txn])
         txn_group.sign_with_private_key(user_address, user_sk)

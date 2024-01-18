@@ -61,7 +61,7 @@ class RewardsTestCase(VaultAppMixin, RewardsAppMixin, BaseTestCase):
                 global_schema=transaction.StateSchema(num_uints=5, num_byte_slices=2),
                 local_schema=transaction.StateSchema(num_uints=0, num_byte_slices=0),
                 extra_pages=3,
-                app_args=[TINY_ASSET_ID, VAULT_APP_ID],
+                app_args=["create_application", TINY_ASSET_ID, VAULT_APP_ID],
             )
         ])
         txn_group.sign_with_private_key(self.app_creator_address, self.app_creator_sk)
@@ -539,6 +539,7 @@ class RewardsTestCase(VaultAppMixin, RewardsAppMixin, BaseTestCase):
             sender=self.user_address,
             sp=self.sp,
             index=REWARDS_APP_ID,
+            extra_app_args=[0]
         )
         txn_group = TransactionGroup([txn])
         txn_group.sign_with_private_key(self.user_address, self.user_sk)

@@ -1,5 +1,5 @@
-#pragma version 8
-#tealish version git+https://github.com/Hipo/tealish.git@e8d1b27620220bc4e520d7d3b6d62523e13a7723
+#pragma version 9
+#tealish version git+https://github.com/Hipo/tealish.git@c4f8c12b36dbcc8b63844df5f818164925735087
 
 # Name: rp<box_index><array_index>
 # Size: 24 bytes
@@ -42,191 +42,172 @@ const int REWARD_HISTORY_BOX_SIZE = 256
 const int REWARD_HISTORY_BOX_ARRAY_LEN = 16
 
 
-if !Txn.ApplicationID:
-    jump create_app
+router:
+    create_application
+    update_application
+    claim_rewards
+    increase_budget
+    create_reward_period
+    set_reward_amount
+    get_box
+    set_manager
+    set_rewards_manager
+    init
 end
 
-switch Txn.OnCompletion:
-    NoOp: main
-    OptIn: fail
-    CloseOut: fail
-    UpdateApplication: update_app
-    DeleteApplication: fail
-end
-
-block fail:
-    exit(0)
-end
-
-block create_app:
-    app_global_put(TINY_ASSET_ID_KEY, btoi(Txn.ApplicationArgs[0]))
-    app_global_put(VAULT_APP_ID_KEY, btoi(Txn.ApplicationArgs[1]))
+@public(OnCompletion=CreateApplication)
+func create_application(tiny_asset_id: int, vault_app_id: int):
+    app_global_put(TINY_ASSET_ID_KEY, tiny_asset_id)
+    app_global_put(VAULT_APP_ID_KEY, vault_app_id)
     app_global_put(REWARD_PERIOD_COUNT_KEY, 0)
     app_global_put(REWARD_HISTORY_COUNT_KEY, 0)
     app_global_put(FIRST_PERIOD_TIMESTAMP, 0)
     app_global_put(MANAGER_KEY, Txn.Sender)
     app_global_put(REWARDS_MANAGER_KEY, Txn.Sender)
-    exit(1)
+    return
 end
 
-block update_app:
+@public(OnCompletion=UpdateApplication)
+func update_application():
     bytes user_address = Txn.Sender
     assert(user_address == app_global_get(MANAGER_KEY))
-    exit(1)
+    return
 end
 
-block main:
-    switch Txn.ApplicationArgs[0]:
-        "claim_rewards": claim_rewards
-        "increase_budget": increase_budget
-        "create_reward_period": create_reward_period
-        "set_reward_amount": set_reward_amount
-        "get_box": get_box
-        "set_manager": set_manager
-        "set_rewards_manager": set_rewards_manager
-        "init": init
-    end
-
-    block increase_budget:
-        # Box read budget and opcode budget will be incread using this method.
-        if Txn.NumAppArgs > 1:
-            int inner_app_call_count = btoi(Txn.ApplicationArgs[1])
-            for _ in 0:inner_app_call_count:
-                increase_budget()
-            end
+@public()
+func increase_budget(inner_app_call_count: int):
+    # Box read budget and opcode budget will be incread using this method.
+    for _ in 0:inner_app_call_count:
+        inner_txn:
+            TypeEnum: Appl
+            ApplicationID: app_global_get(VAULT_APP_ID_KEY)
+            ApplicationArgs[0]: "increase_budget"
+            Fee: 0
         end
-        exit(1)
+    end
+    return
+end
+
+@public()
+func create_reward_period(total_power_index_1: bytes, total_power_index_2: bytes, reward_amount_index: int):
+    int period_index = app_global_get(REWARD_PERIOD_COUNT_KEY)
+    int period_start_timestamp = get_period_start_timestamp(period_index)
+    int period_end_timestamp = period_start_timestamp + WEEK
+    assert(period_end_timestamp <= Global.LatestTimestamp)
+
+    bytes cumulative_power_delta = get_total_cumulative_power_delta(period_start_timestamp, period_end_timestamp, total_power_index_1, total_power_index_2)
+    int total_reward_amount = get_reward_amount(period_start_timestamp, reward_amount_index)
+
+    bytes reward_period = construct_reward_period(total_reward_amount, cumulative_power_delta)
+    save_reward_period(reward_period)
+    log(Concat(method("create_reward_period(uint64,uint64,uint128)"), itob(period_index), itob(total_reward_amount), cumulative_power_delta))
+    return
+end
+
+@public()
+func claim_rewards(period_index_start: int, period_count: int, account_power_indexes: bytes):
+    bytes user_address = Txn.Sender
+    assert(period_count)
+
+    int timestamp = get_period_start_timestamp(period_index_start)
+    int total_reward_amount = 0
+    bytes reward_amounts = ""
+
+    int period_index
+    int period_start_timestamp
+    int period_end_timestamp
+    bytes account_power_index_1
+    bytes account_power_index_2
+    int reward_amount
+    bytes account_cumulative_power_delta
+
+    for i in 0:period_count:
+        period_index = period_index_start + i
+        check_and_save_claimed_reward(user_address, period_index)
+
+        period_start_timestamp = timestamp + (i * WEEK)
+        period_end_timestamp = period_start_timestamp + WEEK
+
+        account_power_index_1 = extract3(account_power_indexes, (i * 8), 8)
+        account_power_index_2 = extract3(account_power_indexes, ((i + 1) * 8), 8)
+
+        account_cumulative_power_delta = get_account_cumulative_power_delta(user_address, period_start_timestamp, period_end_timestamp, account_power_index_1, account_power_index_2)
+
+        RewardPeriod reward_period = get_reward_period(period_index)
+        reward_amount = btoi((itob(reward_period.total_reward_amount) b* account_cumulative_power_delta) b/ reward_period.total_cumulative_power_delta)
+
+        reward_amounts = Concat(reward_amounts, itob(reward_amount))
+        total_reward_amount = total_reward_amount + reward_amount
     end
 
-    block create_reward_period:
-        bytes total_power_index_1 = Txn.ApplicationArgs[1]
-        bytes total_power_index_2 = Txn.ApplicationArgs[2]
-        int reward_amount_index = btoi(Txn.ApplicationArgs[3])
+    transfer(app_global_get(TINY_ASSET_ID_KEY), total_reward_amount, Global.CurrentApplicationAddress, user_address)
 
-        int period_index = app_global_get(REWARD_PERIOD_COUNT_KEY)
-        int period_start_timestamp = get_period_start_timestamp(period_index)
-        int period_end_timestamp = period_start_timestamp + WEEK
-        assert(period_end_timestamp <= Global.LatestTimestamp)
+    # claim_rewards(address, total_reward_amount, period_index_start, period_count, reward_amounts[])
+    log(Concat(method("claim_rewards(address,uint64,uint64,uint64,uint64[])"), user_address, itob(total_reward_amount), itob(period_index_start), itob(period_count), extract(6, 2, itob(period_count)), reward_amounts))
+    return
+end
 
-        bytes cumulative_power_delta = get_total_cumulative_power_delta(period_start_timestamp, period_end_timestamp, total_power_index_1, total_power_index_2)
-        int total_reward_amount = get_reward_amount(period_start_timestamp, reward_amount_index)
+@public()
+func init(reward_amount: int):
+    bytes user_address = Txn.Sender
+    assert(user_address == app_global_get(REWARDS_MANAGER_KEY))
+    assert(!app_global_get(REWARD_HISTORY_COUNT_KEY))
 
-        bytes reward_period = construct_reward_period(total_reward_amount, cumulative_power_delta)
-        save_reward_period(reward_period)
-        log(Concat(method("create_reward_period(uint64,uint64,uint128)"), itob(period_index), itob(total_reward_amount), cumulative_power_delta))
-        exit(1)
-    end
+    int first_period_timestamp = ((Global.LatestTimestamp / WEEK) * WEEK) + WEEK
+    app_global_put(FIRST_PERIOD_TIMESTAMP, first_period_timestamp)
 
-    block claim_rewards:
-        bytes user_address = Txn.Sender
+    bytes reward_history = construct_reward_history(first_period_timestamp, reward_amount)
+    save_reward_history(reward_history)
 
-        int period_index_start = btoi(Txn.ApplicationArgs[1])
-        int period_count = btoi(Txn.ApplicationArgs[2])
-        bytes account_power_indexes = Txn.ApplicationArgs[3]
-        assert(period_count)
+    # opt-in to TINY
+    transfer(app_global_get(TINY_ASSET_ID_KEY), 0, Global.CurrentApplicationAddress, Global.CurrentApplicationAddress)
+    log(Concat(method("init(uint64,uint64)"), itob(first_period_timestamp), itob(reward_amount)))
+    return
+end
 
-        int timestamp = get_period_start_timestamp(period_index_start)
-        int total_reward_amount = 0
-        bytes reward_amounts = ""
+@public()
+func set_reward_amount(reward_amount: int):
+    bytes user_address = Txn.Sender
+    assert(user_address == app_global_get(REWARDS_MANAGER_KEY))
 
-        int period_index
-        int period_start_timestamp
-        int period_end_timestamp
-        bytes account_power_index_1
-        bytes account_power_index_2
-        int reward_amount
-        bytes account_cumulative_power_delta
+    # Ensure that the app is initialized.
+    assert(app_global_get(REWARD_HISTORY_COUNT_KEY))
 
-        for i in 0:period_count:
-            period_index = period_index_start + i
-            check_and_save_claimed_reward(user_address, period_index)
+    bytes reward_history = construct_reward_history(Global.LatestTimestamp, reward_amount)
+    save_reward_history(reward_history)
+    log(Concat(method("set_reward_amount(uint64,uint64)"), itob(Global.LatestTimestamp), itob(reward_amount)))
+    return
+end
 
-            period_start_timestamp = timestamp + (i * WEEK)
-            period_end_timestamp = period_start_timestamp + WEEK
+@public()
+func set_manager(new_manager: bytes):
+    bytes user_address = Txn.Sender
+    assert(user_address == app_global_get(MANAGER_KEY))
 
-            account_power_index_1 = extract3(account_power_indexes, (i * 8), 8)
-            account_power_index_2 = extract3(account_power_indexes, ((i + 1) * 8), 8)
+    assert(len(new_manager) == 32)
+    app_global_put(MANAGER_KEY, new_manager)
+    log(Concat(method("set_manager(address)"), new_manager))
+    return
+end
 
-            account_cumulative_power_delta = get_account_cumulative_power_delta(user_address, period_start_timestamp, period_end_timestamp, account_power_index_1, account_power_index_2)
+@public()
+func set_rewards_manager(new_rewards_manager: bytes):
+    bytes user_address = Txn.Sender
+    assert(user_address == app_global_get(MANAGER_KEY))
 
-            RewardPeriod reward_period = get_reward_period(period_index)
-            reward_amount = btoi((itob(reward_period.total_reward_amount) b* account_cumulative_power_delta) b/ reward_period.total_cumulative_power_delta)
+    assert(len(new_rewards_manager) == 32)
+    app_global_put(REWARDS_MANAGER_KEY, new_rewards_manager)
+    log(Concat(method("set_rewards_manager(address)"), new_rewards_manager))
+    return
+end
 
-            reward_amounts = Concat(reward_amounts, itob(reward_amount))
-            total_reward_amount = total_reward_amount + reward_amount
-        end
+@public()
+func get_box(box_name: bytes) int, bytes, bytes:
+    int exists
+    bytes data
+    exists, data = box_get(box_name)
 
-        transfer(app_global_get(TINY_ASSET_ID_KEY), total_reward_amount, Global.CurrentApplicationAddress, user_address)
-
-        # claim_rewards(address, total_reward_amount, period_index_start, period_count, reward_amounts[])
-        log(Concat(method("claim_rewards(address,uint64,uint64,uint64,uint64[])"), user_address, itob(total_reward_amount), itob(period_index_start), itob(period_count), extract(6, 2, itob(period_count)), reward_amounts))
-        exit(1)
-    end
-
-    block init:
-        bytes user_address = Txn.Sender
-        assert(user_address == app_global_get(REWARDS_MANAGER_KEY))
-        assert(!app_global_get(REWARD_HISTORY_COUNT_KEY))
-
-        int first_period_timestamp = ((Global.LatestTimestamp / WEEK) * WEEK) + WEEK
-        app_global_put(FIRST_PERIOD_TIMESTAMP, first_period_timestamp)
-
-        int reward_amount = btoi(Txn.ApplicationArgs[1])
-        bytes reward_history = construct_reward_history(first_period_timestamp, reward_amount)
-        save_reward_history(reward_history)
-
-        # opt-in to TINY
-        transfer(app_global_get(TINY_ASSET_ID_KEY), 0, Global.CurrentApplicationAddress, Global.CurrentApplicationAddress)
-        log(Concat(method("init(uint64,uint64)"), itob(first_period_timestamp), itob(reward_amount)))
-        exit(1)
-    end
-
-    block set_reward_amount:
-        bytes user_address = Txn.Sender
-        assert(user_address == app_global_get(REWARDS_MANAGER_KEY))
-
-        # Ensure that the app is initialized.
-        assert(app_global_get(REWARD_HISTORY_COUNT_KEY))
-
-        int reward_amount = btoi(Txn.ApplicationArgs[1])
-        bytes reward_history = construct_reward_history(Global.LatestTimestamp, reward_amount)
-        save_reward_history(reward_history)
-        log(Concat(method("set_reward_amount(uint64,uint64)"), itob(Global.LatestTimestamp), itob(reward_amount)))
-        exit(1)
-    end
-
-    block set_manager:
-        bytes user_address = Txn.Sender
-        assert(user_address == app_global_get(MANAGER_KEY))
-
-        bytes new_manager = Txn.ApplicationArgs[1]
-        assert(len(new_manager) == 32)
-        app_global_put(MANAGER_KEY, new_manager)
-        log(Concat(method("set_manager(address)"), new_manager))
-        exit(1)
-    end
-
-    block set_rewards_manager:
-        bytes user_address = Txn.Sender
-        assert(user_address == app_global_get(MANAGER_KEY))
-
-        bytes new_rewards_manager = Txn.ApplicationArgs[1]
-        assert(len(new_rewards_manager) == 32)
-        app_global_put(REWARDS_MANAGER_KEY, new_rewards_manager)
-        log(Concat(method("set_rewards_manager(address)"), new_rewards_manager))
-        exit(1)
-    end
-
-    block get_box:
-        bytes box_name = Txn.ApplicationArgs[1]
-
-        int exists
-        bytes data
-        exists, data = box_get(box_name)
-
-        log(Concat(method("return"), itob(exists), extract(6, 2, itob(len(data))), data))
-        exit(1)
-    end
+    return exists, extract(6, 2, itob(len(data))), data
 end
 
 func construct_reward_period(amount: int, cumulative_power_delta: bytes) bytes:
@@ -347,16 +328,6 @@ func get_total_cumulative_power_delta(timestamp_1: int, timestamp_2: int, total_
 
     bytes cumulative_power_delta = extract(4, 16, Itxn.LastLog)
     return cumulative_power_delta
-end
-
-func increase_budget():
-    inner_txn:
-        TypeEnum: Appl
-        ApplicationID: app_global_get(VAULT_APP_ID_KEY)
-        ApplicationArgs[0]: "increase_budget"
-        Fee: 0
-    end
-    return
 end
 
 func transfer(asset_id: int, amount: int, sender: bytes, receiver: bytes):
