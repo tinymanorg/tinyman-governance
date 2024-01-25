@@ -68,7 +68,6 @@ router:
     cancel_proposal
     execute_proposal
     get_box
-    get_proposal_state
     set_manager
     set_proposal_manager
     set_voting_delay
@@ -371,14 +370,33 @@ func disable_approval_requirement():
 end
 
 @public()
-func get_proposal(proposal_id: bytes) bytes:
+func get_proposal(proposal_id: bytes) bytes, int:
     bytes proposal_box_name = Concat(PROPOSAL_BOX_PREFIX, proposal_id)
     int exists
     bytes proposal_data
     exists, proposal_data = box_get(proposal_box_name)
     assert(exists)
 
-    return proposal_data
+    Proposal proposal = Cast(proposal_data, Proposal)
+
+    int state
+    if proposal.is_cancelled == BYTES_TRUE:
+        state = PROPOSAL_STATE_CANCELLED
+    elif proposal.is_executed == BYTES_TRUE:
+        state = PROPOSAL_STATE_EXECUTED
+    elif !proposal.voting_start_timestamp:
+        state = PROPOSAL_STATE_WAITING_FOR_APPROVAL
+    elif Global.LatestTimestamp < proposal.voting_start_timestamp:
+        state = PROPOSAL_STATE_PENDING
+    elif Global.LatestTimestamp < proposal.voting_end_timestamp:
+        state = PROPOSAL_STATE_ACTIVE
+    elif (proposal.is_quorum_reached == BYTES_FALSE) || (proposal.for_voting_power <= proposal.against_voting_power):
+        state = PROPOSAL_STATE_DEFEATED
+    else:
+        state = PROPOSAL_STATE_SUCCEEDED
+    end
+
+    return proposal_data, state
 end
 
 @public()
@@ -410,31 +428,6 @@ func get_box(box_name: bytes) int, bytes, bytes:
     exists, data = box_get(box_name)
 
     return exists, extract(6, 2, itob(len(data))), data
-end
-
-@public()
-func get_proposal_state(proposal_id: bytes) int:
-    bytes proposal_box_name = Concat(PROPOSAL_BOX_PREFIX, proposal_id)
-    box<Proposal> proposal = OpenBox(proposal_box_name)
-
-    int state
-    if proposal.is_cancelled == BYTES_TRUE:
-        state = PROPOSAL_STATE_CANCELLED
-    elif proposal.is_executed == BYTES_TRUE:
-        state = PROPOSAL_STATE_EXECUTED
-    elif !proposal.voting_start_timestamp:
-        state = PROPOSAL_STATE_WAITING_FOR_APPROVAL
-    elif Global.LatestTimestamp < proposal.voting_start_timestamp:
-        state = PROPOSAL_STATE_PENDING
-    elif Global.LatestTimestamp < proposal.voting_end_timestamp:
-        state = PROPOSAL_STATE_ACTIVE
-    elif (proposal.is_quorum_reached == BYTES_FALSE) || (proposal.for_voting_power <= proposal.against_voting_power):
-        state = PROPOSAL_STATE_DEFEATED
-    else:
-        state = PROPOSAL_STATE_SUCCEEDED
-    end
-
-    return state
 end
 
 func check_and_set_user_as_voted(address: bytes, proposal_index: int):
