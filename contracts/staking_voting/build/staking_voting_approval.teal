@@ -26,795 +26,743 @@
 #define PROPOSAL_ASSET_BOX_SIZE 8
 #define ACCOUNT_ATTENDANCE_SHEET_BOX_SIZE 24
 
-// tl:38: if !Txn.ApplicationID:
-txn ApplicationID
-!
-bz l0_end
-// then:
-    // tl:39: jump create_app
-    b create_app
-l0_end:
 
-// tl:42: switch Txn.OnCompletion:
-txn OnCompletion
-pushint 0                                                   // NoOp
-==
-bnz main
-txn OnCompletion
-pushint 1                                                   // OptIn
-==
-bnz fail
-txn OnCompletion
-pushint 2                                                   // CloseOut
-==
-bnz fail
-txn OnCompletion
-pushint 4                                                   // UpdateApplication
-==
-bnz update_app
-txn OnCompletion
-pushint 5                                                   // DeleteApplication
-==
-bnz fail
+// tl:39: router:
+pushbytes "create_application"
+pushbytes "update_application"
+pushbytes "increase_budget"
+pushbytes "cast_vote"
+pushbytes "create_proposal"
+pushbytes "cancel_proposal"
+pushbytes "get_box"
+pushbytes "set_manager"
+pushbytes "set_proposal_manager"
+pushbytes "set_voting_delay"
+pushbytes "set_voting_duration"
+txna ApplicationArgs 0
+match route_create_application route_update_application route_increase_budget route_cast_vote route_create_proposal route_cancel_proposal route_get_box route_set_manager route_set_proposal_manager route_set_voting_delay route_set_voting_duration
 err                                                         // unexpected value
+route_create_application:
+    txn ApplicationID; pushint 0; ==; assert                // ApplicationID == 0
+    txna ApplicationArgs 1; btoi 
+    callsub __func__create_application
+    pushint 1; return
+route_update_application:
+    txn OnCompletion; pushint 4; ==; assert;                // assert OnCompletion == UpdateApplication
+    callsub __func__update_application
+    pushint 1; return
+route_increase_budget:
+    txn OnCompletion; pushint 0; ==; assert;                // assert OnCompletion == NoOp
+    txna ApplicationArgs 1; btoi 
+    callsub __func__increase_budget
+    pushint 1; return
+route_cast_vote:
+    txn OnCompletion; pushint 0; ==; assert;                // assert OnCompletion == NoOp
+    txna ApplicationArgs 1
+    txna ApplicationArgs 2
+    txna ApplicationArgs 3
+    txna ApplicationArgs 4
+    callsub __func__cast_vote
+    pushint 1; return
+route_create_proposal:
+    txn OnCompletion; pushint 0; ==; assert;                // assert OnCompletion == NoOp
+    txna ApplicationArgs 1; dup; len; pushint 59; ==; assert; 
+    callsub __func__create_proposal
+    pushint 1; return
+route_cancel_proposal:
+    txn OnCompletion; pushint 0; ==; assert;                // assert OnCompletion == NoOp
+    txna ApplicationArgs 1
+    callsub __func__cancel_proposal
+    pushint 1; return
+route_get_box:
+    txn OnCompletion; pushint 0; ==; assert;                // assert OnCompletion == NoOp
+    txna ApplicationArgs 1
+    callsub __func__get_box
+    // return int, bytes, bytes
+    // uncover 0 int
+    itob
+    uncover 1                                               // bytes
+    uncover 2                                               // bytes
+    concat
+    concat
+    pushbytes 0x151f7c75; swap; concat; log;                // arc4 return log
+    pushint 1; return
+route_set_manager:
+    txn OnCompletion; pushint 0; ==; assert;                // assert OnCompletion == NoOp
+    txna ApplicationArgs 1; dup; len; pushint 32; ==; assert; 
+    callsub __func__set_manager
+    pushint 1; return
+route_set_proposal_manager:
+    txn OnCompletion; pushint 0; ==; assert;                // assert OnCompletion == NoOp
+    txna ApplicationArgs 1; dup; len; pushint 32; ==; assert; 
+    callsub __func__set_proposal_manager
+    pushint 1; return
+route_set_voting_delay:
+    txn OnCompletion; pushint 0; ==; assert;                // assert OnCompletion == NoOp
+    txna ApplicationArgs 1; btoi 
+    callsub __func__set_voting_delay
+    pushint 1; return
+route_set_voting_duration:
+    txn OnCompletion; pushint 0; ==; assert;                // assert OnCompletion == NoOp
+    txna ApplicationArgs 1; btoi 
+    callsub __func__set_voting_duration
+    pushint 1; return
 
-// block fail
-fail:
-    // tl:51: exit(0)
-    pushint 0
-    return
 
-// block create_app
-create_app:
-    // tl:55: app_global_put(VAULT_APP_ID_KEY, btoi(Txn.ApplicationArgs[0]))
+// tl:55: func create_application(vault_app_id: int):
+__func__create_application:
+    store 1                                                 // vault_app_id [int]
+    // tl:56: app_global_put(VAULT_APP_ID_KEY, btoi(Txn.ApplicationArgs[0]))
     pushbytes VAULT_APP_ID_KEY                              // "vault_app_id"
     txna ApplicationArgs 0
     btoi
     app_global_put
-    // tl:56: app_global_put(PROPOSAL_INDEX_COUNTER_KEY, 0)
+    // tl:57: app_global_put(PROPOSAL_INDEX_COUNTER_KEY, 0)
     pushbytes PROPOSAL_INDEX_COUNTER_KEY                    // "proposal_index_counter"
     pushint 0
     app_global_put
     
-    // tl:58: app_global_put(VOTING_DELAY_KEY, 2)
+    // tl:59: app_global_put(VOTING_DELAY_KEY, 2)
     pushbytes VOTING_DELAY_KEY                              // "voting_delay"
     pushint 2
     app_global_put
-    // tl:59: app_global_put(VOTING_DURATION_KEY, 7)
+    // tl:60: app_global_put(VOTING_DURATION_KEY, 7)
     pushbytes VOTING_DURATION_KEY                           // "voting_duration"
     pushint 7
     app_global_put
     
-    // tl:61: app_global_put(MANAGER_KEY, Txn.Sender)
+    // tl:62: app_global_put(MANAGER_KEY, Txn.Sender)
     pushbytes MANAGER_KEY                                   // "manager"
     txn Sender
     app_global_put
-    // tl:62: app_global_put(PROPOSAL_MANAGER_KEY, Txn.Sender)
+    // tl:63: app_global_put(PROPOSAL_MANAGER_KEY, Txn.Sender)
     pushbytes PROPOSAL_MANAGER_KEY                          // "proposal_manager"
     txn Sender
     app_global_put
-    // tl:63: exit(1)
-    pushint 1
-    return
+    // tl:64: return
+    retsub
 
-// block update_app
-update_app:
-    // tl:67: bytes user_address = Txn.Sender [slot 0]
+// tl:68: func update_application():
+__func__update_application:
+    // tl:69: bytes user_address = Txn.Sender [slot 2]
     txn Sender
-    store 0                                                 // user_address
-    // tl:68: assert(user_address == app_global_get(MANAGER_KEY))
-    load 0                                                  // user_address
+    store 2                                                 // user_address
+    // tl:70: assert(user_address == app_global_get(MANAGER_KEY))
+    load 2                                                  // user_address
     pushbytes MANAGER_KEY                                   // "manager"
     app_global_get
     ==
     assert
-    // tl:69: exit(1)
+    // tl:71: return
+    retsub
+
+// tl:75: func create_proposal(proposal_id: bytes[59]):
+__func__create_proposal:
+    store 3                                                 // proposal_id [bytes[59]]
+    // tl:76: bytes user_address = Txn.Sender [slot 4]
+    txn Sender
+    store 4                                                 // user_address
+    // tl:77: assert(user_address == app_global_get(PROPOSAL_MANAGER_KEY))
+    load 4                                                  // user_address
+    pushbytes PROPOSAL_MANAGER_KEY                          // "proposal_manager"
+    app_global_get
+    ==
+    assert
+    
+    // proposal id will be calculated off-chain. it is base32 string representation of CID (base32 - cidv1 - raw - (sha2-256 : 256 : <metadata>))
+    // tl:80: bytes proposal_box_name = Concat(PROPOSAL_BOX_PREFIX, proposal_id) [slot 5]
+    pushbytes PROPOSAL_BOX_PREFIX                           // "p"
+    load 3                                                  // proposal_id
+    concat
+    store 5                                                 // proposal_box_name
+    
+    // tl:82: int voting_start_timestamp = get_voting_start_timestamp() [slot 6]
+    callsub __func__get_voting_start_timestamp
+    store 6                                                 // voting_start_timestamp
+    // tl:83: int voting_end_timestamp = voting_start_timestamp + (app_global_get(VOTING_DURATION_KEY) * DAY) [slot 7]
+    load 6                                                  // voting_start_timestamp
+    pushbytes VOTING_DURATION_KEY                           // "voting_duration"
+    app_global_get
+    pushint DAY                                             // 86400
+    *
+    +
+    store 7                                                 // voting_end_timestamp
+    
+    // tl:85: box<Proposal> proposal = CreateBox(proposal_box_name) [slot 8]
+    load 5                                                  // proposal_box_name
+    dup; pushint 49; box_create; assert                     // create & assert created
+    store 8                                                 // box:proposal
+    // tl:86: proposal.index = app_global_get(PROPOSAL_INDEX_COUNTER_KEY)
+    pushbytes PROPOSAL_INDEX_COUNTER_KEY                    // "proposal_index_counter"
+    app_global_get
+    itob; load 8; pushint 0; uncover 2; box_replace;        // boxset proposal.index
+    // tl:87: proposal.creation_timestamp = Global.LatestTimestamp
+    global LatestTimestamp
+    itob; load 8; pushint 8; uncover 2; box_replace;        // boxset proposal.creation_timestamp
+    // tl:88: proposal.voting_start_timestamp = voting_start_timestamp
+    load 6                                                  // voting_start_timestamp
+    itob; load 8; pushint 16; uncover 2; box_replace;       // boxset proposal.voting_start_timestamp
+    // tl:89: proposal.voting_end_timestamp = voting_end_timestamp
+    load 7                                                  // voting_end_timestamp
+    itob; load 8; pushint 24; uncover 2; box_replace;       // boxset proposal.voting_end_timestamp
+    // tl:90: app_global_put(PROPOSAL_INDEX_COUNTER_KEY, app_global_get(PROPOSAL_INDEX_COUNTER_KEY) + 1)
+    pushbytes PROPOSAL_INDEX_COUNTER_KEY                    // "proposal_index_counter"
+    pushbytes PROPOSAL_INDEX_COUNTER_KEY                    // "proposal_index_counter"
+    app_global_get
     pushint 1
-    return
+    +
+    app_global_put
+    
+    // tl:92: bytes proposal_data [slot 9]
+    // tl:93: _, proposal_data = box_get(proposal_box_name)
+    load 5                                                  // proposal_box_name
+    box_get
+    pop                                                     // discarding value for _
+    store 9                                                 // proposal_data
+    // tl:94: log(Concat(method("proposal(byte[59],uint64,uint64,uint64,uint64,uint64,uint64,bool)"), proposal_id, proposal_data))
+    method "proposal(byte[59],uint64,uint64,uint64,uint64,uint64,uint64,bool)"
+    load 3                                                  // proposal_id
+    load 9                                                  // proposal_data
+    concat
+    concat
+    log
+    // tl:95: log(Concat(method("create_proposal(address,byte[59])"), user_address, proposal_id))
+    method "create_proposal(address,byte[59])"
+    load 4                                                  // user_address
+    load 3                                                  // proposal_id
+    concat
+    concat
+    log
+    // tl:96: return
+    retsub
 
-// block main
-main:
-    // tl:73: switch Txn.ApplicationArgs[0]:
-    txna ApplicationArgs 0
-    pushbytes "increase_budget"
+// tl:100: func cancel_proposal(proposal_id: bytes):
+__func__cancel_proposal:
+    store 10                                                // proposal_id [bytes]
+    // tl:101: bytes user_address = Txn.Sender [slot 11]
+    txn Sender
+    store 11                                                // user_address
+    // tl:102: assert(user_address == app_global_get(PROPOSAL_MANAGER_KEY))
+    load 11                                                 // user_address
+    pushbytes PROPOSAL_MANAGER_KEY                          // "proposal_manager"
+    app_global_get
     ==
-    bnz main__increase_budget
-    txna ApplicationArgs 0
-    pushbytes "cast_vote"
-    ==
-    bnz main__cast_vote
-    txna ApplicationArgs 0
-    pushbytes "create_proposal"
-    ==
-    bnz main__create_proposal
-    txna ApplicationArgs 0
-    pushbytes "cancel_proposal"
-    ==
-    bnz main__cancel_proposal
-    txna ApplicationArgs 0
-    pushbytes "get_box"
-    ==
-    bnz main__get_box
-    txna ApplicationArgs 0
-    pushbytes "set_manager"
-    ==
-    bnz main__set_manager
-    txna ApplicationArgs 0
-    pushbytes "set_proposal_manager"
-    ==
-    bnz main__set_proposal_manager
-    txna ApplicationArgs 0
-    pushbytes "set_voting_delay"
-    ==
-    bnz main__set_voting_delay
-    txna ApplicationArgs 0
-    pushbytes "set_voting_duration"
-    ==
-    bnz main__set_voting_duration
-    err                                                     // unexpected value
+    assert
     
-    // block create_proposal
-    main__create_proposal:
-        // tl:86: bytes user_address = Txn.Sender [slot 0]
-        txn Sender
-        store 0                                             // user_address
-        // tl:87: assert(user_address == app_global_get(PROPOSAL_MANAGER_KEY))
-        load 0                                              // user_address
-        pushbytes PROPOSAL_MANAGER_KEY                      // "proposal_manager"
-        app_global_get
-        ==
-        assert
-        
-        // proposal id will be calculated off-chain. it is base32 string representation of CID (base32 - cidv1 - raw - (sha2-256 : 256 : <metadata>))
-        // tl:90: bytes proposal_id = Txn.ApplicationArgs[1] [slot 1]
-        txna ApplicationArgs 1
-        store 1                                             // proposal_id
-        // tl:91: assert(len(proposal_id) == 59)
-        load 1                                              // proposal_id
-        len
-        pushint 59
-        ==
-        assert
-        // tl:92: bytes proposal_box_name = Concat(PROPOSAL_BOX_PREFIX, proposal_id) [slot 2]
-        pushbytes PROPOSAL_BOX_PREFIX                       // "p"
-        load 1                                              // proposal_id
-        concat
-        store 2                                             // proposal_box_name
-        
-        // tl:94: int voting_start_timestamp = get_voting_start_timestamp() [slot 3]
-        callsub __func__get_voting_start_timestamp
-        store 3                                             // voting_start_timestamp
-        // tl:95: int voting_end_timestamp = voting_start_timestamp + (app_global_get(VOTING_DURATION_KEY) * DAY) [slot 4]
-        load 3                                              // voting_start_timestamp
-        pushbytes VOTING_DURATION_KEY                       // "voting_duration"
-        app_global_get
-        pushint DAY                                         // 86400
-        *
-        +
-        store 4                                             // voting_end_timestamp
-        
-        // tl:97: box<Proposal> proposal = CreateBox(proposal_box_name) [slot 5]
-        load 2                                              // proposal_box_name
-        dup; pushint 49; box_create; assert                 // create & assert created
-        store 5                                             // box:proposal
-        // tl:98: proposal.index = app_global_get(PROPOSAL_INDEX_COUNTER_KEY)
-        pushbytes PROPOSAL_INDEX_COUNTER_KEY                // "proposal_index_counter"
-        app_global_get
-        itob; load 5; pushint 0; uncover 2; box_replace;    // boxset proposal.index
-        // tl:99: proposal.creation_timestamp = Global.LatestTimestamp
-        global LatestTimestamp
-        itob; load 5; pushint 8; uncover 2; box_replace;    // boxset proposal.creation_timestamp
-        // tl:100: proposal.voting_start_timestamp = voting_start_timestamp
-        load 3                                              // voting_start_timestamp
-        itob; load 5; pushint 16; uncover 2; box_replace;   // boxset proposal.voting_start_timestamp
-        // tl:101: proposal.voting_end_timestamp = voting_end_timestamp
-        load 4                                              // voting_end_timestamp
-        itob; load 5; pushint 24; uncover 2; box_replace;   // boxset proposal.voting_end_timestamp
-        // tl:102: app_global_put(PROPOSAL_INDEX_COUNTER_KEY, app_global_get(PROPOSAL_INDEX_COUNTER_KEY) + 1)
-        pushbytes PROPOSAL_INDEX_COUNTER_KEY                // "proposal_index_counter"
-        pushbytes PROPOSAL_INDEX_COUNTER_KEY                // "proposal_index_counter"
-        app_global_get
-        pushint 1
-        +
-        app_global_put
-        
-        // tl:104: bytes proposal_data [slot 6]
-        // tl:105: _, proposal_data = box_get(proposal_box_name)
-        load 2                                              // proposal_box_name
-        box_get
-        pop                                                 // discarding value for _
-        store 6                                             // proposal_data
-        // tl:106: log(Concat(method("proposal(byte[59],uint64,uint64,uint64,uint64,uint64,uint64,bool)"), proposal_id, proposal_data))
-        method "proposal(byte[59],uint64,uint64,uint64,uint64,uint64,uint64,bool)"
-        load 1                                              // proposal_id
-        load 6                                              // proposal_data
-        concat
-        concat
-        log
-        // tl:107: log(Concat(method("create_proposal(address,byte[59])"), user_address, proposal_id))
-        method "create_proposal(address,byte[59])"
-        load 0                                              // user_address
-        load 1                                              // proposal_id
-        concat
-        concat
-        log
-        // tl:108: exit(1)
-        pushint 1
-        return
+    // tl:104: bytes proposal_box_name = Concat(PROPOSAL_BOX_PREFIX, proposal_id) [slot 12]
+    pushbytes PROPOSAL_BOX_PREFIX                           // "p"
+    load 10                                                 // proposal_id
+    concat
+    store 12                                                // proposal_box_name
+    // tl:105: box<Proposal> proposal = OpenBox(proposal_box_name) [slot 13]
+    load 12                                                 // proposal_box_name
+    dup; box_len; assert; pushint 49; ==; assert            // len(box) == Proposal.size
+    store 13                                                // box:proposal
     
-    // block cancel_proposal
-    main__cancel_proposal:
-        // tl:112: bytes user_address = Txn.Sender [slot 0]
-        txn Sender
-        store 0                                             // user_address
-        // tl:113: assert(user_address == app_global_get(PROPOSAL_MANAGER_KEY))
-        load 0                                              // user_address
-        pushbytes PROPOSAL_MANAGER_KEY                      // "proposal_manager"
-        app_global_get
-        ==
-        assert
-        
-        // tl:115: bytes proposal_id = Txn.ApplicationArgs[1] [slot 1]
-        txna ApplicationArgs 1
-        store 1                                             // proposal_id
-        // tl:116: bytes proposal_box_name = Concat(PROPOSAL_BOX_PREFIX, proposal_id) [slot 2]
-        pushbytes PROPOSAL_BOX_PREFIX                       // "p"
-        load 1                                              // proposal_id
-        concat
-        store 2                                             // proposal_box_name
-        // tl:117: box<Proposal> proposal = OpenBox(proposal_box_name) [slot 3]
-        load 2                                              // proposal_box_name
-        dup; box_len; assert; pushint 49; ==; assert        // len(box) == Proposal.size
-        store 3                                             // box:proposal
-        
-        // tl:119: assert(Global.LatestTimestamp < proposal.voting_end_timestamp)
-        global LatestTimestamp
-        load 3; pushint 24; pushint 8; box_extract; btoi;   // proposal.voting_end_timestamp
-        <
-        assert
-        // tl:120: assert(proposal.is_cancelled == BYTES_FALSE)
-        load 3; pushint 48; pushint 1; box_extract;         // proposal.is_cancelled
-        pushbytes BYTES_FALSE                               // "\x00"
-        ==
-        assert
-        // tl:121: proposal.is_cancelled = BYTES_TRUE
-        pushbytes BYTES_TRUE                                // "\x80"
-        load 3; pushint 48; uncover 2; box_replace;         // boxset proposal.is_cancelled
-        
-        // tl:123: bytes proposal_data [slot 4]
-        // tl:124: _, proposal_data = box_get(proposal_box_name)
-        load 2                                              // proposal_box_name
-        box_get
-        pop                                                 // discarding value for _
-        store 4                                             // proposal_data
-        // tl:125: log(Concat(method("proposal(byte[59],uint64,uint64,uint64,uint64,uint64,uint64,bool)"), proposal_id, proposal_data))
-        method "proposal(byte[59],uint64,uint64,uint64,uint64,uint64,uint64,bool)"
-        load 1                                              // proposal_id
-        load 4                                              // proposal_data
-        concat
-        concat
-        log
-        // tl:126: log(Concat(method("cancel_proposal(address,byte[59])"), user_address, proposal_id))
-        method "cancel_proposal(address,byte[59])"
-        load 0                                              // user_address
-        load 1                                              // proposal_id
-        concat
-        concat
-        log
-        // tl:127: exit(1)
-        pushint 1
-        return
+    // tl:107: assert(Global.LatestTimestamp < proposal.voting_end_timestamp)
+    global LatestTimestamp
+    load 13; pushint 24; pushint 8; box_extract; btoi;      // proposal.voting_end_timestamp
+    <
+    assert
+    // tl:108: assert(proposal.is_cancelled == BYTES_FALSE)
+    load 13; pushint 48; pushint 1; box_extract;            // proposal.is_cancelled
+    pushbytes BYTES_FALSE                                   // "\x00"
+    ==
+    assert
+    // tl:109: proposal.is_cancelled = BYTES_TRUE
+    pushbytes BYTES_TRUE                                    // "\x80"
+    load 13; pushint 48; uncover 2; box_replace;            // boxset proposal.is_cancelled
     
-    // block cast_vote
-    main__cast_vote:
-        // tl:131: bytes user_address = Txn.Sender [slot 0]
-        txn Sender
-        store 0                                             // user_address
-        // tl:132: bytes proposal_id = Txn.ApplicationArgs[1] [slot 1]
-        txna ApplicationArgs 1
-        store 1                                             // proposal_id
-        // tl:133: bytes votes_as_percentage = Txn.ApplicationArgs[2] [slot 2]
-        txna ApplicationArgs 2
-        store 2                                             // votes_as_percentage
-        // tl:134: bytes asset_ids = Txn.ApplicationArgs[3] [slot 3]
-        txna ApplicationArgs 3
-        store 3                                             // asset_ids
-        // tl:135: bytes account_power_index = Txn.ApplicationArgs[4] [slot 4]
-        txna ApplicationArgs 4
-        store 4                                             // account_power_index
-        
-        // tl:137: bytes proposal_box_name = Concat(PROPOSAL_BOX_PREFIX, proposal_id) [slot 5]
-        pushbytes PROPOSAL_BOX_PREFIX                       // "p"
-        load 1                                              // proposal_id
-        concat
-        store 5                                             // proposal_box_name
-        // tl:138: box<Proposal> proposal = OpenBox(proposal_box_name) [slot 6]
-        load 5                                              // proposal_box_name
-        dup; box_len; assert; pushint 49; ==; assert        // len(box) == Proposal.size
-        store 6                                             // box:proposal
-        
-        // Proposal Active
-        // proposal.voting_start_timestamp <= Global.LatestTimestamp < proposal.voting_end_timestamp
-        // tl:142: assert(proposal.voting_start_timestamp <= Global.LatestTimestamp)
-        load 6; pushint 16; pushint 8; box_extract; btoi;   // proposal.voting_start_timestamp
-        global LatestTimestamp
-        <=
-        assert
-        // tl:143: assert(Global.LatestTimestamp < proposal.voting_end_timestamp)
-        global LatestTimestamp
-        load 6; pushint 24; pushint 8; box_extract; btoi;   // proposal.voting_end_timestamp
-        <
-        assert
-        // tl:144: assert(proposal.is_cancelled == BYTES_FALSE)
-        load 6; pushint 48; pushint 1; box_extract;         // proposal.is_cancelled
-        pushbytes BYTES_FALSE                               // "\x00"
-        ==
-        assert
-        
-        // vote count and asset count must be equal
-        // tl:147: assert(len(votes_as_percentage))
-        load 2                                              // votes_as_percentage
-        len
-        assert
-        // tl:148: assert(len(asset_ids) == len(votes_as_percentage))
-        load 3                                              // asset_ids
-        len
-        load 2                                              // votes_as_percentage
-        len
-        ==
-        assert
-        // tl:149: assert(!(len(votes_as_percentage) % 8))
-        load 2                                              // votes_as_percentage
-        len
-        pushint 8
-        %
-        !
-        assert
-        // tl:150: int option_count = len(votes_as_percentage) / 8 [slot 7]
-        load 2                                              // votes_as_percentage
-        len
-        pushint 8
-        /
-        store 7                                             // option_count
-        // tl:151: assert(option_count <= MAX_OPTION_COUNT)
-        load 7                                              // option_count
-        pushint MAX_OPTION_COUNT                            // 16
-        <=
-        assert
-        
-        // tl:153: int proposal_index = proposal.index [slot 8]
-        load 6; pushint 0; pushint 8; box_extract; btoi;    // proposal.index
-        store 8                                             // proposal_index
-        // tl:154: check_and_set_user_as_voted(user_address, proposal_index)
-        load 0                                              // user_address
-        load 8                                              // proposal_index
-        callsub __func__check_and_set_user_as_voted
-        
-        // tl:156: int account_voting_power = get_account_voting_power_at(user_address, proposal.creation_timestamp, account_power_index) [slot 9]
-        load 0                                              // user_address
-        load 6; pushint 8; pushint 8; box_extract; btoi;    // proposal.creation_timestamp
-        load 4                                              // account_power_index
-        callsub __func__get_account_voting_power_at
-        store 9                                             // account_voting_power
-        // tl:157: assert(account_voting_power)
-        load 9                                              // account_voting_power
-        assert
-        
-        // Update proposal
-        // tl:160: proposal.vote_count = proposal.vote_count + 1
-        load 6; pushint 40; pushint 8; box_extract; btoi;   // proposal.vote_count
-        pushint 1
-        +
-        itob; load 6; pushint 40; uncover 2; box_replace;   // boxset proposal.vote_count
-        // tl:161: proposal.voting_power = proposal.voting_power + account_voting_power
-        load 6; pushint 32; pushint 8; box_extract; btoi;   // proposal.voting_power
-        load 9                                              // account_voting_power
-        +
-        itob; load 6; pushint 32; uncover 2; box_replace;   // boxset proposal.voting_power
-        
-        // tl:163: int option_vote_amount [slot 10]
-        // tl:164: int asset_id [slot 11]
-        // tl:165: int total_percentage = 0 [slot 12]
+    // tl:111: bytes proposal_data [slot 14]
+    // tl:112: _, proposal_data = box_get(proposal_box_name)
+    load 12                                                 // proposal_box_name
+    box_get
+    pop                                                     // discarding value for _
+    store 14                                                // proposal_data
+    // tl:113: log(Concat(method("proposal(byte[59],uint64,uint64,uint64,uint64,uint64,uint64,bool)"), proposal_id, proposal_data))
+    method "proposal(byte[59],uint64,uint64,uint64,uint64,uint64,uint64,bool)"
+    load 10                                                 // proposal_id
+    load 14                                                 // proposal_data
+    concat
+    concat
+    log
+    // tl:114: log(Concat(method("cancel_proposal(address,byte[59])"), user_address, proposal_id))
+    method "cancel_proposal(address,byte[59])"
+    load 11                                                 // user_address
+    load 10                                                 // proposal_id
+    concat
+    concat
+    log
+    // tl:115: return
+    retsub
+
+// tl:119: func cast_vote(proposal_id: bytes, votes_as_percentage: bytes, asset_ids: bytes, account_power_index: bytes):
+__func__cast_vote:
+    store 15                                                // account_power_index [bytes]
+    store 16                                                // asset_ids [bytes]
+    store 17                                                // votes_as_percentage [bytes]
+    store 18                                                // proposal_id [bytes]
+    // tl:120: bytes user_address = Txn.Sender [slot 19]
+    txn Sender
+    store 19                                                // user_address
+    // tl:121: bytes proposal_box_name = Concat(PROPOSAL_BOX_PREFIX, proposal_id) [slot 20]
+    pushbytes PROPOSAL_BOX_PREFIX                           // "p"
+    load 18                                                 // proposal_id
+    concat
+    store 20                                                // proposal_box_name
+    // tl:122: box<Proposal> proposal = OpenBox(proposal_box_name) [slot 21]
+    load 20                                                 // proposal_box_name
+    dup; box_len; assert; pushint 49; ==; assert            // len(box) == Proposal.size
+    store 21                                                // box:proposal
+    
+    // Proposal Active
+    // proposal.voting_start_timestamp <= Global.LatestTimestamp < proposal.voting_end_timestamp
+    // tl:126: assert(proposal.voting_start_timestamp <= Global.LatestTimestamp)
+    load 21; pushint 16; pushint 8; box_extract; btoi;      // proposal.voting_start_timestamp
+    global LatestTimestamp
+    <=
+    assert
+    // tl:127: assert(Global.LatestTimestamp < proposal.voting_end_timestamp)
+    global LatestTimestamp
+    load 21; pushint 24; pushint 8; box_extract; btoi;      // proposal.voting_end_timestamp
+    <
+    assert
+    // tl:128: assert(proposal.is_cancelled == BYTES_FALSE)
+    load 21; pushint 48; pushint 1; box_extract;            // proposal.is_cancelled
+    pushbytes BYTES_FALSE                                   // "\x00"
+    ==
+    assert
+    
+    // vote count and asset count must be equal
+    // tl:131: assert(len(votes_as_percentage))
+    load 17                                                 // votes_as_percentage
+    len
+    assert
+    // tl:132: assert(len(asset_ids) == len(votes_as_percentage))
+    load 16                                                 // asset_ids
+    len
+    load 17                                                 // votes_as_percentage
+    len
+    ==
+    assert
+    // tl:133: assert(!(len(votes_as_percentage) % 8))
+    load 17                                                 // votes_as_percentage
+    len
+    pushint 8
+    %
+    !
+    assert
+    // tl:134: int option_count = len(votes_as_percentage) / 8 [slot 22]
+    load 17                                                 // votes_as_percentage
+    len
+    pushint 8
+    /
+    store 22                                                // option_count
+    // tl:135: assert(option_count <= MAX_OPTION_COUNT)
+    load 22                                                 // option_count
+    pushint MAX_OPTION_COUNT                                // 16
+    <=
+    assert
+    
+    // tl:137: int proposal_index = proposal.index [slot 23]
+    load 21; pushint 0; pushint 8; box_extract; btoi;       // proposal.index
+    store 23                                                // proposal_index
+    // tl:138: check_and_set_user_as_voted(user_address, proposal_index)
+    load 19                                                 // user_address
+    load 23                                                 // proposal_index
+    callsub __func__check_and_set_user_as_voted
+    
+    // tl:140: int account_voting_power = get_account_voting_power_at(user_address, proposal.creation_timestamp, account_power_index) [slot 24]
+    load 19                                                 // user_address
+    load 21; pushint 8; pushint 8; box_extract; btoi;       // proposal.creation_timestamp
+    load 15                                                 // account_power_index
+    callsub __func__get_account_voting_power_at
+    store 24                                                // account_voting_power
+    // tl:141: assert(account_voting_power)
+    load 24                                                 // account_voting_power
+    assert
+    
+    // Update proposal
+    // tl:144: proposal.vote_count = proposal.vote_count + 1
+    load 21; pushint 40; pushint 8; box_extract; btoi;      // proposal.vote_count
+    pushint 1
+    +
+    itob; load 21; pushint 40; uncover 2; box_replace;      // boxset proposal.vote_count
+    // tl:145: proposal.voting_power = proposal.voting_power + account_voting_power
+    load 21; pushint 32; pushint 8; box_extract; btoi;      // proposal.voting_power
+    load 24                                                 // account_voting_power
+    +
+    itob; load 21; pushint 32; uncover 2; box_replace;      // boxset proposal.voting_power
+    
+    // tl:147: int option_vote_amount [slot 25]
+    // tl:148: int asset_id [slot 26]
+    // tl:149: int total_percentage = 0 [slot 27]
+    pushint 0
+    store 27                                                // total_percentage
+    // tl:150: int tmp_index [slot 28]
+    // tl:151: int tmp_vote_percentage [slot 29]
+    // tl:152: for i in 0:option_count:
         pushint 0
-        store 12                                            // total_percentage
-        // tl:166: int tmp_index [slot 13]
-        // tl:167: int tmp_vote_percentage [slot 14]
-        // tl:168: for i in 0:option_count:
-            pushint 0
-            store 15                                        // i
-            l1_for:
-            load 15                                         // i
-            load 7                                          // option_count
-            ==
-            bnz l1_end
-            // tl:169: tmp_index = i * 8
-            load 15                                         // i
-            pushint 8
-            *
-            store 13                                        // tmp_index
-            
-            // validate percentages
-            // tl:172: tmp_vote_percentage = extract_uint64(votes_as_percentage, tmp_index)
-            load 2                                          // votes_as_percentage
-            load 13                                         // tmp_index
-            extract_uint64
-            store 14                                        // tmp_vote_percentage
-            // tl:173: assert(tmp_vote_percentage)
-            load 14                                         // tmp_vote_percentage
-            assert
-            // tl:174: total_percentage = total_percentage + tmp_vote_percentage
-            load 12                                         // total_percentage
-            load 14                                         // tmp_vote_percentage
-            +
-            store 12                                        // total_percentage
-            // tl:175: assert(total_percentage <= 100)
-            load 12                                         // total_percentage
-            pushint 100
-            <=
-            assert
-            
-            // update vote amounts
-            // tl:178: option_vote_amount = tmp_vote_percentage * (account_voting_power / 100)
-            load 14                                         // tmp_vote_percentage
-            load 9                                          // account_voting_power
-            pushint 100
-            /
-            *
-            store 10                                        // option_vote_amount
-            // tl:179: asset_id = extract_uint64(asset_ids, tmp_index)
-            load 3                                          // asset_ids
-            load 13                                         // tmp_index
-            extract_uint64
-            store 11                                        // asset_id
-            // tl:180: add_vote_amount(proposal_index, asset_id, option_vote_amount)
-            load 8                                          // proposal_index
-            load 11                                         // asset_id
-            load 10                                         // option_vote_amount
-            callsub __func__add_vote_amount
-            
-            // tl:182: log(Concat(method("vote(uint64,uint64,uint64)"), itob(asset_id), itob(option_vote_amount), itob(tmp_vote_percentage)))
-            method "vote(uint64,uint64,uint64)"
-            load 11                                         // asset_id
-            itob
-            load 10                                         // option_vote_amount
-            itob
-            load 14                                         // tmp_vote_percentage
-            itob
-            concat
-            concat
-            concat
-            log
-            load 15                                         // i
-            pushint 1
-            +
-            store 15                                        // i
-            b l1_for
-            l1_end:
-        // tl:184: assert(total_percentage == 100)
-        load 12                                             // total_percentage
+        store 30                                            // i
+        l0_for:
+        load 30                                             // i
+        load 22                                             // option_count
+        ==
+        bnz l0_end
+        // tl:153: tmp_index = i * 8
+        load 30                                             // i
+        pushint 8
+        *
+        store 28                                            // tmp_index
+        
+        // validate percentages
+        // tl:156: tmp_vote_percentage = extract_uint64(votes_as_percentage, tmp_index)
+        load 17                                             // votes_as_percentage
+        load 28                                             // tmp_index
+        extract_uint64
+        store 29                                            // tmp_vote_percentage
+        // tl:157: assert(tmp_vote_percentage)
+        load 29                                             // tmp_vote_percentage
+        assert
+        // tl:158: total_percentage = total_percentage + tmp_vote_percentage
+        load 27                                             // total_percentage
+        load 29                                             // tmp_vote_percentage
+        +
+        store 27                                            // total_percentage
+        // tl:159: assert(total_percentage <= 100)
+        load 27                                             // total_percentage
         pushint 100
-        ==
+        <=
         assert
         
-        // tl:186: bytes proposal_data [slot 15]
-        // tl:187: _, proposal_data = box_get(proposal_box_name)
-        load 5                                              // proposal_box_name
-        box_get
-        pop                                                 // discarding value for _
-        store 15                                            // proposal_data
-        // tl:188: log(Concat(method("proposal(byte[59],uint64,uint64,uint64,uint64,uint64,uint64,bool)"), proposal_id, proposal_data))
-        method "proposal(byte[59],uint64,uint64,uint64,uint64,uint64,uint64,bool)"
-        load 1                                              // proposal_id
-        load 15                                             // proposal_data
-        concat
-        concat
-        log
-        // tl:189: log(Concat(method("cast_vote(address,byte[59],uint64)"), user_address, proposal_id, itob(account_voting_power)))
-        method "cast_vote(address,byte[59],uint64)"
-        load 0                                              // user_address
-        load 1                                              // proposal_id
-        load 9                                              // account_voting_power
+        // update vote amounts
+        // tl:162: option_vote_amount = tmp_vote_percentage * (account_voting_power / 100)
+        load 29                                             // tmp_vote_percentage
+        load 24                                             // account_voting_power
+        pushint 100
+        /
+        *
+        store 25                                            // option_vote_amount
+        // tl:163: asset_id = extract_uint64(asset_ids, tmp_index)
+        load 16                                             // asset_ids
+        load 28                                             // tmp_index
+        extract_uint64
+        store 26                                            // asset_id
+        // tl:164: add_vote_amount(proposal_index, asset_id, option_vote_amount)
+        load 23                                             // proposal_index
+        load 26                                             // asset_id
+        load 25                                             // option_vote_amount
+        callsub __func__add_vote_amount
+        
+        // tl:166: log(Concat(method("vote(uint64,uint64,uint64)"), itob(asset_id), itob(option_vote_amount), itob(tmp_vote_percentage)))
+        method "vote(uint64,uint64,uint64)"
+        load 26                                             // asset_id
+        itob
+        load 25                                             // option_vote_amount
+        itob
+        load 29                                             // tmp_vote_percentage
         itob
         concat
         concat
         concat
         log
-        // tl:190: exit(1)
+        load 30                                             // i
         pushint 1
-        return
+        +
+        store 30                                            // i
+        b l0_for
+        l0_end:
+    // tl:168: assert(total_percentage == 100)
+    load 27                                                 // total_percentage
+    pushint 100
+    ==
+    assert
     
-    // block increase_budget
-    main__increase_budget:
-        // Box read budget and opcode budget will be incread using this method.
-        // tl:195: if Txn.NumAppArgs > 1:
-        txn NumAppArgs
-        pushint 1
-        >
-        bz l2_end
-        // then:
-            // tl:196: int inner_app_call_count = btoi(Txn.ApplicationArgs[1]) [slot 0]
-            txna ApplicationArgs 1
-            btoi
-            store 0                                         // inner_app_call_count
-            // tl:197: for _ in 0:inner_app_call_count:
-                pushint 0
-                dup
-                l3_for:
-                load 0                                      // inner_app_call_count
-                ==
-                bnz l3_end
-                // tl:198: increase_budget()
-                callsub __func__increase_budget
-                pushint 1
-                +
-                dup
-                b l3_for
-                pop
-                l3_end:
-        l2_end:
-        // tl:201: exit(1)
-        pushint 1
-        return
-    
-    // block set_voting_delay
-    main__set_voting_delay:
-        // tl:205: bytes user_address = Txn.Sender [slot 0]
-        txn Sender
-        store 0                                             // user_address
-        // tl:206: assert(user_address == app_global_get(PROPOSAL_MANAGER_KEY))
-        load 0                                              // user_address
-        pushbytes PROPOSAL_MANAGER_KEY                      // "proposal_manager"
-        app_global_get
-        ==
-        assert
-        
-        // tl:208: int new_voting_delay = btoi(Txn.ApplicationArgs[1]) [slot 1]
-        txna ApplicationArgs 1
-        btoi
-        store 1                                             // new_voting_delay
-        // tl:209: app_global_put(VOTING_DELAY_KEY, new_voting_delay)
-        pushbytes VOTING_DELAY_KEY                          // "voting_delay"
-        load 1                                              // new_voting_delay
-        app_global_put
-        // tl:210: log(Concat(method("set_voting_delay(uint64)"), itob(new_voting_delay)))
-        method "set_voting_delay(uint64)"
-        load 1                                              // new_voting_delay
-        itob
-        concat
-        log
-        // tl:211: exit(1)
-        pushint 1
-        return
-    
-    // block set_voting_duration
-    main__set_voting_duration:
-        // tl:215: bytes user_address = Txn.Sender [slot 0]
-        txn Sender
-        store 0                                             // user_address
-        // tl:216: assert(user_address == app_global_get(PROPOSAL_MANAGER_KEY))
-        load 0                                              // user_address
-        pushbytes PROPOSAL_MANAGER_KEY                      // "proposal_manager"
-        app_global_get
-        ==
-        assert
-        
-        // tl:218: int new_voting_duration = btoi(Txn.ApplicationArgs[1]) [slot 1]
-        txna ApplicationArgs 1
-        btoi
-        store 1                                             // new_voting_duration
-        // tl:219: assert(new_voting_duration)
-        load 1                                              // new_voting_duration
-        assert
-        // tl:220: app_global_put(VOTING_DURATION_KEY, new_voting_duration)
-        pushbytes VOTING_DURATION_KEY                       // "voting_duration"
-        load 1                                              // new_voting_duration
-        app_global_put
-        // tl:221: log(Concat(method("set_voting_duration(uint64)"), itob(new_voting_duration)))
-        method "set_voting_duration(uint64)"
-        load 1                                              // new_voting_duration
-        itob
-        concat
-        log
-        // tl:222: exit(1)
-        pushint 1
-        return
-    
-    // block set_manager
-    main__set_manager:
-        // tl:226: bytes user_address = Txn.Sender [slot 0]
-        txn Sender
-        store 0                                             // user_address
-        // tl:227: assert(user_address == app_global_get(MANAGER_KEY))
-        load 0                                              // user_address
-        pushbytes MANAGER_KEY                               // "manager"
-        app_global_get
-        ==
-        assert
-        
-        // tl:229: bytes new_manager = Txn.ApplicationArgs[1] [slot 1]
-        txna ApplicationArgs 1
-        store 1                                             // new_manager
-        // tl:230: assert(len(new_manager) == 32)
-        load 1                                              // new_manager
-        len
-        pushint 32
-        ==
-        assert
-        // tl:231: app_global_put(MANAGER_KEY, new_manager)
-        pushbytes MANAGER_KEY                               // "manager"
-        load 1                                              // new_manager
-        app_global_put
-        // tl:232: log(Concat(method("set_manager(address)"), new_manager))
-        method "set_manager(address)"
-        load 1                                              // new_manager
-        concat
-        log
-        // tl:233: exit(1)
-        pushint 1
-        return
-    
-    // block set_proposal_manager
-    main__set_proposal_manager:
-        // tl:237: bytes user_address = Txn.Sender [slot 0]
-        txn Sender
-        store 0                                             // user_address
-        // tl:238: assert(user_address == app_global_get(MANAGER_KEY))
-        load 0                                              // user_address
-        pushbytes MANAGER_KEY                               // "manager"
-        app_global_get
-        ==
-        assert
-        
-        // tl:240: bytes set_proposal_manager = Txn.ApplicationArgs[1] [slot 1]
-        txna ApplicationArgs 1
-        store 1                                             // set_proposal_manager
-        // tl:241: assert(len(set_proposal_manager) == 32)
-        load 1                                              // set_proposal_manager
-        len
-        pushint 32
-        ==
-        assert
-        // tl:242: app_global_put(PROPOSAL_MANAGER_KEY, set_proposal_manager)
-        pushbytes PROPOSAL_MANAGER_KEY                      // "proposal_manager"
-        load 1                                              // set_proposal_manager
-        app_global_put
-        // tl:243: log(Concat(method("set_proposal_manager(address)"), set_proposal_manager))
-        method "set_proposal_manager(address)"
-        load 1                                              // set_proposal_manager
-        concat
-        log
-        // tl:244: exit(1)
-        pushint 1
-        return
-    
-    // block get_box
-    main__get_box:
-        // tl:248: bytes box_name = Txn.ApplicationArgs[1] [slot 0]
-        txna ApplicationArgs 1
-        store 0                                             // box_name
-        
-        // tl:250: int exists [slot 1]
-        // tl:251: bytes data [slot 2]
-        // tl:252: exists, data = box_get(box_name)
-        load 0                                              // box_name
-        box_get
-        store 1                                             // exists
-        store 2                                             // data
-        
-        // tl:254: log(Concat(method("return"), itob(exists), extract(6, 2, itob(len(data))), data))
-        method "return"
-        load 1                                              // exists
-        itob
-        load 2                                              // data
-        len
-        itob
-        extract 6 2
-        load 2                                              // data
-        concat
-        concat
-        concat
-        log
-        // tl:255: exit(1)
-        pushint 1
-        return
+    // tl:170: bytes proposal_data [slot 31]
+    // tl:171: _, proposal_data = box_get(proposal_box_name)
+    load 20                                                 // proposal_box_name
+    box_get
+    pop                                                     // discarding value for _
+    store 31                                                // proposal_data
+    // tl:172: log(Concat(method("proposal(byte[59],uint64,uint64,uint64,uint64,uint64,uint64,bool)"), proposal_id, proposal_data))
+    method "proposal(byte[59],uint64,uint64,uint64,uint64,uint64,uint64,bool)"
+    load 18                                                 // proposal_id
+    load 31                                                 // proposal_data
+    concat
+    concat
+    log
+    // tl:173: log(Concat(method("cast_vote(address,byte[59],uint64)"), user_address, proposal_id, itob(account_voting_power)))
+    method "cast_vote(address,byte[59],uint64)"
+    load 19                                                 // user_address
+    load 18                                                 // proposal_id
+    load 24                                                 // account_voting_power
+    itob
+    concat
+    concat
+    concat
+    log
+    // tl:174: return
+    retsub
 
-// tl:259: func check_and_set_user_as_voted(address: bytes, proposal_index: int):
+// tl:178: func increase_budget(inner_app_call_count: int):
+__func__increase_budget:
+    store 32                                                // inner_app_call_count [int]
+    // Box read budget and opcode budget will be incread using this method.
+    // tl:180: for _ in 0:inner_app_call_count:
+        pushint 0
+        dup
+        l1_for:
+        load 32                                             // inner_app_call_count
+        ==
+        bnz l1_end
+        // tl:181: inner_txn:
+        callsub _itxn_begin
+            // tl:182: TypeEnum: Appl
+            pushint 6                                       // Appl
+            itxn_field TypeEnum
+            // tl:183: ApplicationID: app_global_get(VAULT_APP_ID_KEY)
+            pushbytes VAULT_APP_ID_KEY                      // "vault_app_id"
+            app_global_get
+            itxn_field ApplicationID
+            // tl:184: ApplicationArgs[0]: "increase_budget"
+            pushbytes "increase_budget"
+            itxn_field ApplicationArgs
+            // tl:185: Fee: 0
+            pushint 0
+            itxn_field Fee
+        callsub _itxn_submit
+        // end inner_txn
+        pushint 1
+        +
+        dup
+        b l1_for
+        pop
+        l1_end:
+    // tl:188: return
+    retsub
+
+// tl:192: func set_voting_delay(new_voting_delay: int):
+__func__set_voting_delay:
+    store 33                                                // new_voting_delay [int]
+    // tl:193: bytes user_address = Txn.Sender [slot 34]
+    txn Sender
+    store 34                                                // user_address
+    // tl:194: assert(user_address == app_global_get(PROPOSAL_MANAGER_KEY))
+    load 34                                                 // user_address
+    pushbytes PROPOSAL_MANAGER_KEY                          // "proposal_manager"
+    app_global_get
+    ==
+    assert
+    
+    // tl:196: app_global_put(VOTING_DELAY_KEY, new_voting_delay)
+    pushbytes VOTING_DELAY_KEY                              // "voting_delay"
+    load 33                                                 // new_voting_delay
+    app_global_put
+    // tl:197: log(Concat(method("set_voting_delay(uint64)"), itob(new_voting_delay)))
+    method "set_voting_delay(uint64)"
+    load 33                                                 // new_voting_delay
+    itob
+    concat
+    log
+    // tl:198: return
+    retsub
+
+// tl:202: func set_voting_duration(new_voting_duration: int):
+__func__set_voting_duration:
+    store 35                                                // new_voting_duration [int]
+    // tl:203: bytes user_address = Txn.Sender [slot 36]
+    txn Sender
+    store 36                                                // user_address
+    // tl:204: assert(user_address == app_global_get(PROPOSAL_MANAGER_KEY))
+    load 36                                                 // user_address
+    pushbytes PROPOSAL_MANAGER_KEY                          // "proposal_manager"
+    app_global_get
+    ==
+    assert
+    
+    // tl:206: assert(new_voting_duration)
+    load 35                                                 // new_voting_duration
+    assert
+    // tl:207: app_global_put(VOTING_DURATION_KEY, new_voting_duration)
+    pushbytes VOTING_DURATION_KEY                           // "voting_duration"
+    load 35                                                 // new_voting_duration
+    app_global_put
+    // tl:208: log(Concat(method("set_voting_duration(uint64)"), itob(new_voting_duration)))
+    method "set_voting_duration(uint64)"
+    load 35                                                 // new_voting_duration
+    itob
+    concat
+    log
+    // tl:209: return
+    retsub
+
+// tl:213: func set_manager(new_manager: bytes[32]):
+__func__set_manager:
+    store 37                                                // new_manager [bytes[32]]
+    // tl:214: bytes user_address = Txn.Sender [slot 38]
+    txn Sender
+    store 38                                                // user_address
+    // tl:215: assert(user_address == app_global_get(MANAGER_KEY))
+    load 38                                                 // user_address
+    pushbytes MANAGER_KEY                                   // "manager"
+    app_global_get
+    ==
+    assert
+    
+    // tl:217: app_global_put(MANAGER_KEY, new_manager)
+    pushbytes MANAGER_KEY                                   // "manager"
+    load 37                                                 // new_manager
+    app_global_put
+    // tl:218: log(Concat(method("set_manager(address)"), new_manager))
+    method "set_manager(address)"
+    load 37                                                 // new_manager
+    concat
+    log
+    // tl:219: return
+    retsub
+
+// tl:223: func set_proposal_manager(new_proposal_manager: bytes[32]):
+__func__set_proposal_manager:
+    store 39                                                // new_proposal_manager [bytes[32]]
+    // tl:224: bytes user_address = Txn.Sender [slot 40]
+    txn Sender
+    store 40                                                // user_address
+    // tl:225: assert(user_address == app_global_get(MANAGER_KEY))
+    load 40                                                 // user_address
+    pushbytes MANAGER_KEY                                   // "manager"
+    app_global_get
+    ==
+    assert
+    
+    // tl:227: app_global_put(PROPOSAL_MANAGER_KEY, new_proposal_manager)
+    pushbytes PROPOSAL_MANAGER_KEY                          // "proposal_manager"
+    load 39                                                 // new_proposal_manager
+    app_global_put
+    // tl:228: log(Concat(method("set_proposal_manager(address)"), new_proposal_manager))
+    method "set_proposal_manager(address)"
+    load 39                                                 // new_proposal_manager
+    concat
+    log
+    // tl:229: return
+    retsub
+
+// tl:233: func get_box(box_name: bytes) int, bytes, bytes:
+__func__get_box:
+    store 41                                                // box_name [bytes]
+    // tl:234: int exists [slot 42]
+    // tl:235: bytes data [slot 43]
+    // tl:236: exists, data = box_get(box_name)
+    load 41                                                 // box_name
+    box_get
+    store 42                                                // exists
+    store 43                                                // data
+    // tl:237: return exists, extract(6, 2, itob(len(data))), data
+    load 43                                                 // data
+    load 43                                                 // data
+    len
+    itob
+    extract 6 2
+    load 42                                                 // exists
+    retsub
+
+
+// tl:241: func check_and_set_user_as_voted(address: bytes, proposal_index: int):
 __func__check_and_set_user_as_voted:
-    store 16                                                // proposal_index [int]
-    store 17                                                // address [bytes]
-    // tl:260: int box_index = proposal_index / (ACCOUNT_ATTENDANCE_SHEET_BOX_SIZE * 8) [slot 18]
-    load 16                                                 // proposal_index
+    store 44                                                // proposal_index [int]
+    store 45                                                // address [bytes]
+    // tl:242: int box_index = proposal_index / (ACCOUNT_ATTENDANCE_SHEET_BOX_SIZE * 8) [slot 46]
+    load 44                                                 // proposal_index
     pushint ACCOUNT_ATTENDANCE_SHEET_BOX_SIZE               // 24
     pushint 8
     *
     /
-    store 18                                                // box_index
-    // tl:261: int array_index = proposal_index % (ACCOUNT_ATTENDANCE_SHEET_BOX_SIZE * 8) [slot 19]
-    load 16                                                 // proposal_index
+    store 46                                                // box_index
+    // tl:243: int array_index = proposal_index % (ACCOUNT_ATTENDANCE_SHEET_BOX_SIZE * 8) [slot 47]
+    load 44                                                 // proposal_index
     pushint ACCOUNT_ATTENDANCE_SHEET_BOX_SIZE               // 24
     pushint 8
     *
     %
-    store 19                                                // array_index
-    // tl:262: bytes box_name = Concat(ATTENDANCE_BOX_PREFIX, Concat(address, itob(box_index))) [slot 20]
+    store 47                                                // array_index
+    // tl:244: bytes box_name = Concat(ATTENDANCE_BOX_PREFIX, Concat(address, itob(box_index))) [slot 48]
     pushbytes ATTENDANCE_BOX_PREFIX                         // "a"
-    load 17                                                 // address
-    load 18                                                 // box_index
+    load 45                                                 // address
+    load 46                                                 // box_index
     itob
     concat
     concat
-    store 20                                                // box_name
+    store 48                                                // box_name
     
-    // tl:264: bytes sheet [slot 21]
-    // tl:265: _ = box_create(box_name, ACCOUNT_ATTENDANCE_SHEET_BOX_SIZE)
-    load 20                                                 // box_name
+    // tl:246: bytes sheet [slot 49]
+    // tl:247: _ = box_create(box_name, ACCOUNT_ATTENDANCE_SHEET_BOX_SIZE)
+    load 48                                                 // box_name
     pushint ACCOUNT_ATTENDANCE_SHEET_BOX_SIZE               // 24
     box_create
     pop                                                     // discarding value for _
-    // tl:266: _, sheet = box_get(box_name)
-    load 20                                                 // box_name
+    // tl:248: _, sheet = box_get(box_name)
+    load 48                                                 // box_name
     box_get
     pop                                                     // discarding value for _
-    store 21                                                // sheet
-    // tl:267: assert(!getbit(sheet, array_index))
-    load 21                                                 // sheet
-    load 19                                                 // array_index
+    store 49                                                // sheet
+    // tl:249: assert(!getbit(sheet, array_index))
+    load 49                                                 // sheet
+    load 47                                                 // array_index
     getbit
     !
     assert
-    // tl:268: sheet = setbit(sheet, array_index, 1)
-    load 21                                                 // sheet
-    load 19                                                 // array_index
+    // tl:250: sheet = setbit(sheet, array_index, 1)
+    load 49                                                 // sheet
+    load 47                                                 // array_index
     pushint 1
     setbit
-    store 21                                                // sheet
-    // tl:269: box_put(box_name, sheet)
-    load 20                                                 // box_name
-    load 21                                                 // sheet
+    store 49                                                // sheet
+    // tl:251: box_put(box_name, sheet)
+    load 48                                                 // box_name
+    load 49                                                 // sheet
     box_put
-    // tl:270: return
+    // tl:252: return
     retsub
 
-// tl:273: func add_vote_amount(proposal_index: int, asset_id: int, vote_amount: int):
+// tl:255: func add_vote_amount(proposal_index: int, asset_id: int, vote_amount: int):
 __func__add_vote_amount:
-    store 22                                                // vote_amount [int]
-    store 23                                                // asset_id [int]
-    store 24                                                // proposal_index [int]
-    // tl:274: bytes box_name = Concat(VOTE_BOX_PREFIX, Concat(itob(proposal_index), itob(asset_id))) [slot 25]
+    store 50                                                // vote_amount [int]
+    store 51                                                // asset_id [int]
+    store 52                                                // proposal_index [int]
+    // tl:256: bytes box_name = Concat(VOTE_BOX_PREFIX, Concat(itob(proposal_index), itob(asset_id))) [slot 53]
     pushbytes VOTE_BOX_PREFIX                               // "v"
-    load 24                                                 // proposal_index
+    load 52                                                 // proposal_index
     itob
-    load 23                                                 // asset_id
+    load 51                                                 // asset_id
     itob
     concat
     concat
-    store 25                                                // box_name
-    // tl:275: _ = box_create(box_name, PROPOSAL_ASSET_BOX_SIZE)
-    load 25                                                 // box_name
+    store 53                                                // box_name
+    // tl:257: _ = box_create(box_name, PROPOSAL_ASSET_BOX_SIZE)
+    load 53                                                 // box_name
     pushint PROPOSAL_ASSET_BOX_SIZE                         // 8
     box_create
     pop                                                     // discarding value for _
-    // tl:276: bytes proposal_asset_vote_amount [slot 26]
-    // tl:277: _, proposal_asset_vote_amount = box_get(box_name)
-    load 25                                                 // box_name
+    // tl:258: bytes proposal_asset_vote_amount [slot 54]
+    // tl:259: _, proposal_asset_vote_amount = box_get(box_name)
+    load 53                                                 // box_name
     box_get
     pop                                                     // discarding value for _
-    store 26                                                // proposal_asset_vote_amount
+    store 54                                                // proposal_asset_vote_amount
     
-    // tl:279: box_put(box_name, itob(btoi(proposal_asset_vote_amount) + vote_amount))
-    load 25                                                 // box_name
-    load 26                                                 // proposal_asset_vote_amount
+    // tl:261: box_put(box_name, itob(btoi(proposal_asset_vote_amount) + vote_amount))
+    load 53                                                 // box_name
+    load 54                                                 // proposal_asset_vote_amount
     btoi
-    load 22                                                 // vote_amount
+    load 50                                                 // vote_amount
     +
     itob
     box_put
-    // tl:280: return
+    // tl:262: return
     retsub
 
-// tl:283: func get_voting_start_timestamp() int:
+// tl:265: func get_voting_start_timestamp() int:
 __func__get_voting_start_timestamp:
-    // tl:284: int end_timestamp_of_day = ((Global.LatestTimestamp / DAY) * DAY) + DAY [slot 27]
+    // tl:266: int end_timestamp_of_day = ((Global.LatestTimestamp / DAY) * DAY) + DAY [slot 55]
     global LatestTimestamp
     pushint DAY                                             // 86400
     /
@@ -822,9 +770,9 @@ __func__get_voting_start_timestamp:
     *
     pushint DAY                                             // 86400
     +
-    store 27                                                // end_timestamp_of_day
-    // tl:285: return end_timestamp_of_day + (app_global_get(VOTING_DELAY_KEY) * DAY)
-    load 27                                                 // end_timestamp_of_day
+    store 55                                                // end_timestamp_of_day
+    // tl:267: return end_timestamp_of_day + (app_global_get(VOTING_DELAY_KEY) * DAY)
+    load 55                                                 // end_timestamp_of_day
     pushbytes VOTING_DELAY_KEY                              // "voting_delay"
     app_global_get
     pushint DAY                                             // 86400
@@ -833,89 +781,68 @@ __func__get_voting_start_timestamp:
     retsub
 
 // Inner Txns
-// tl:289: func increase_budget():
-__func__increase_budget:
-    // tl:290: inner_txn:
-    callsub _itxn_begin
-        // tl:291: TypeEnum: Appl
-        pushint 6                                           // Appl
-        itxn_field TypeEnum
-        // tl:292: ApplicationID: app_global_get(VAULT_APP_ID_KEY)
-        pushbytes VAULT_APP_ID_KEY                          // "vault_app_id"
-        app_global_get
-        itxn_field ApplicationID
-        // tl:293: ApplicationArgs[0]: "increase_budget"
-        pushbytes "increase_budget"
-        itxn_field ApplicationArgs
-        // tl:294: Fee: 0
-        pushint 0
-        itxn_field Fee
-    callsub _itxn_submit
-    // end inner_txn
-    // tl:296: return
-    retsub
 
-// tl:299: func get_account_voting_power_at(address: bytes, snapshot_timestamp: int, account_power_index: bytes) int:
+// tl:272: func get_account_voting_power_at(address: bytes, snapshot_timestamp: int, account_power_index: bytes) int:
 __func__get_account_voting_power_at:
-    store 28                                                // account_power_index [bytes]
-    store 29                                                // snapshot_timestamp [int]
-    store 30                                                // address [bytes]
-    // tl:300: inner_txn:
+    store 56                                                // account_power_index [bytes]
+    store 57                                                // snapshot_timestamp [int]
+    store 58                                                // address [bytes]
+    // tl:273: inner_txn:
     callsub _itxn_begin
-        // tl:301: TypeEnum: Appl
+        // tl:274: TypeEnum: Appl
         pushint 6                                           // Appl
         itxn_field TypeEnum
-        // tl:302: ApplicationID: app_global_get(VAULT_APP_ID_KEY)
+        // tl:275: ApplicationID: app_global_get(VAULT_APP_ID_KEY)
         pushbytes VAULT_APP_ID_KEY                          // "vault_app_id"
         app_global_get
         itxn_field ApplicationID
-        // tl:303: ApplicationArgs[0]: "get_tiny_power_of_at"
+        // tl:276: ApplicationArgs[0]: "get_tiny_power_of_at"
         pushbytes "get_tiny_power_of_at"
         itxn_field ApplicationArgs
-        // tl:304: ApplicationArgs[1]: address
-        load 30                                             // address
+        // tl:277: ApplicationArgs[1]: address
+        load 58                                             // address
         itxn_field ApplicationArgs
-        // tl:305: ApplicationArgs[2]: itob(snapshot_timestamp)
-        load 29                                             // snapshot_timestamp
+        // tl:278: ApplicationArgs[2]: itob(snapshot_timestamp)
+        load 57                                             // snapshot_timestamp
         itob
         itxn_field ApplicationArgs
-        // tl:306: ApplicationArgs[3]: account_power_index
-        load 28                                             // account_power_index
+        // tl:279: ApplicationArgs[3]: account_power_index
+        load 56                                             // account_power_index
         itxn_field ApplicationArgs
-        // tl:307: Fee: 0
+        // tl:280: Fee: 0
         pushint 0
         itxn_field Fee
     callsub _itxn_submit
     // end inner_txn
-    // tl:309: int voting_power = extract_uint64(Itxn.LastLog, 4) [slot 31]
+    // tl:282: int voting_power = extract_uint64(Itxn.LastLog, 4) [slot 59]
     itxn LastLog
     pushint 4
     extract_uint64
-    store 31                                                // voting_power
-    // tl:310: return voting_power
-    load 31                                                 // voting_power
+    store 59                                                // voting_power
+    // tl:283: return voting_power
+    load 59                                                 // voting_power
     retsub
 
 
 _itxn_group_begin:
-  load 32; !; assert                                        // ensure no group active
-  int 1; store 32; retsub                                   // set group flag
+  load 60; !; assert                                        // ensure no group active
+  int 1; store 60; retsub                                   // set group flag
 
 _itxn_begin:
-  load 32
+  load 60
   switch _itxn_begin__0 _itxn_begin__1 _itxn_begin__2
   err
   _itxn_begin__0: itxn_begin; retsub                        // no group
-  _itxn_begin__1: itxn_begin; int 2; store 32; retsub       // start first txn of group
+  _itxn_begin__1: itxn_begin; int 2; store 60; retsub       // start first txn of group
   _itxn_begin__2: itxn_next; retsub                         // start next txn of group
 
 _itxn_submit:
-  load 32
+  load 60
   bz _itxn_submit__0
   retsub                                                    // in a group, don't submit
   _itxn_submit__0: itxn_submit; retsub                      // no group, submit
 
 _itxn_group_submit:
   itxn_submit
-  int 0; store 32; retsub                                   // set group flag to 0
+  int 0; store 60; retsub                                   // set group flag to 0
 
