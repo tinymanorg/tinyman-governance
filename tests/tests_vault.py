@@ -14,10 +14,10 @@ from tinyman.governance.event import decode_logs
 from tinyman.governance.transactions import _prepare_budget_increase_transaction
 from tinyman.governance.vault.constants import TOTAL_LOCKED_AMOUNT_KEY, TOTAL_POWER_COUNT_KEY, TWO_TO_THE_64, MAX_LOCK_TIME, LAST_TOTAL_POWER_TIMESTAMP_KEY, ACCOUNT_POWER_BOX_COST, ACCOUNT_STATE_BOX_COST
 from tinyman.governance.vault.events import vault_events
-from tinyman.governance.vault.storage import VaultAppGlobalState
+from tinyman.governance.vault.storage import VaultAppGlobalState, get_power_index_at
 from tinyman.governance.vault.storage import parse_box_total_power, parse_box_account_state, parse_box_account_power, parse_box_slope_change, TotalPower, AccountState, AccountPower, SlopeChange, get_account_state_box_name, get_account_power_box_name, get_total_power_box_name, get_slope_change_box_name
-from tinyman.governance.vault.transactions import prepare_init_transactions, prepare_create_lock_transactions, prepare_withdraw_transactions, prepare_get_tiny_power_of_transactions, prepare_get_total_tiny_power_of_at_transactions, prepare_extend_lock_end_time_transactions, prepare_increase_lock_amount_transactions, prepare_get_tiny_power_of_at_transactions, prepare_get_total_tiny_power_transactions, prepare_delete_account_state_transactions, prepare_delete_account_power_boxes_transactions, prepare_create_checkpoints_transactions, prepare_get_box_transaction
 from tinyman.governance.vault.utils import get_start_timestamp_of_week, get_slope, get_bias, get_cumulative_power_delta
+from tinyman.governance.vault.transactions import prepare_init_transactions, prepare_create_lock_transactions, prepare_withdraw_transactions, prepare_get_cumulative_power_of_at_transactions, prepare_get_total_cumulative_power_at_transactions, prepare_get_tiny_power_of_transactions, prepare_get_total_tiny_power_of_at_transactions, prepare_extend_lock_end_time_transactions, prepare_increase_lock_amount_transactions, prepare_get_tiny_power_of_at_transactions, prepare_get_total_tiny_power_transactions, prepare_delete_account_state_transactions, prepare_delete_account_power_boxes_transactions, prepare_create_checkpoints_transactions, prepare_get_box_transaction
 from tinyman.utils import bytes_to_int, TransactionGroup
 
 from tests.common import BaseTestCase, VaultAppMixin
@@ -2048,3 +2048,145 @@ class VaultTestCase(VaultAppMixin, BaseTestCase):
         expected = get_account_state(self.ledger, self.user_address)
         retrieved = parse_box_account_state(box_data)
         self.assertEqual(expected, retrieved)
+
+    def test_get_cumulative_power_of_at(self):
+        block_datetime = datetime(year=2022, month=3, day=1, hour=1, tzinfo=ZoneInfo("UTC"))
+        block_timestamp = int(block_datetime.timestamp())
+        last_checkpoint_timestamp = block_timestamp - 10
+
+        self.create_vault_app(self.app_creator_address)
+        self.init_vault_app(timestamp=last_checkpoint_timestamp)
+
+        # Create lock
+        lock_start_timestamp = block_timestamp
+        lock_end_timestamp = get_start_timestamp_of_week(block_timestamp + 6 * WEEK)
+        lock_duration = int(lock_end_timestamp - lock_start_timestamp)
+        amount = 10_000_000
+        self.ledger.move(
+            amount * 200,
+            asset_id=TINY_ASSET_ID,
+            sender=self.ledger.assets[TINY_ASSET_ID]["creator"],
+            receiver=self.user_address
+        )
+
+        with unittest.mock.patch("time.time", return_value=lock_start_timestamp):
+            txn_group = prepare_create_lock_transactions(
+                vault_app_id=VAULT_APP_ID,
+                tiny_asset_id=TINY_ASSET_ID,
+                sender=self.user_address,
+                locked_amount=amount,
+                lock_end_time=lock_end_timestamp,
+                vault_app_global_state=get_vault_app_global_state(self.ledger),
+                account_state=get_account_state(self.ledger, self.user_address),
+                slope_change_at_lock_end_time=get_slope_change_at(self.ledger, lock_end_timestamp),
+                suggested_params=self.sp,
+            )
+        txn_group.sign_with_private_key(self.user_address, self.user_sk)
+        block = self.ledger.eval_transactions(txn_group.signed_transactions, block_timestamp=lock_start_timestamp)
+
+        # Get the cumulative power before the lock
+        txn_group = prepare_get_cumulative_power_of_at_transactions(
+            vault_app_id=VAULT_APP_ID,
+            sender=self.user_address,
+            user_address=self.user_address,
+            user_account_powers=get_account_powers(self.ledger, self.user_address),
+            timestamp=lock_start_timestamp - WEEK,
+            suggested_params=self.sp,
+        )
+        txn_group.sign_with_private_key(self.user_address, self.user_sk)
+        block = self.ledger.eval_transactions(txn_group.signed_transactions, block_timestamp=lock_start_timestamp + WEEK)
+
+        user_cumulative_power = bytes_to_int(block[b'txns'][0][b'dt'][b'lg'][-1][4:])
+
+        assert(user_cumulative_power == 0)
+
+        # Get cumulative power at the end of the lock
+        txn_group = prepare_get_cumulative_power_of_at_transactions(
+            vault_app_id=VAULT_APP_ID,
+            sender=self.user_address,
+            user_address=self.user_address,
+            user_account_powers=get_account_powers(self.ledger, self.user_address),
+            timestamp=lock_end_timestamp + 1,
+            suggested_params=self.sp,
+        )
+        txn_group.sign_with_private_key(self.user_address, self.user_sk)
+        block = self.ledger.eval_transactions(txn_group.signed_transactions, block_timestamp=lock_end_timestamp + WEEK)
+
+        user_cumulative_power = bytes_to_int(block[b'txns'][0][b'dt'][b'lg'][-1][4:])
+
+        # There is a difference between the cumulative power calculated by the contract and the one calculated by the test.
+        # Same difference happens between get_cumulative_power_1 and get_cumulative_power_2 results.
+        #assert(user_cumulative_power == get_cumulative_power_delta(bias=get_bias(get_slope(amount), lock_duration), slope=get_slope(amount), time_delta=lock_duration))
+        bias = get_bias(get_slope(amount), lock_duration)
+        slope = get_slope(amount)
+        assert(user_cumulative_power == int(((bias * bias) * TWO_TO_THE_64) / (slope * 2)))
+
+    def test_get_total_cumulative_power_at(self):
+        block_datetime = datetime(year=2022, month=3, day=1, hour=1, tzinfo=ZoneInfo("UTC"))
+        block_timestamp = int(block_datetime.timestamp())
+        last_checkpoint_timestamp = block_timestamp - 10
+
+        self.create_vault_app(self.app_creator_address)
+        self.init_vault_app(timestamp=last_checkpoint_timestamp)
+
+        # Create lock
+        lock_start_timestamp = block_timestamp
+        lock_end_timestamp = get_start_timestamp_of_week(block_timestamp + 6 * WEEK)
+        lock_duration = int(lock_end_timestamp - lock_start_timestamp)
+        amount = 10_000_000
+        self.ledger.move(
+            amount * 200,
+            asset_id=TINY_ASSET_ID,
+            sender=self.ledger.assets[TINY_ASSET_ID]["creator"],
+            receiver=self.user_address
+        )
+
+        with unittest.mock.patch("time.time", return_value=lock_start_timestamp):
+            txn_group = prepare_create_lock_transactions(
+                vault_app_id=VAULT_APP_ID,
+                tiny_asset_id=TINY_ASSET_ID,
+                sender=self.user_address,
+                locked_amount=amount,
+                lock_end_time=lock_end_timestamp,
+                vault_app_global_state=get_vault_app_global_state(self.ledger),
+                account_state=get_account_state(self.ledger, self.user_address),
+                slope_change_at_lock_end_time=get_slope_change_at(self.ledger, lock_end_timestamp),
+                suggested_params=self.sp,
+            )
+        txn_group.sign_with_private_key(self.user_address, self.user_sk)
+        block = self.ledger.eval_transactions(txn_group.signed_transactions, block_timestamp=lock_start_timestamp)
+
+        # Get the cumulative power before the lock
+        txn_group = prepare_get_total_cumulative_power_at_transactions(
+            vault_app_id=VAULT_APP_ID,
+            sender=self.user_address,
+            total_powers=get_all_total_powers(self.ledger, get_vault_app_global_state(self.ledger).total_power_count),
+            timestamp=lock_start_timestamp - WEEK,
+            suggested_params=self.sp,
+        )
+        txn_group.sign_with_private_key(self.user_address, self.user_sk)
+        block = self.ledger.eval_transactions(txn_group.signed_transactions, block_timestamp=lock_start_timestamp + WEEK)
+
+        total_cumulative_power = bytes_to_int(block[b'txns'][0][b'dt'][b'lg'][-1][4:])
+
+        assert(total_cumulative_power == 0)
+
+        # Get total cumulative power at the end of the lock
+        self.create_checkpoints(self.user_address, self.user_sk, lock_end_timestamp + WEEK)
+
+        txn_group = prepare_get_total_cumulative_power_at_transactions(
+            vault_app_id=VAULT_APP_ID,
+            sender=self.user_address,
+            total_powers=get_all_total_powers(self.ledger, get_vault_app_global_state(self.ledger).total_power_count),
+            timestamp=lock_end_timestamp + WEEK,
+            suggested_params=self.sp,
+        )
+        txn_group.sign_with_private_key(self.user_address, self.user_sk)
+        block = self.ledger.eval_transactions(txn_group.signed_transactions, block_timestamp=lock_end_timestamp + WEEK)
+
+        total_cumulative_power = bytes_to_int(block[b'txns'][0][b'dt'][b'lg'][-1][4:])
+        total_power_index = get_power_index_at(get_all_total_powers(self.ledger, get_vault_app_global_state(self.ledger).total_power_count), lock_end_timestamp)
+        total_power = get_all_total_powers(self.ledger, get_vault_app_global_state(self.ledger).total_power_count)[total_power_index]
+        _total_cumulative_power = total_power.cumulative_power + get_cumulative_power_delta(bias=total_power.bias, slope=total_power.slope, time_delta=lock_end_timestamp - total_power.timestamp)
+
+        assert(total_cumulative_power == _total_cumulative_power)
