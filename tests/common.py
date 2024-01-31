@@ -75,12 +75,6 @@ def get_rawbox_from_proposal(proposal: Proposal) -> bytes:
     return raw_box
 
 
-def lpad(string: bytes, n: int) -> bytes:
-    assert(n > 0)
-
-    return b"\x00" * (128 - len(string)) + string
-
-
 class BaseTestCase(unittest.TestCase):
     maxDiff = None
 

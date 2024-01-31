@@ -14,7 +14,7 @@ from tinyman.governance.proposal_voting.storage import (
 )
 from tinyman.governance.proposal_voting.executor_transactions import get_send_transactions_execution_hash, prepare_send_transactions
 from tinyman.governance.utils import generate_cid_from_proposal_metadata
-from tinyman.utils import TransactionGroup, bytes_to_int, int_to_bytes
+from tinyman.utils import TransactionGroup
 
 from tests.common import (
     BaseTestCase,
@@ -22,7 +22,6 @@ from tests.common import (
     VaultAppMixin,
     TreasuryManagementExecutorMixin,
     get_rawbox_from_proposal,
-    lpad,
 )
 from tests.constants import (
     PROPOSAL_VOTING_APP_ID,

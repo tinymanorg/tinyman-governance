@@ -4,7 +4,7 @@ from zoneinfo import ZoneInfo
 from algojig import get_suggested_params
 from algosdk import transaction
 from algosdk.account import generate_account
-from algosdk.encoding import decode_address, _correct_padding
+from algosdk.encoding import decode_address
 from algosdk.logic import get_application_address
 from tinyman.governance import proposal_voting
 from tinyman.governance.proposal_voting.executor_transactions import get_arbitrary_transaction_execution_hash, prepare_validate_transaction_transactions
@@ -22,7 +22,6 @@ from tests.common import (
     VaultAppMixin,
     ArbitraryExecutorAppMixin,
     get_rawbox_from_proposal,
-    lpad,
 )
 from tests.constants import (
     PROPOSAL_VOTING_APP_ID,

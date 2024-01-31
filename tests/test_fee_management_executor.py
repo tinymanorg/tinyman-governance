@@ -1,5 +1,4 @@
 from datetime import datetime
-from hashlib import sha256
 from zoneinfo import ZoneInfo
 
 from algojig import get_suggested_params
@@ -19,7 +18,7 @@ from tinyman.governance.proposal_voting.storage import (
 from tinyman.governance.utils import (
     generate_cid_from_proposal_metadata,
 )
-from tinyman.utils import TransactionGroup, int_to_bytes
+from tinyman.utils import TransactionGroup
 
 from tests.common import (
     BaseTestCase,
@@ -27,7 +26,6 @@ from tests.common import (
     VaultAppMixin,
     FeeManagementExecutorMixin,
     get_rawbox_from_proposal,
-    lpad,
 )
 from tests.constants import (
     AMM_V2_APP_ID,

@@ -98,7 +98,7 @@ block main:
                 Amount: amount
                 Fee: 0
             end
-        elif asset_id > 0:
+        else:
             inner_txn:
                 TypeEnum: Axfer
                 Sender: sender
@@ -107,8 +107,6 @@ block main:
                 XferAsset: asset_id
                 Fee: 0
             end
-        else:
-            exit(0)
         end
 
         set_proposal_as_executed(proposal_id)

@@ -138,7 +138,6 @@ block main:
         # proposal checks
         assert(proposal_state == PROPOSAL_STATE_SUCCEEDED)
 
-        # Assert Gtxn[1]'s transaction_id.
         bytes execution_hash = Lpad(Global.GroupID, 128)
         assert(execution_hash == proposal.execution_hash)
 
