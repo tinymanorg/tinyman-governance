@@ -2188,5 +2188,11 @@ class VaultTestCase(VaultAppMixin, BaseTestCase):
         total_power_index = get_power_index_at(get_all_total_powers(self.ledger, get_vault_app_global_state(self.ledger).total_power_count), lock_end_timestamp)
         total_power = get_all_total_powers(self.ledger, get_vault_app_global_state(self.ledger).total_power_count)[total_power_index]
         _total_cumulative_power = total_power.cumulative_power + get_cumulative_power_delta(bias=total_power.bias, slope=total_power.slope, time_delta=lock_end_timestamp - total_power.timestamp)
-
         assert(total_cumulative_power == _total_cumulative_power)
+
+        # Assert the total cumulative power from start of lock to end of lock
+        total_power_at_lock = get_all_total_powers(self.ledger, get_vault_app_global_state(self.ledger).total_power_count)[1]
+        # In this case our total cumulative power graph is a perpendicular triangle where the height is the bias and the base is the lock duration. total_power_at_lock.bias * lock_duration / 2. Which is _total_cumulative_power
+        _total_cumulative_power = get_cumulative_power_delta(bias=total_power_at_lock.bias, slope=total_power_at_lock.slope, time_delta=total_power.timestamp - total_power_at_lock.timestamp)
+
+        assert(total_power.cumulative_power == _total_cumulative_power), f"{total_power.cumulative_power} != {_total_cumulative_power}"
