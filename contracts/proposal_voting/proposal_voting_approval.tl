@@ -217,7 +217,7 @@ func execute_proposal(proposal_id: bytes):
 end
 
 @public()
-func create_proposal(proposal_id: bytes, execution_hash: bytes, executor: bytes[32]):
+func create_proposal(proposal_id: bytes, execution_hash: bytes[64], executor: bytes[32]):
     bytes[32] user_address = Txn.Sender
 
     # 1. Check voting power threshold
@@ -241,7 +241,7 @@ func create_proposal(proposal_id: bytes, execution_hash: bytes, executor: bytes[
     proposal.snapshot_total_voting_power = total_voting_power
     proposal.proposer = user_address
     proposal.quorum_threshold = app_global_get(QUORUM_THRESHOLD_KEY)
-    proposal.execution_hash = Lpad(execution_hash, 64)
+    proposal.execution_hash = execution_hash
     proposal.executor = executor
 
     # 4. Start & End time
