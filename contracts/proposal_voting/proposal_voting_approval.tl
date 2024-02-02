@@ -19,7 +19,7 @@ struct Proposal:
     is_executed: bytes[1]
     is_quorum_reached: bytes[1]
     proposer: bytes[32]
-    execution_hash: bytes[64]
+    execution_hash: bytes[34]
     executor: bytes[32]
 end
 
@@ -217,7 +217,7 @@ func execute_proposal(proposal_id: bytes):
 end
 
 @public()
-func create_proposal(proposal_id: bytes, execution_hash: bytes, executor: bytes[32]):
+func create_proposal(proposal_id: bytes, execution_hash: bytes[34], executor: bytes[32]):
     bytes[32] user_address = Txn.Sender
 
     # 1. Check voting power threshold
@@ -241,7 +241,7 @@ func create_proposal(proposal_id: bytes, execution_hash: bytes, executor: bytes[
     proposal.snapshot_total_voting_power = total_voting_power
     proposal.proposer = user_address
     proposal.quorum_threshold = app_global_get(QUORUM_THRESHOLD_KEY)
-    proposal.execution_hash = Lpad(execution_hash, 64)
+    proposal.execution_hash = execution_hash
     proposal.executor = executor
 
     # 4. Start & End time
@@ -256,7 +256,7 @@ func create_proposal(proposal_id: bytes, execution_hash: bytes, executor: bytes[
 
     bytes proposal_data
     _, proposal_data = box_get(proposal_box_name)
-    log(Concat(method("proposal(byte[59],uint64,uint64,uint64,uint64,uint64,uint64,uint64,uint64,uint64,uint64,bool,bool,bool,bool,address,byte[64],address)"), proposal_id, proposal_data))
+    log(Concat(method("proposal(byte[59],uint64,uint64,uint64,uint64,uint64,uint64,uint64,uint64,uint64,uint64,bool,bool,bool,bool,address,byte[34],address)"), proposal_id, proposal_data))
     log(Concat(method("create_proposal(address,byte[59])"), user_address, proposal_id))
     return
 end
