@@ -81,7 +81,7 @@ route_cast_vote:
 route_create_proposal:
     txn OnCompletion; pushint 0; ==; assert;                // assert OnCompletion == NoOp
     txna ApplicationArgs 1
-    txna ApplicationArgs 2
+    txna ApplicationArgs 2; dup; len; pushint 64; ==; assert; 
     txna ApplicationArgs 3; dup; len; pushint 32; ==; assert; 
     callsub __func__create_proposal
     pushint 1; return
@@ -574,10 +574,10 @@ __func__execute_proposal:
     // tl:216: return
     retsub
 
-// tl:220: func create_proposal(proposal_id: bytes, execution_hash: bytes, executor: bytes[32]):
+// tl:220: func create_proposal(proposal_id: bytes, execution_hash: bytes[64], executor: bytes[32]):
 __func__create_proposal:
     store 25                                                // executor [bytes[32]]
-    store 26                                                // execution_hash [bytes]
+    store 26                                                // execution_hash [bytes[64]]
     store 27                                                // proposal_id [bytes]
     // tl:221: bytes[32] user_address = Txn.Sender [slot 28]
     txn Sender
@@ -651,9 +651,8 @@ __func__create_proposal:
     pushbytes QUORUM_THRESHOLD_KEY                          // "quorum_threshold"
     app_global_get
     itob; load 32; pushint 48; uncover 2; box_replace;      // boxset proposal.quorum_threshold
-    // tl:244: proposal.execution_hash = Lpad(execution_hash, 64)
+    // tl:244: proposal.execution_hash = execution_hash
     load 26                                                 // execution_hash
-    pushint 64; bzero; b|;                                  // Lpad(64)
     load 32; pushint 116; uncover 2; box_replace;           // boxset proposal.execution_hash
     // tl:245: proposal.executor = executor
     load 25                                                 // executor

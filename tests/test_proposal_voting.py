@@ -239,7 +239,7 @@ class ProposalVotingTestCase(VaultAppMixin, ProposalVotingAppMixin, BaseTestCase
             vault_app_id=VAULT_APP_ID,
             sender=user_address,
             proposal_id=proposal_id,
-            execution_hash="",
+            execution_hash=bytes(64),
             executor=decode_address(user_address),
             vault_app_global_state=get_vault_app_global_state(self.ledger),
             suggested_params=self.sp
@@ -263,8 +263,8 @@ class ProposalVotingTestCase(VaultAppMixin, ProposalVotingAppMixin, BaseTestCase
             'for_voting_power': 0,
             'abstain_voting_power': 0,
             'proposer_address': user_address,
-            'execution_hash': b"\x00" * 64,
-            'executor': user_address,
+            'execution_hash': bytes(64),
+            'executor_address': user_address,
         }
 
         # Logs
@@ -275,7 +275,7 @@ class ProposalVotingTestCase(VaultAppMixin, ProposalVotingAppMixin, BaseTestCase
             events[0],
             {
                 'event_name': 'proposal',
-                'proposal_id': list(proposal_id.encode()),
+                'proposal_id': proposal_id.encode(),
                 **box_data
             }
         )
@@ -284,7 +284,7 @@ class ProposalVotingTestCase(VaultAppMixin, ProposalVotingAppMixin, BaseTestCase
             {
                 'event_name': 'create_proposal',
                 'user_address': user_address,
-                'proposal_id': list(proposal_id.encode())
+                'proposal_id': proposal_id.encode(),
             }
         )
         
@@ -312,7 +312,7 @@ class ProposalVotingTestCase(VaultAppMixin, ProposalVotingAppMixin, BaseTestCase
             vault_app_id=VAULT_APP_ID,
             sender=user_address,
             proposal_id=proposal_id,
-            execution_hash="",
+            execution_hash=bytes(64),
             executor=decode_address(user_address),
             vault_app_global_state=get_vault_app_global_state(self.ledger),
             suggested_params=self.sp
@@ -347,7 +347,7 @@ class ProposalVotingTestCase(VaultAppMixin, ProposalVotingAppMixin, BaseTestCase
             vault_app_id=VAULT_APP_ID,
             sender=user_2_address,
             proposal_id=proposal_id,
-            execution_hash="",
+            execution_hash=bytes(64),
             executor=decode_address(user_2_address),
             vault_app_global_state=get_vault_app_global_state(self.ledger),
             suggested_params=self.sp
@@ -490,7 +490,7 @@ class ProposalVotingTestCase(VaultAppMixin, ProposalVotingAppMixin, BaseTestCase
             vault_app_id=VAULT_APP_ID,
             sender=user_address,
             proposal_id=proposal_id,
-            execution_hash="",
+            execution_hash=bytes(64),
             executor=decode_address(user_address),
             vault_app_global_state=get_vault_app_global_state(self.ledger),
             suggested_params=self.sp
@@ -527,7 +527,7 @@ class ProposalVotingTestCase(VaultAppMixin, ProposalVotingAppMixin, BaseTestCase
             {
                 "event_name": "approve_proposal",
                 "user_address": self.proposal_manager_address,
-                "proposal_id": list(proposal_id.encode()),
+                "proposal_id": proposal_id.encode(),
             }
         )
     
@@ -643,7 +643,7 @@ class ProposalVotingTestCase(VaultAppMixin, ProposalVotingAppMixin, BaseTestCase
             {
                 "event_name": "cast_vote",
                 "user_address": user_address,
-                "proposal_id": list(proposal_id.encode()),
+                "proposal_id": proposal_id.encode(),
                 "vote": vote,
                 "voting_power": ANY
             }
@@ -703,7 +703,7 @@ class ProposalVotingTestCase(VaultAppMixin, ProposalVotingAppMixin, BaseTestCase
             vault_app_id=VAULT_APP_ID,
             sender=user_address,
             proposal_id=proposal_id,
-            execution_hash="",
+            execution_hash=bytes(64),
             executor=decode_address(user_address),
             vault_app_global_state=get_vault_app_global_state(self.ledger),
             suggested_params=self.sp
@@ -792,7 +792,7 @@ class ProposalVotingTestCase(VaultAppMixin, ProposalVotingAppMixin, BaseTestCase
             vault_app_id=VAULT_APP_ID,
             sender=user_address,
             proposal_id=proposal_id,
-            execution_hash="",
+            execution_hash=bytes(64),
             executor=decode_address(user_address),
             vault_app_global_state=get_vault_app_global_state(self.ledger),
             suggested_params=self.sp
@@ -900,7 +900,7 @@ class ProposalVotingTestCase(VaultAppMixin, ProposalVotingAppMixin, BaseTestCase
             vault_app_id=VAULT_APP_ID,
             sender=user_address,
             proposal_id=proposal_id,
-            execution_hash="",
+            execution_hash=bytes(64),
             executor=decode_address(user_address),
             vault_app_global_state=get_vault_app_global_state(self.ledger),
             suggested_params=self.sp
@@ -972,7 +972,7 @@ class ProposalVotingTestCase(VaultAppMixin, ProposalVotingAppMixin, BaseTestCase
             vault_app_id=VAULT_APP_ID,
             sender=user_address,
             proposal_id=proposal_id,
-            execution_hash="",
+            execution_hash=bytes(64),
             executor=decode_address(user_address),
             vault_app_global_state=get_vault_app_global_state(self.ledger),
             suggested_params=self.sp
@@ -1095,7 +1095,7 @@ class ProposalVotingTestCase(VaultAppMixin, ProposalVotingAppMixin, BaseTestCase
             vault_app_id=VAULT_APP_ID,
             sender=user_address,
             proposal_id=proposal_id,
-            execution_hash="",
+            execution_hash=bytes(64),
             executor=decode_address(user_address),
             vault_app_global_state=get_vault_app_global_state(self.ledger),
             suggested_params=self.sp
@@ -1137,7 +1137,7 @@ class ProposalVotingTestCase(VaultAppMixin, ProposalVotingAppMixin, BaseTestCase
             {
                 'event_name': 'cancel_proposal',
                 'user_address': self.proposal_manager_address,
-                'proposal_id': list(proposal_id.encode()),
+                'proposal_id': proposal_id.encode(),
             }
         )
         
@@ -1227,7 +1227,7 @@ class ProposalVotingTestCase(VaultAppMixin, ProposalVotingAppMixin, BaseTestCase
             vault_app_id=VAULT_APP_ID,
             sender=user_address,
             proposal_id=proposal_id,
-            execution_hash="",
+            execution_hash=bytes(64),
             executor=decode_address(user_address),
             vault_app_global_state=get_vault_app_global_state(self.ledger),
             suggested_params=self.sp
@@ -1292,7 +1292,7 @@ class ProposalVotingTestCase(VaultAppMixin, ProposalVotingAppMixin, BaseTestCase
             {
                 'event_name': 'execute_proposal',
                 'user_address': user_address,
-                'proposal_id': list(proposal_id.encode()),
+                'proposal_id': proposal_id.encode(),
             }
         )
 
@@ -1360,7 +1360,7 @@ class ProposalVotingTestCase(VaultAppMixin, ProposalVotingAppMixin, BaseTestCase
             vault_app_id=VAULT_APP_ID,
             sender=user_address,
             proposal_id=proposal_id,
-            execution_hash="",
+            execution_hash=bytes(64),
             executor=decode_address(user_address),
             vault_app_global_state=get_vault_app_global_state(self.ledger),
             suggested_params=self.sp
@@ -1395,7 +1395,7 @@ class ProposalVotingTestCase(VaultAppMixin, ProposalVotingAppMixin, BaseTestCase
             {
                 'event_name': 'approve_proposal',
                 'user_address': self.proposal_manager_address,
-                'proposal_id': list(proposal_id.encode()),
+                'proposal_id': proposal_id.encode(),
             }
         )
 
@@ -1445,7 +1445,7 @@ class ProposalVotingTestCase(VaultAppMixin, ProposalVotingAppMixin, BaseTestCase
             vault_app_id=VAULT_APP_ID,
             sender=user_address,
             proposal_id=proposal_id,
-            execution_hash="",
+            execution_hash=bytes(64),
             executor=decode_address(user_address),
             vault_app_global_state=get_vault_app_global_state(self.ledger),
             suggested_params=self.sp
