@@ -19,6 +19,8 @@ struct Proposal:
     is_executed: bytes[1]
     is_quorum_reached: bytes[1]
     proposer: bytes[32]
+    execution_hash: bytes[128]
+    executor: bytes[32]
 end
 
 # 24 * 60 * 60
