@@ -1,5 +1,5 @@
-#pragma version 8
-#tealish version git+https://github.com/Hipo/tealish.git@e8d1b27620220bc4e520d7d3b6d62523e13a7723
+#pragma version 9
+#tealish version git+https://github.com/Hipo/tealish.git@c4f8c12b36dbcc8b63844df5f818164925735087
 
 # Taken from Proposal Voting App
 # Size: 123 bytes
@@ -19,7 +19,7 @@ struct Proposal:
     is_executed: bytes[1]
     is_quorum_reached: bytes[1]
     proposer: bytes[32]
-    execution_hash: bytes[128]
+    execution_hash: bytes[34]
     executor: bytes[32]
 end
 
@@ -40,110 +40,82 @@ const int PROPOSAL_STATE_DEFEATED = 4
 const int PROPOSAL_STATE_SUCCEEDED = 5
 const int PROPOSAL_STATE_EXECUTED = 6
 
-if !Txn.ApplicationID:
-    jump create_app
+# Execution Hash Prefixes
+const bytes VALIDATE_TRANSACTION_HASH_PREFIX = "vt"
+const bytes VALIDATE_GROUP_HASH_PREFIX = "vg"
+
+router:
+    create_application
+    update_application
+    validate_transaction
+    validate_group
 end
 
-switch Txn.OnCompletion:
-    NoOp: main
-    OptIn: fail
-    CloseOut: fail
-    UpdateApplication: update_app
-    DeleteApplication: fail
-end
-
-block fail:
-    exit(0)
-end
-
-block create_app:
-    app_global_put(PROPOSAL_VOTING_APP_ID_KEY, btoi(Txn.ApplicationArgs[0]))
+@public(OnCompletion=CreateApplication)
+func create_application(proposal_voting_app_id: int):
+    app_global_put(PROPOSAL_VOTING_APP_ID_KEY, proposal_voting_app_id)
 
     app_global_put(MANAGER_KEY, Txn.Sender)
-    exit(1)
+
+    return
 end
 
-block update_app:
+@public(OnCompletion=UpdateApplication)
+func update_application():
     bytes user_address = Txn.Sender
     assert(user_address == app_global_get(MANAGER_KEY))
-    exit(1)
+
+    return
 end
 
-block main:
-    switch Txn.ApplicationArgs[0]:
-        "validate_transaction": validate_transaction
-        "validate_group": validate_group
+@public()
+func validate_transaction(proposal_id: bytes):
+    # Read proposal from proposal_voting app
+    inner_txn:
+        TypeEnum: Appl
+        ApplicationID: app_global_get(PROPOSAL_VOTING_APP_ID_KEY)
+        ApplicationArgs[0]: "get_proposal"
+        ApplicationArgs[1]: proposal_id
+        Fee: 0
     end
 
-    block validate_transaction:
+    Proposal proposal = Cast(extract(4, 182, Itxn.LastLog), Proposal)
+    int proposal_state = btoi(extract(186, 0, Itxn.LastLog))
 
-        bytes proposal_id = Txn.ApplicationArgs[1]
+    # proposal checks
+    assert(proposal_state == PROPOSAL_STATE_SUCCEEDED)
 
-        # read proposal from proposal_voting app
-        inner_txn:
-            TypeEnum: Appl
-            ApplicationID: app_global_get(PROPOSAL_VOTING_APP_ID_KEY)
-            ApplicationArgs[0]: "get_proposal"
-            ApplicationArgs[1]: proposal_id
-            Fee: 0
-        end
+    # Assert Gtxn[1]'s transaction_id.
+    bytes execution_hash = Concat(VALIDATE_TRANSACTION_HASH_PREFIX, Gtxn[1].TxID)
+    assert(execution_hash == proposal.execution_hash)
 
-        Proposal proposal = Cast(extract(4, 0, Itxn.LastLog), Proposal)
+    set_proposal_as_executed(proposal_id)
+    return
+end
 
-        inner_txn:
-            TypeEnum: Appl
-            ApplicationID: app_global_get(PROPOSAL_VOTING_APP_ID_KEY)
-            ApplicationArgs[0]: "get_proposal_state"
-            ApplicationArgs[1]: proposal_id
-            Fee: 0
-        end
-
-        int proposal_state = extract_uint64(Itxn.LastLog, 4)
-
-        # proposal checks
-        assert(proposal_state == PROPOSAL_STATE_SUCCEEDED)
-
-        # Assert Gtxn[1]'s transaction_id.
-        bytes execution_hash = Lpad(Gtxn[1].TxID, 128)
-        assert(execution_hash == proposal.execution_hash)
-
-        set_proposal_as_executed(proposal_id)
-        exit(1)
+@public()
+func validate_group(proposal_id: bytes):
+    # 1. Read proposal from proposal_voting app
+    inner_txn:
+        TypeEnum: Appl
+        ApplicationID: app_global_get(PROPOSAL_VOTING_APP_ID_KEY)
+        ApplicationArgs[0]: "get_proposal"
+        ApplicationArgs[1]: proposal_id
+        Fee: 0
     end
 
-    block validate_group:
-        bytes proposal_id = Txn.ApplicationArgs[1]
+    Proposal proposal = Cast(extract(4, 182, Itxn.LastLog), Proposal)
+    int proposal_state = btoi(extract(186, 0, Itxn.LastLog))
 
-        # read proposal from proposal_voting app
-        inner_txn:
-            TypeEnum: Appl
-            ApplicationID: app_global_get(PROPOSAL_VOTING_APP_ID_KEY)
-            ApplicationArgs[0]: "get_proposal"
-            ApplicationArgs[1]: proposal_id
-            Fee: 0
-        end
+    # 2 .Proposal checks
+    assert(proposal_state == PROPOSAL_STATE_SUCCEEDED)
 
-        Proposal proposal = Cast(extract(4, 0, Itxn.LastLog), Proposal)
+    bytes execution_hash = Concat(VALIDATE_GROUP_HASH_PREFIX, Global.GroupID)
+    assert(execution_hash == proposal.execution_hash)
 
-        inner_txn:
-            TypeEnum: Appl
-            ApplicationID: app_global_get(PROPOSAL_VOTING_APP_ID_KEY)
-            ApplicationArgs[0]: "get_proposal_state"
-            ApplicationArgs[1]: proposal_id
-            Fee: 0
-        end
+    set_proposal_as_executed(proposal_id)
 
-        int proposal_state = extract_uint64(Itxn.LastLog, 4)
-
-        # proposal checks
-        assert(proposal_state == PROPOSAL_STATE_SUCCEEDED)
-
-        bytes execution_hash = Lpad(Global.GroupID, 128)
-        assert(execution_hash == proposal.execution_hash)
-
-        set_proposal_as_executed(proposal_id)
-        exit(1)
-    end
+    return
 end
 
 func set_proposal_as_executed(proposal_id: bytes):

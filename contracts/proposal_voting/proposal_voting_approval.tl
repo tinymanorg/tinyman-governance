@@ -19,7 +19,7 @@ struct Proposal:
     is_executed: bytes[1]
     is_quorum_reached: bytes[1]
     proposer: bytes[32]
-    execution_hash: bytes[128]
+    execution_hash: bytes[34]
     executor: bytes[32]
 end
 
@@ -171,7 +171,7 @@ func approve_proposal(proposal_id: bytes):
 
     bytes proposal_data
     _, proposal_data = box_get(proposal_box_name)
-    log(Concat(method("proposal(byte[59],uint64,uint64,uint64,uint64,uint64,uint64,uint64,uint64,uint64,uint64,bool,bool,bool,bool,address)"), proposal_id, proposal_data))
+    log(Concat(method("proposal(byte[59],uint64,uint64,uint64,uint64,uint64,uint64,uint64,uint64,uint64,uint64,bool,bool,bool,bool,address,byte[34],address)"), proposal_id, proposal_data))
     log(Concat(method("approve_proposal(address,byte[59])"), user_address, proposal_id))
     return
 end
@@ -190,7 +190,7 @@ func cancel_proposal(proposal_id: bytes):
 
     bytes proposal_data
     _, proposal_data = box_get(proposal_box_name)
-    log(Concat(method("proposal(byte[59],uint64,uint64,uint64,uint64,uint64,uint64,uint64,uint64,uint64,uint64,bool,bool,bool,bool,address)"), proposal_id, proposal_data))
+    log(Concat(method("proposal(byte[59],uint64,uint64,uint64,uint64,uint64,uint64,uint64,uint64,uint64,uint64,bool,bool,bool,bool,address,byte[34],address)"), proposal_id, proposal_data))
     log(Concat(method("cancel_proposal(address,byte[59])"), user_address, proposal_id))
     return
 end
@@ -198,7 +198,6 @@ end
 @public()
 func execute_proposal(proposal_id: bytes):
     bytes user_address = Txn.Sender
-    assert(user_address == app_global_get(PROPOSAL_MANAGER_KEY))
 
     bytes proposal_box_name = Concat(PROPOSAL_BOX_PREFIX, proposal_id)
     box<Proposal> proposal = OpenBox(proposal_box_name)
@@ -210,9 +209,11 @@ func execute_proposal(proposal_id: bytes):
     assert(proposal.for_voting_power > proposal.against_voting_power)
     proposal.is_executed = BYTES_TRUE
 
+    assert(user_address == proposal.executor)
+
     bytes proposal_data
     _, proposal_data = box_get(proposal_box_name)
-    log(Concat(method("proposal(byte[59],uint64,uint64,uint64,uint64,uint64,uint64,uint64,uint64,uint64,uint64,bool,bool,bool,bool,address)"), proposal_id, proposal_data))
+    log(Concat(method("proposal(byte[59],uint64,uint64,uint64,uint64,uint64,uint64,uint64,uint64,uint64,uint64,bool,bool,bool,bool,address,byte[34],address)"), proposal_id, proposal_data))
     log(Concat(method("execute_proposal(address,byte[59])"), user_address, proposal_id))
     return
 end
@@ -255,7 +256,7 @@ func create_proposal(proposal_id: bytes):
 
     bytes proposal_data
     _, proposal_data = box_get(proposal_box_name)
-    log(Concat(method("proposal(byte[59],uint64,uint64,uint64,uint64,uint64,uint64,uint64,uint64,uint64,uint64,bool,bool,bool,bool,address)"), proposal_id, proposal_data))
+    log(Concat(method("proposal(byte[59],uint64,uint64,uint64,uint64,uint64,uint64,uint64,uint64,uint64,uint64,bool,bool,bool,bool,address,byte[34],address)"), proposal_id, proposal_data))
     log(Concat(method("create_proposal(address,byte[59])"), user_address, proposal_id))
     return
 end
@@ -303,7 +304,7 @@ func cast_vote(proposal_id: bytes, vote: int, account_power_index: bytes):
 
     bytes proposal_data
     _, proposal_data = box_get(proposal_box_name)
-    log(Concat(method("proposal(byte[59],uint64,uint64,uint64,uint64,uint64,uint64,uint64,uint64,uint64,uint64,bool,bool,bool,bool,address)"), proposal_id, proposal_data))
+    log(Concat(method("proposal(byte[59],uint64,uint64,uint64,uint64,uint64,uint64,uint64,uint64,uint64,uint64,bool,bool,bool,bool,address,byte[34],address)"), proposal_id, proposal_data))
     log(Concat(method("cast_vote(address,byte[59],uint64,uint64)"), user_address, proposal_id, itob(vote), itob(account_voting_power)))
     return
 end

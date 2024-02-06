@@ -1,5 +1,5 @@
-#pragma version 8
-#tealish version git+https://github.com/Hipo/tealish.git@e8d1b27620220bc4e520d7d3b6d62523e13a7723
+#pragma version 9
+#tealish version git+https://github.com/Hipo/tealish.git@c4f8c12b36dbcc8b63844df5f818164925735087
 
 # Assert that Gtxn[0] is an appcall to execution validator
 assert(Gtxn[0].ApplicationID == 10000)
