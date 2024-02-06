@@ -198,7 +198,6 @@ end
 @public()
 func execute_proposal(proposal_id: bytes):
     bytes user_address = Txn.Sender
-
     bytes proposal_box_name = Concat(PROPOSAL_BOX_PREFIX, proposal_id)
     box<Proposal> proposal = OpenBox(proposal_box_name)
     assert(proposal.voting_end_timestamp)
@@ -207,6 +206,7 @@ func execute_proposal(proposal_id: bytes):
     assert(proposal.is_executed == BYTES_FALSE)
     assert(proposal.is_quorum_reached == BYTES_TRUE)
     assert(proposal.for_voting_power > proposal.against_voting_power)
+    assert(proposal.executor == user_address)
     proposal.is_executed = BYTES_TRUE
 
     assert(user_address == proposal.executor)
@@ -219,8 +219,8 @@ func execute_proposal(proposal_id: bytes):
 end
 
 @public()
-func create_proposal(proposal_id: bytes):
-    bytes user_address = Txn.Sender
+func create_proposal(proposal_id: bytes, execution_hash: bytes[64], executor: bytes[32]):
+    bytes[32] user_address = Txn.Sender
 
     # 1. Check voting power threshold
     int account_voting_power = get_account_voting_power(user_address)
@@ -241,8 +241,10 @@ func create_proposal(proposal_id: bytes):
     proposal.index = app_global_get(PROPOSAL_INDEX_COUNTER_KEY)
     proposal.creation_timestamp = Global.LatestTimestamp
     proposal.snapshot_total_voting_power = total_voting_power
-    proposal.proposer = Cast(user_address, bytes[32])
+    proposal.proposer = user_address
     proposal.quorum_threshold = app_global_get(QUORUM_THRESHOLD_KEY)
+    proposal.execution_hash = execution_hash
+    proposal.executor = executor
 
     # 4. Start & End time
     if !app_global_get(APPROVAL_REQUIREMENT_KEY):

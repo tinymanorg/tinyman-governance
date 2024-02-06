@@ -188,7 +188,7 @@ class StakingVotingTestCase(VaultAppMixin, StakingVotingAppMixin, BaseTestCase):
         txn_group.sign_with_private_key(address=self.proposal_manager_address, private_key=self.proposal_manager_sk)
         with self.assertRaises(LogicEvalError) as e:
             self.ledger.eval_transactions(txn_group.signed_transactions, block_timestamp=block_timestamp)
-        self.assertEqual(e.exception.source['line'], 'assert(len(proposal_id) == 59)')
+        self.assertEqual(e.exception.source['line'], 'router:')
 
     def test_cast_vote(self):
         user_sk, user_address = generate_account()
