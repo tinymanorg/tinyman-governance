@@ -139,8 +139,7 @@ func set_fee_for_pool(proposal_id: bytes, pool_address: bytes, total_fee_share: 
     Proposal proposal = check_and_get_proposal(proposal_id)
 
     # Assert proposal.execution_hash
-    # hash(method_name, pool_address: address, total_fee_share, protocol_fee_ratio)
-    
+    # prefix + hash(method_name, pool_address: address, total_fee_share, protocol_fee_ratio)
     bytes execution_hash = Concat(SET_FEE_FOR_POOL_HASH_PREFIX, sha256(Concat("set_fee_for_pool", pool_address, total_fee_share, protocol_fee_ratio)))
     assert(proposal.execution_hash == execution_hash)
 

@@ -70,7 +70,7 @@ class TreasuryManagementExecutorTestCase(
                         num_uints=0, num_byte_slices=0
                     ),
                     extra_pages=3,
-                    app_args=[PROPOSAL_VOTING_APP_ID],
+                    app_args=[b"create_application", PROPOSAL_VOTING_APP_ID],
                 )
             ]
         )

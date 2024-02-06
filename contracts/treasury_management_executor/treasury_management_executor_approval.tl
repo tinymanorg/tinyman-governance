@@ -40,84 +40,49 @@ const int PROPOSAL_STATE_DEFEATED = 4
 const int PROPOSAL_STATE_SUCCEEDED = 5
 const int PROPOSAL_STATE_EXECUTED = 6
 
-if !Txn.ApplicationID:
-    jump create_app
+# Execution Hash Prefixes
+const bytes SEND_HASH_PREFIX = "sn"
+
+router:
+    create_application
+    update_application
+    send
 end
 
-switch Txn.OnCompletion:
-    NoOp: main
-    OptIn: fail
-    CloseOut: fail
-    UpdateApplication: update_app
-    DeleteApplication: fail
-end
-
-block fail:
-    exit(0)
-end
-
-block create_app:
-    app_global_put(PROPOSAL_VOTING_APP_ID_KEY, btoi(Txn.ApplicationArgs[0]))
+@public(OnCompletion=CreateApplication)
+func create_application(proposal_voting_app_id: int):
+    app_global_put(PROPOSAL_VOTING_APP_ID_KEY, proposal_voting_app_id)
 
     app_global_put(MANAGER_KEY, Txn.Sender)
-    exit(1)
+
+    return
 end
 
-block update_app:
+@public(OnCompletion=UpdateApplication)
+func update_application():
     bytes user_address = Txn.Sender
     assert(user_address == app_global_get(MANAGER_KEY))
-    exit(1)
+
+    return
 end
 
-block main:
-    switch Txn.ApplicationArgs[0]:
-        "send": send
-    end
+@public()
+func send(proposal_id: bytes, sender: bytes, receiver: bytes, amount: int, asset_id: int):
+    Proposal proposal = check_and_get_proposal(proposal_id)
 
-    block send:
-        bytes proposal_id = Txn.ApplicationArgs[1]
-        # Sender can be a rekeyed account to application's account.
-        bytes sender = Txn.ApplicationArgs[2]
-        bytes receiver = Txn.ApplicationArgs[3]
-        int amount = btoi(Txn.ApplicationArgs[4])
-        int asset_id = btoi(Txn.ApplicationArgs[5])
+    # Assert proposal.execution_hash
+    # prefix + hash(method_name, sender, receiver, amount, asset_id)
+    bytes execution_hash = Concat(SEND_HASH_PREFIX, sha256(Concat("send", sender, receiver, itob(amount), itob(asset_id))))
+    assert(proposal.execution_hash == execution_hash)
 
-        Proposal proposal = check_and_get_proposal(proposal_id)
+    transfer(asset_id, amount, sender, receiver)
 
-        # Assert proposal.execution_hash
-        # hash(method_name, sender, receiver, amount, asset_id)
-
-        bytes execution_hash = Lpad(sha256(Concat("send", sender, receiver, itob(amount), itob(asset_id))), 128)
-        assert(proposal.execution_hash == execution_hash)
-
-        if asset_id == 0:
-            inner_txn:
-                TypeEnum: Pay
-                Sender: sender
-                Receiver: receiver
-                Amount: amount
-                Fee: 0
-            end
-        else:
-            inner_txn:
-                TypeEnum: Axfer
-                Sender: sender
-                Receiver: receiver
-                Amount: amount
-                XferAsset: asset_id
-                Fee: 0
-            end
-        end
-
-        set_proposal_as_executed(proposal_id)
-        exit(1)
-    end
-
+    set_proposal_as_executed(proposal_id)
+    return
 end
 
 func check_and_get_proposal(proposal_id: bytes) Proposal:
-
-    # read proposal from proposal_voting app
+    # Read proposal from proposal_voting app
     inner_txn:
         TypeEnum: Appl
         ApplicationID: app_global_get(PROPOSAL_VOTING_APP_ID_KEY)
@@ -126,19 +91,10 @@ func check_and_get_proposal(proposal_id: bytes) Proposal:
         Fee: 0
     end
 
-    Proposal proposal = Cast(extract(4, 0, Itxn.LastLog), Proposal)
+    Proposal proposal = Cast(extract(4, 182, Itxn.LastLog), Proposal)
+    int proposal_state = btoi(extract(186, 0, Itxn.LastLog))
 
-    inner_txn:
-        TypeEnum: Appl
-        ApplicationID: app_global_get(PROPOSAL_VOTING_APP_ID_KEY)
-        ApplicationArgs[0]: "get_proposal_state"
-        ApplicationArgs[1]: proposal_id
-        Fee: 0
-    end
-
-    int proposal_state = extract_uint64(Itxn.LastLog, 4)
-
-    # proposal checks
+    # Proposal checks
     assert(proposal_state == PROPOSAL_STATE_SUCCEEDED)
 
     return proposal
@@ -151,6 +107,32 @@ func set_proposal_as_executed(proposal_id: bytes):
         ApplicationArgs[0]: "execute_proposal"
         ApplicationArgs[1]: proposal_id
         Fee: 0
+    end
+    return
+end
+
+func transfer(asset_id: int, amount: int, sender: bytes, receiver: bytes):
+    # This function is copied from Tinyman AMM Contracts V2.
+    # "asset_id == 0" is updated as "!asset_id" for budget optimization.
+    # https://github.com/tinymanorg/tinyman-amm-contracts-v2/blob/main/contracts/amm_approval.tl#L1146
+
+    if !asset_id:
+        inner_txn:
+            TypeEnum: Pay
+            Sender: sender
+            Receiver: receiver
+            Amount: amount
+            Fee: 0
+        end
+    else:
+        inner_txn:
+            TypeEnum: Axfer
+            Sender: sender
+            AssetReceiver: receiver
+            AssetAmount: amount
+            XferAsset: asset_id
+            Fee: 0
+        end
     end
     return
 end
