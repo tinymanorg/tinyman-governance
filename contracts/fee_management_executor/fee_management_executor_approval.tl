@@ -18,7 +18,7 @@ struct Proposal:
     is_executed: bytes[1]
     is_quorum_reached: bytes[1]
     proposer: bytes[32]
-    execution_hash: bytes[128]
+    execution_hash: bytes[34]
     executor: bytes[32]
 end
 
@@ -40,145 +40,126 @@ const int PROPOSAL_STATE_DEFEATED = 4
 const int PROPOSAL_STATE_SUCCEEDED = 5
 const int PROPOSAL_STATE_EXECUTED = 6
 
-if !Txn.ApplicationID:
-    jump create_app
+# Execution Hash Prefixes
+
+const bytes SET_FEE_SETTER_HASH_PREFIX = "fs"
+const bytes SET_FEE_MANAGER_HASH_PREFIX = "fm"
+const bytes SET_FEE_COLLECTOR_HASH_PREFIX = "fc"
+const bytes SET_FEE_FOR_POOL_HASH_PREFIX = "sf"
+
+router:
+    create_application
+    update_application
+    set_fee_setter
+    set_fee_manager
+    set_fee_collector
+    set_fee_for_pool
 end
 
-switch Txn.OnCompletion:
-    NoOp: main
-    OptIn: fail
-    CloseOut: fail
-    UpdateApplication: update_app
-    DeleteApplication: fail
-end
-
-block fail:
-    exit(0)
-end
-
-block create_app:
-    app_global_put(AMM_APP_ID_KEY, btoi(Txn.ApplicationArgs[0]))
-    app_global_put(PROPOSAL_VOTING_APP_ID_KEY, btoi(Txn.ApplicationArgs[1]))
+@public(OnCompletion=CreateApplication)
+func create_application(amm_app_id: int, proposal_voting_app_id: int):
+    app_global_put(AMM_APP_ID_KEY, amm_app_id)
+    app_global_put(PROPOSAL_VOTING_APP_ID_KEY, proposal_voting_app_id)
 
     app_global_put(MANAGER_KEY, Txn.Sender)
-    exit(1)
+
+    return
 end
 
-block update_app:
+@public(OnCompletion=UpdateApplication)
+func update_application():
     bytes user_address = Txn.Sender
     assert(user_address == app_global_get(MANAGER_KEY))
-    exit(1)
+
+    return
 end
 
-block main:
-    switch Txn.ApplicationArgs[0]:
-        "set_fee_setter": set_fee_setter
-        "set_fee_manager": set_fee_manager
-        "set_fee_collector": set_fee_collector
-        "set_fee_for_pool": set_fee_for_pool
+@public()
+func set_fee_setter(proposal_id: bytes, new_fee_setter: bytes):
+    Proposal proposal = check_and_get_proposal(proposal_id)
+
+    # Assert proposal.execution_hash
+    bytes execution_hash = Concat(SET_FEE_SETTER_HASH_PREFIX, sha256(Concat("set_fee_setter", new_fee_setter)))
+    assert(proposal.execution_hash == execution_hash)
+
+    inner_txn:
+        TypeEnum: Appl
+        ApplicationID: app_global_get(AMM_APP_ID_KEY)
+        ApplicationArgs[0]: "set_fee_setter"
+        Accounts[0]: new_fee_setter
+        Fee: 0
     end
 
-    block set_fee_setter:
-        bytes proposal_id = Txn.ApplicationArgs[1]
-        bytes new_fee_setter = Txn.ApplicationArgs[2]
+    set_proposal_as_executed(proposal_id)
+    return
+end
 
-        Proposal proposal = check_and_get_proposal(proposal_id)
+@public()
+func set_fee_manager(proposal_id: bytes, new_fee_manager: bytes):
+    Proposal proposal = check_and_get_proposal(proposal_id)
 
-        # Assert proposal.execution_hash
-        # hash(method_name, address)
-        bytes execution_hash = Lpad(sha256(Concat("set_fee_setter", new_fee_setter)), 128)
-        assert(proposal.execution_hash == execution_hash)
+    # Assert proposal.execution_hash
+    bytes execution_hash = Concat(SET_FEE_MANAGER_HASH_PREFIX, sha256(Concat("set_fee_manager", new_fee_manager)))
+    assert(proposal.execution_hash == execution_hash)
 
-        inner_txn:
-            TypeEnum: Appl
-            ApplicationID: app_global_get(AMM_APP_ID_KEY)
-            ApplicationArgs[0]: "set_fee_setter"
-            Accounts[0]: new_fee_setter
-            Fee: 0
-        end
-
-        set_proposal_as_executed(proposal_id)
-        exit(1)
+    inner_txn:
+        TypeEnum: Appl
+        ApplicationID: app_global_get(AMM_APP_ID_KEY)
+        ApplicationArgs[0]: "set_fee_manager"
+        Accounts[0]: new_fee_manager
+        Fee: 0
     end
 
-    block set_fee_manager:
-        bytes proposal_id = Txn.ApplicationArgs[1]
-        bytes new_fee_manager = Txn.ApplicationArgs[2]
+    set_proposal_as_executed(proposal_id)
+    return
+end
 
-        Proposal proposal = check_and_get_proposal(proposal_id)
+@public()
+func set_fee_collector(proposal_id: bytes, new_fee_collector: bytes):
+    Proposal proposal = check_and_get_proposal(proposal_id)
 
-        # Assert proposal.execution_hash
-        # hash(method_name, address)
-        bytes execution_hash = Lpad(sha256(Concat("set_fee_manager", new_fee_manager)), 128)
-        assert(proposal.execution_hash == execution_hash)
+    # Assert proposal.execution_hash
+    bytes execution_hash = Concat(SET_FEE_COLLECTOR_HASH_PREFIX, sha256(Concat("set_fee_collector", new_fee_collector)))
+    assert(proposal.execution_hash == execution_hash)
 
-        inner_txn:
-            TypeEnum: Appl
-            ApplicationID: app_global_get(AMM_APP_ID_KEY)
-            ApplicationArgs[0]: "set_fee_manager"
-            Accounts[0]: new_fee_manager
-            Fee: 0
-        end
-
-        set_proposal_as_executed(proposal_id)
-        exit(1)
+    inner_txn:
+        TypeEnum: Appl
+        ApplicationID: app_global_get(AMM_APP_ID_KEY)
+        ApplicationArgs[0]: "set_fee_manager"
+        Accounts[0]: new_fee_collector
+        Fee: 0
     end
 
-    block set_fee_collector:
-        bytes proposal_id = Txn.ApplicationArgs[1]
-        bytes new_fee_collector = Txn.ApplicationArgs[2]
+    set_proposal_as_executed(proposal_id)
+    return
+end
 
-        Proposal proposal = check_and_get_proposal(proposal_id)
+@public()
+func set_fee_for_pool(proposal_id: bytes, pool_address: bytes, total_fee_share: bytes, protocol_fee_ratio: bytes):
+    Proposal proposal = check_and_get_proposal(proposal_id)
 
-        # Assert proposal.execution_hash
-        # hash(method_name, address)
-        bytes execution_hash = Lpad(sha256(Concat("set_fee_collector", new_fee_collector)), 128)
-        assert(proposal.execution_hash == execution_hash)
+    # Assert proposal.execution_hash
+    # hash(method_name, pool_address: address, total_fee_share, protocol_fee_ratio)
+    
+    bytes execution_hash = Concat(SET_FEE_FOR_POOL_HASH_PREFIX, sha256(Concat("set_fee_for_pool", pool_address, total_fee_share, protocol_fee_ratio)))
+    assert(proposal.execution_hash == execution_hash)
 
-        inner_txn:
-            TypeEnum: Appl
-            ApplicationID: app_global_get(AMM_APP_ID_KEY)
-            ApplicationArgs[0]: "set_fee_manager"
-            Accounts[0]: new_fee_collector
-            Fee: 0
-        end
-
-        set_proposal_as_executed(proposal_id)
-        exit(1)
+    inner_txn:
+        TypeEnum: Appl
+        ApplicationID: app_global_get(AMM_APP_ID_KEY)
+        ApplicationArgs[0]: "set_fee"
+        ApplicationArgs[1]: total_fee_share
+        ApplicationArgs[2]: protocol_fee_ratio
+        Accounts[0]: pool_address
+        Fee: 0
     end
 
-    block set_fee_for_pool:
-        bytes proposal_id = Txn.ApplicationArgs[1]
-        bytes pool_address = Txn.ApplicationArgs[2]
-        bytes total_fee_share = Txn.ApplicationArgs[3]
-        bytes protocol_fee_ratio = Txn.ApplicationArgs[4]
-
-        Proposal proposal = check_and_get_proposal(proposal_id)
-
-        # Assert proposal.execution_hash
-        # hash(method_name, pool_address: address, total_fee_share, protocol_fee_ratio)
-        
-        bytes execution_hash = Lpad(sha256(Concat("set_fee_for_pool", pool_address, total_fee_share, protocol_fee_ratio)), 128)
-        assert(proposal.execution_hash == execution_hash)
-
-        inner_txn:
-            TypeEnum: Appl
-            ApplicationID: app_global_get(AMM_APP_ID_KEY)
-            ApplicationArgs[0]: "set_fee"
-            ApplicationArgs[1]: total_fee_share
-            ApplicationArgs[2]: protocol_fee_ratio
-            Accounts[0]: pool_address
-            Fee: 0
-        end
-
-        set_proposal_as_executed(proposal_id)
-        exit(1)
-    end
+    set_proposal_as_executed(proposal_id)
+    return
 end
 
 func check_and_get_proposal(proposal_id: bytes) Proposal:
-
-    # read proposal from proposal_voting app
+    # Read proposal from proposal_voting app
     inner_txn:
         TypeEnum: Appl
         ApplicationID: app_global_get(PROPOSAL_VOTING_APP_ID_KEY)
@@ -187,19 +168,10 @@ func check_and_get_proposal(proposal_id: bytes) Proposal:
         Fee: 0
     end
 
-    Proposal proposal = Cast(extract(4, 0, Itxn.LastLog), Proposal)
+    Proposal proposal = Cast(extract(4, 182, Itxn.LastLog), Proposal)
+    int proposal_state = btoi(extract(186, 0, Itxn.LastLog))
 
-    inner_txn:
-        TypeEnum: Appl
-        ApplicationID: app_global_get(PROPOSAL_VOTING_APP_ID_KEY)
-        ApplicationArgs[0]: "get_proposal_state"
-        ApplicationArgs[1]: proposal_id
-        Fee: 0
-    end
-
-    int proposal_state = extract_uint64(Itxn.LastLog, 4)
-
-    # proposal checks
+    # Proposal checks
     assert(proposal_state == PROPOSAL_STATE_SUCCEEDED)
 
     return proposal

@@ -19,7 +19,7 @@ struct Proposal:
     is_executed: bytes[1]
     is_quorum_reached: bytes[1]
     proposer: bytes[32]
-    execution_hash: bytes[128]
+    execution_hash: bytes[34]
     executor: bytes[32]
 end
 

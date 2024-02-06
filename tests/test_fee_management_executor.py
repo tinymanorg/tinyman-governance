@@ -77,7 +77,7 @@ class FeeManagementExecutorTestCase(
                         num_uints=0, num_byte_slices=0
                     ),
                     extra_pages=3,
-                    app_args=[AMM_V2_APP_ID, PROPOSAL_VOTING_APP_ID],
+                    app_args=[b"create_application", AMM_V2_APP_ID, PROPOSAL_VOTING_APP_ID],
                 )
             ]
         )
