@@ -219,7 +219,7 @@ func execute_proposal(proposal_id: bytes):
 end
 
 @public()
-func create_proposal(proposal_id: bytes, execution_hash: bytes[64], executor: bytes[32]):
+func create_proposal(proposal_id: bytes, execution_hash: bytes[34], executor: bytes[32]):
     bytes[32] user_address = Txn.Sender
 
     # 1. Check voting power threshold
