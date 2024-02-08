@@ -19,7 +19,7 @@ struct Proposal:
     is_executed: bytes[1]
     is_quorum_reached: bytes[1]
     proposer: bytes[32]
-    execution_hash: bytes[64]
+    execution_hash: bytes[34]
     executor: bytes[32]
 end
 
@@ -171,7 +171,7 @@ func approve_proposal(proposal_id: bytes):
 
     bytes proposal_data
     _, proposal_data = box_get(proposal_box_name)
-    log(Concat(method("proposal(byte[59],uint64,uint64,uint64,uint64,uint64,uint64,uint64,uint64,uint64,uint64,bool,bool,bool,bool,address,byte[64],address)"), proposal_id, proposal_data))
+    log(Concat(method("proposal(byte[59],uint64,uint64,uint64,uint64,uint64,uint64,uint64,uint64,uint64,uint64,bool,bool,bool,bool,address,byte[34],address)"), proposal_id, proposal_data))
     log(Concat(method("approve_proposal(address,byte[59])"), user_address, proposal_id))
     return
 end
@@ -190,7 +190,7 @@ func cancel_proposal(proposal_id: bytes):
 
     bytes proposal_data
     _, proposal_data = box_get(proposal_box_name)
-    log(Concat(method("proposal(byte[59],uint64,uint64,uint64,uint64,uint64,uint64,uint64,uint64,uint64,uint64,bool,bool,bool,bool,address,byte[64],address)"), proposal_id, proposal_data))
+    log(Concat(method("proposal(byte[59],uint64,uint64,uint64,uint64,uint64,uint64,uint64,uint64,uint64,uint64,bool,bool,bool,bool,address,byte[34],address)"), proposal_id, proposal_data))
     log(Concat(method("cancel_proposal(address,byte[59])"), user_address, proposal_id))
     return
 end
@@ -211,13 +211,13 @@ func execute_proposal(proposal_id: bytes):
 
     bytes proposal_data
     _, proposal_data = box_get(proposal_box_name)
-    log(Concat(method("proposal(byte[59],uint64,uint64,uint64,uint64,uint64,uint64,uint64,uint64,uint64,uint64,bool,bool,bool,bool,address,byte[64],address)"), proposal_id, proposal_data))
+    log(Concat(method("proposal(byte[59],uint64,uint64,uint64,uint64,uint64,uint64,uint64,uint64,uint64,uint64,bool,bool,bool,bool,address,byte[34],address)"), proposal_id, proposal_data))
     log(Concat(method("execute_proposal(address,byte[59])"), user_address, proposal_id))
     return
 end
 
 @public()
-func create_proposal(proposal_id: bytes, execution_hash: bytes[64], executor: bytes[32]):
+func create_proposal(proposal_id: bytes, execution_hash: bytes[34], executor: bytes[32]):
     bytes[32] user_address = Txn.Sender
 
     # 1. Check voting power threshold
@@ -256,7 +256,7 @@ func create_proposal(proposal_id: bytes, execution_hash: bytes[64], executor: by
 
     bytes proposal_data
     _, proposal_data = box_get(proposal_box_name)
-    log(Concat(method("proposal(byte[59],uint64,uint64,uint64,uint64,uint64,uint64,uint64,uint64,uint64,uint64,bool,bool,bool,bool,address,byte[64],address)"), proposal_id, proposal_data))
+    log(Concat(method("proposal(byte[59],uint64,uint64,uint64,uint64,uint64,uint64,uint64,uint64,uint64,uint64,bool,bool,bool,bool,address,byte[34],address)"), proposal_id, proposal_data))
     log(Concat(method("create_proposal(address,byte[59])"), user_address, proposal_id))
     return
 end
@@ -304,7 +304,7 @@ func cast_vote(proposal_id: bytes, vote: int, account_power_index: bytes):
 
     bytes proposal_data
     _, proposal_data = box_get(proposal_box_name)
-    log(Concat(method("proposal(byte[59],uint64,uint64,uint64,uint64,uint64,uint64,uint64,uint64,uint64,uint64,bool,bool,bool,bool,address,byte[64],address)"), proposal_id, proposal_data))
+    log(Concat(method("proposal(byte[59],uint64,uint64,uint64,uint64,uint64,uint64,uint64,uint64,uint64,uint64,bool,bool,bool,bool,address,byte[34],address)"), proposal_id, proposal_data))
     log(Concat(method("cast_vote(address,byte[59],uint64,uint64)"), user_address, proposal_id, itob(vote), itob(account_voting_power)))
     return
 end
