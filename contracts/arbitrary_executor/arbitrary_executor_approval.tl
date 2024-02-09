@@ -49,6 +49,7 @@ router:
     update_application
     validate_transaction
     validate_group
+    asset_optin
 end
 
 @public(OnCompletion=CreateApplication)
@@ -100,6 +101,21 @@ func validate_group(proposal_id: bytes):
     return
 end
 
+@public()
+func asset_optin(asset_id: int):
+    int index = Txn.GroupIndex
+    assert(index != 0)
+
+    assert(Gtxn[index - 1].TypeEnum == Pay)
+    assert(Gtxn[index - 1].Sender == Txn.Sender)
+    assert(Gtxn[index - 1].Receiver == Global.CurrentApplicationAddress)
+    assert(Gtxn[index - 1].Amount == 100000)
+
+    transfer(asset_id, 0, Global.CurrentApplicationAddress, Global.CurrentApplicationAddress)
+
+    return
+end
+
 func check_and_get_proposal(proposal_id: bytes) Proposal:
     # Read proposal from proposal_voting app
     inner_txn:
@@ -126,6 +142,32 @@ func set_proposal_as_executed(proposal_id: bytes):
         ApplicationArgs[0]: "execute_proposal"
         ApplicationArgs[1]: proposal_id
         Fee: 0
+    end
+    return
+end
+
+func transfer(asset_id: int, amount: int, sender: bytes, receiver: bytes):
+    # This function is copied from Tinyman AMM Contracts V2.
+    # "asset_id == 0" is updated as "!asset_id" for budget optimization.
+    # https://github.com/tinymanorg/tinyman-amm-contracts-v2/blob/main/contracts/amm_approval.tl#L1146
+
+    if !asset_id:
+        inner_txn:
+            TypeEnum: Pay
+            Sender: sender
+            Receiver: receiver
+            Amount: amount
+            Fee: 0
+        end
+    else:
+        inner_txn:
+            TypeEnum: Axfer
+            Sender: sender
+            AssetReceiver: receiver
+            AssetAmount: amount
+            XferAsset: asset_id
+            Fee: 0
+        end
     end
     return
 end
