@@ -71,19 +71,10 @@ end
 @public()
 func validate_transaction(proposal_id: bytes):
     # Read proposal from proposal_voting app
-    inner_txn:
-        TypeEnum: Appl
-        ApplicationID: app_global_get(PROPOSAL_VOTING_APP_ID_KEY)
-        ApplicationArgs[0]: "get_proposal"
-        ApplicationArgs[1]: proposal_id
-        Fee: 0
-    end
-
-    Proposal proposal = Cast(extract(4, 182, Itxn.LastLog), Proposal)
-    int proposal_state = btoi(extract(186, 0, Itxn.LastLog))
+    Proposal proposal = check_and_get_proposal(proposal_id)
 
     # proposal checks
-    assert(proposal_state == PROPOSAL_STATE_SUCCEEDED)
+    assert(Global.GroupSize == 2)
 
     # Assert Gtxn[1]'s transaction_id.
     bytes execution_hash = Concat(VALIDATE_TRANSACTION_HASH_PREFIX, Gtxn[1].TxID)
@@ -96,6 +87,21 @@ end
 @public()
 func validate_group(proposal_id: bytes):
     # 1. Read proposal from proposal_voting app
+    Proposal proposal = check_and_get_proposal(proposal_id)
+
+    # 2. Proposal checks
+    assert(Global.GroupSize >= 2)
+
+    bytes execution_hash = Concat(VALIDATE_GROUP_HASH_PREFIX, Global.GroupID)
+    assert(execution_hash == proposal.execution_hash)
+
+    set_proposal_as_executed(proposal_id)
+
+    return
+end
+
+func check_and_get_proposal(proposal_id: bytes) Proposal:
+    # Read proposal from proposal_voting app
     inner_txn:
         TypeEnum: Appl
         ApplicationID: app_global_get(PROPOSAL_VOTING_APP_ID_KEY)
@@ -107,15 +113,10 @@ func validate_group(proposal_id: bytes):
     Proposal proposal = Cast(extract(4, 182, Itxn.LastLog), Proposal)
     int proposal_state = btoi(extract(186, 0, Itxn.LastLog))
 
-    # 2 .Proposal checks
+    # Proposal checks
     assert(proposal_state == PROPOSAL_STATE_SUCCEEDED)
 
-    bytes execution_hash = Concat(VALIDATE_GROUP_HASH_PREFIX, Global.GroupID)
-    assert(execution_hash == proposal.execution_hash)
-
-    set_proposal_as_executed(proposal_id)
-
-    return
+    return proposal
 end
 
 func set_proposal_as_executed(proposal_id: bytes):

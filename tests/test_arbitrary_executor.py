@@ -1,13 +1,13 @@
 from datetime import datetime
 from zoneinfo import ZoneInfo
 
-from algojig import get_suggested_params
+from algojig import get_suggested_params, LogicSigReject
 from algosdk import transaction
 from algosdk.account import generate_account
 from algosdk.encoding import decode_address
 from algosdk.logic import get_application_address
 from tinyman.governance import proposal_voting
-from tinyman.governance.proposal_voting.executor_transactions import get_arbitrary_transaction_execution_hash, prepare_validate_transaction_transactions
+from tinyman.governance.proposal_voting.executor_transactions import get_arbitrary_transaction_execution_hash, get_arbitrary_transaction_group_execution_hash, prepare_validate_transaction_transactions, prepare_validate_group_transactions
 from tinyman.governance.proposal_voting.storage import (
     Proposal,
     get_proposal_box_name,
@@ -248,6 +248,235 @@ class ArbitraryExecutorTestCase(
         )
 
         execution_hash = get_arbitrary_transaction_execution_hash(arbitrary_transaction)
+
+        # Create proposal
+        proposal = Proposal(
+            index=0,
+            creation_timestamp=1647302400,
+            voting_start_timestamp=1647561600,
+            voting_end_timestamp=1648166400,
+            snapshot_total_voting_power=7671231,
+            vote_count=4,
+            quorum_threshold=7000000,
+            against_voting_power=205479,
+            for_voting_power=7054794,
+            abstain_voting_power=410958,
+            is_approved=True,
+            is_cancelled=False,
+            is_executed=False,
+            is_quorum_reached=True,
+            proposer_address=user_address,
+            execution_hash=execution_hash,
+            executor_address=get_application_address(ARBITRARY_EXECUTOR_APP_ID)
+        )
+
+        self.ledger.boxes[PROPOSAL_VOTING_APP_ID] = {
+            proposal_box_name: get_rawbox_from_proposal(proposal)
+        }
+
+        # Execute proposal
+        self.create_arbitrary_executor_app(self.manager_address)
+
+        arbitrary_executor_txn_group.sign_with_private_key(user_address, user_sk)
+        arbitrary_executor_txn_group.sign_with_logicsig(logic_sig_account, address=tinyman_algo_address)
+
+        block = self.ledger.eval_transactions(
+            arbitrary_executor_txn_group.signed_transactions,
+            block_timestamp=proposal.voting_end_timestamp + 10,
+        )
+
+        proposal = parse_box_proposal(self.ledger.boxes[PROPOSAL_VOTING_APP_ID][proposal_box_name])
+        self.assertTrue(proposal.is_executed)
+    
+    def test_logic_sig_with_rekey(self):
+        user_sk, user_address = generate_account()
+        tinyman_algo_sk, tinyman_algo_address = generate_account()
+
+        self.ledger.set_account_balance(user_address, 10_000_000)
+        self.ledger.set_account_balance(tinyman_algo_address, 10_000_000)
+
+        self.create_proposal_voting_app(
+            self.manager_address, self.proposal_manager_address
+        )
+        self.ledger.global_states[PROPOSAL_VOTING_APP_ID][
+            b"quorum_threshold"
+        ] = 7_000_000
+        self.ledger.set_account_balance(
+            get_application_address(PROPOSAL_VOTING_APP_ID),
+            proposal_voting.constants.PROPOSAL_VOTING_APP_MINIMUM_BALANCE_REQUIREMENT,
+        )
+
+        global_states = self.ledger.global_states.copy()
+
+        # Create logic sig account
+        logic_sig_account = transaction.LogicSigAccount(arbitrary_executor_logic_signature.bytecode)
+
+        # Rekey tinyman_algo account to logic sig account
+        self.ledger.set_account_balance(logic_sig_account.address(), 10_000_000)
+
+        txn_group = TransactionGroup([
+            transaction.PaymentTxn(
+                sender=tinyman_algo_address,
+                sp=self.sp,
+                receiver=logic_sig_account.address(),
+                amt=1000, 
+                rekey_to=logic_sig_account.address()
+            )
+        ])
+        txn_group.sign_with_private_key(tinyman_algo_address, tinyman_algo_sk)
+        self.ledger.eval_transactions(
+            txn_group.signed_transactions, block_timestamp=1647561600
+        )
+
+        self.ledger.global_states = global_states
+
+        # Create the arbitrary executor transactions
+        proposal_id = generate_cid_from_proposal_metadata({"name": "Proposal 1"})
+        proposal_box_name = get_proposal_box_name(proposal_id)
+
+        # Transaction with rekey
+        arbitrary_transaction_sp = get_suggested_params()
+        arbitrary_transaction_sp.fee = 15000
+        arbitrary_transaction = transaction.PaymentTxn(
+            sender=tinyman_algo_address,
+            sp=arbitrary_transaction_sp,
+            receiver=user_address,
+            amt=0,
+            rekey_to=user_address
+        )
+
+        arbitrary_executor_txn_group = prepare_validate_transaction_transactions(
+            arbitrary_executor_app_id=ARBITRARY_EXECUTOR_APP_ID,
+            proposal_voting_app_id=PROPOSAL_VOTING_APP_ID,
+            proposal_id=proposal_id,
+            transaction_to_validate=arbitrary_transaction,
+            sender=user_address,
+            suggested_params=self.sp
+        )
+
+        execution_hash = get_arbitrary_transaction_execution_hash(arbitrary_transaction)
+
+        # Create proposal
+        proposal = Proposal(
+            index=0,
+            creation_timestamp=1647302400,
+            voting_start_timestamp=1647561600,
+            voting_end_timestamp=1648166400,
+            snapshot_total_voting_power=7671231,
+            vote_count=4,
+            quorum_threshold=7000000,
+            against_voting_power=205479,
+            for_voting_power=7054794,
+            abstain_voting_power=410958,
+            is_approved=True,
+            is_cancelled=False,
+            is_executed=False,
+            is_quorum_reached=True,
+            proposer_address=user_address,
+            execution_hash=execution_hash,
+            executor_address=get_application_address(ARBITRARY_EXECUTOR_APP_ID)
+        )
+
+        self.ledger.boxes[PROPOSAL_VOTING_APP_ID] = {
+            proposal_box_name: get_rawbox_from_proposal(proposal)
+        }
+
+        # Execute proposal
+        self.create_arbitrary_executor_app(self.manager_address)
+
+        arbitrary_executor_txn_group.sign_with_private_key(user_address, user_sk)
+        arbitrary_executor_txn_group.sign_with_logicsig(logic_sig_account, address=tinyman_algo_address)
+
+        with self.assertRaises(LogicSigReject) as e:
+            self.ledger.eval_transactions(
+                arbitrary_executor_txn_group.signed_transactions,
+                block_timestamp=proposal.voting_end_timestamp + 10,
+            )
+        self.assertEqual(e.exception.error, 'assert failed')
+    
+    def test_validate_group(self):
+        user_sk, user_address = generate_account()
+        tinyman_algo_sk, tinyman_algo_address = generate_account()
+
+        self.ledger.set_account_balance(user_address, 10_000_000)
+        self.ledger.set_account_balance(tinyman_algo_address, 10_000_000)
+
+        self.create_proposal_voting_app(
+            self.manager_address, self.proposal_manager_address
+        )
+        self.ledger.global_states[PROPOSAL_VOTING_APP_ID][
+            b"quorum_threshold"
+        ] = 7_000_000
+        self.ledger.set_account_balance(
+            get_application_address(PROPOSAL_VOTING_APP_ID),
+            proposal_voting.constants.PROPOSAL_VOTING_APP_MINIMUM_BALANCE_REQUIREMENT,
+        )
+
+        global_states = self.ledger.global_states.copy()
+
+        # Create logic sig account
+        logic_sig_account = transaction.LogicSigAccount(arbitrary_executor_logic_signature.bytecode)
+
+        # Rekey tinyman_algo account to logic sig account
+        self.ledger.set_account_balance(logic_sig_account.address(), 10_000_000)
+
+        txn_group = TransactionGroup([
+            transaction.PaymentTxn(
+                sender=tinyman_algo_address,
+                sp=self.sp,
+                receiver=logic_sig_account.address(),
+                amt=1000, 
+                rekey_to=logic_sig_account.address()
+            )
+        ])
+        txn_group.sign_with_private_key(tinyman_algo_address, tinyman_algo_sk)
+        self.ledger.eval_transactions(
+            txn_group.signed_transactions, block_timestamp=1647561600
+        )
+
+        self.ledger.global_states = global_states
+
+        # Create the arbitrary executor transactions
+        proposal_id = generate_cid_from_proposal_metadata({"name": "Proposal 1"})
+        proposal_box_name = get_proposal_box_name(proposal_id)
+
+        arbitrary_transaction_sp = get_suggested_params()
+        arbitrary_transaction_sp.fee = 15000
+        arbitrary_transactions = TransactionGroup([
+            transaction.AssetConfigTxn(
+                sender=tinyman_algo_address,
+                sp=arbitrary_transaction_sp,
+                total=1000,
+                default_frozen=False,
+                unit_name="TINYRING",
+                asset_name="Tiny Ring",
+                manager=tinyman_algo_address,
+                reserve=tinyman_algo_address,
+                freeze=tinyman_algo_address,
+                clawback=tinyman_algo_address,
+                url="https://ipfs.io/ipfs/RANDOM_CID",
+                decimals=0,
+            ),
+            # An arbitrary transaction.
+            transaction.PaymentTxn(
+                sender=user_address,
+                sp=arbitrary_transaction_sp,
+                receiver=tinyman_algo_address,
+                amt=1000,
+            )
+        ])
+        
+
+        arbitrary_executor_txn_group = prepare_validate_group_transactions(
+            arbitrary_executor_app_id=ARBITRARY_EXECUTOR_APP_ID,
+            proposal_voting_app_id=PROPOSAL_VOTING_APP_ID,
+            proposal_id=proposal_id,
+            group_to_validate=arbitrary_transactions,
+            sender=user_address,
+            suggested_params=self.sp
+        )
+
+        execution_hash = get_arbitrary_transaction_group_execution_hash(arbitrary_transactions)
 
         # Create proposal
         proposal = Proposal(
