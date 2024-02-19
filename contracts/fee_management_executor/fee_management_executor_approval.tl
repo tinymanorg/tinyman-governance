@@ -76,7 +76,7 @@ func update_application():
 end
 
 @public()
-func set_fee_setter(proposal_id: bytes, new_fee_setter: bytes):
+func set_fee_setter(proposal_id: bytes, new_fee_setter: bytes[32]):
     Proposal proposal = check_and_get_proposal(proposal_id)
 
     # Assert proposal.execution_hash
@@ -96,7 +96,7 @@ func set_fee_setter(proposal_id: bytes, new_fee_setter: bytes):
 end
 
 @public()
-func set_fee_manager(proposal_id: bytes, new_fee_manager: bytes):
+func set_fee_manager(proposal_id: bytes, new_fee_manager: bytes[32]):
     Proposal proposal = check_and_get_proposal(proposal_id)
 
     # Assert proposal.execution_hash
@@ -116,7 +116,7 @@ func set_fee_manager(proposal_id: bytes, new_fee_manager: bytes):
 end
 
 @public()
-func set_fee_collector(proposal_id: bytes, new_fee_collector: bytes):
+func set_fee_collector(proposal_id: bytes, new_fee_collector: bytes[32]):
     Proposal proposal = check_and_get_proposal(proposal_id)
 
     # Assert proposal.execution_hash
@@ -136,7 +136,7 @@ func set_fee_collector(proposal_id: bytes, new_fee_collector: bytes):
 end
 
 @public()
-func set_fee_for_pool(proposal_id: bytes, pool_address: bytes, total_fee_share: bytes, protocol_fee_ratio: bytes):
+func set_fee_for_pool(proposal_id: bytes, pool_address: bytes[32], total_fee_share: bytes, protocol_fee_ratio: bytes):
     Proposal proposal = check_and_get_proposal(proposal_id)
 
     # Assert proposal.execution_hash

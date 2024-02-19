@@ -67,7 +67,7 @@ func update_application():
 end
 
 @public()
-func send(proposal_id: bytes, sender: bytes, receiver: bytes, amount: int, asset_id: int):
+func send(proposal_id: bytes, sender: bytes[32], receiver: bytes[32], amount: int, asset_id: int):
     Proposal proposal = check_and_get_proposal(proposal_id)
 
     # Assert proposal.execution_hash
