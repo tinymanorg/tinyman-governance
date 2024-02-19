@@ -7,7 +7,7 @@ from algosdk.account import generate_account
 from algosdk.encoding import decode_address
 from algosdk.logic import get_application_address
 from tinyman.governance import proposal_voting
-from tinyman.governance.proposal_voting.executor_transactions import get_arbitrary_transaction_execution_hash, get_arbitrary_transaction_group_execution_hash, prepare_validate_transaction_transactions, prepare_validate_group_transactions
+from tinyman.governance.proposal_voting.executor_transactions import get_arbitrary_transaction_execution_hash, get_arbitrary_transaction_group_execution_hash, prepare_asset_optin_transactions, prepare_validate_transaction_transactions, prepare_validate_group_transactions
 from tinyman.governance.proposal_voting.storage import (
     Proposal,
     get_proposal_box_name,
@@ -516,3 +516,38 @@ class ArbitraryExecutorTestCase(
 
         proposal = parse_box_proposal(self.ledger.boxes[PROPOSAL_VOTING_APP_ID][proposal_box_name])
         self.assertTrue(proposal.is_executed)
+
+    def test_asset_optin(self):
+        block_datetime = datetime(year=2022, month=3, day=2, tzinfo=ZoneInfo("UTC"))
+        block_timestamp = int(block_datetime.timestamp())
+
+        self.create_arbitrary_executor_app(self.manager_address)
+
+        user_sk, user_address = generate_account()
+
+        self.ledger.set_account_balance(user_address, 10_000_000)
+        self.ledger.set_account_balance(get_application_address(ARBITRARY_EXECUTOR_APP_ID), 100000)
+
+        self.ledger.create_asset(5, params=dict())
+        txn_group = prepare_asset_optin_transactions(
+            sender=user_address,
+            suggested_params=self.sp,
+            app_id=ARBITRARY_EXECUTOR_APP_ID,
+            asset_id=5,
+        )
+        txn_group.sign_with_private_key(user_address, user_sk)
+        self.ledger.eval_transactions(
+            txn_group.signed_transactions, block_timestamp=block_timestamp
+        )
+
+        self.ledger.create_asset(6, params=dict())
+        txn_group = prepare_asset_optin_transactions(
+            sender=user_address,
+            suggested_params=self.sp,
+            app_id=ARBITRARY_EXECUTOR_APP_ID,
+            asset_id=6,
+        )
+        txn_group.sign_with_private_key(user_address, user_sk)
+        self.ledger.eval_transactions(
+            txn_group.signed_transactions, block_timestamp=block_timestamp
+        )
