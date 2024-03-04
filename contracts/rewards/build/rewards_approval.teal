@@ -55,35 +55,35 @@ route_create_application:
     callsub __func__create_application
     pushint 1; return
 route_update_application:
-    txn OnCompletion; pushint 4; ==; assert;                // assert OnCompletion == UpdateApplication
+    txn OnCompletion; pushint 4; ==; assert                 // assert OnCompletion == UpdateApplication
     callsub __func__update_application
     pushint 1; return
 route_claim_rewards:
-    txn OnCompletion; pushint 0; ==; assert;                // assert OnCompletion == NoOp
+    txn OnCompletion; pushint 0; ==; assert                 // assert OnCompletion == NoOp
     txna ApplicationArgs 1; btoi 
     txna ApplicationArgs 2; btoi 
     txna ApplicationArgs 3
     callsub __func__claim_rewards
     pushint 1; return
 route_increase_budget:
-    txn OnCompletion; pushint 0; ==; assert;                // assert OnCompletion == NoOp
+    txn OnCompletion; pushint 0; ==; assert                 // assert OnCompletion == NoOp
     txna ApplicationArgs 1; btoi 
     callsub __func__increase_budget
     pushint 1; return
 route_create_reward_period:
-    txn OnCompletion; pushint 0; ==; assert;                // assert OnCompletion == NoOp
+    txn OnCompletion; pushint 0; ==; assert                 // assert OnCompletion == NoOp
     txna ApplicationArgs 1
     txna ApplicationArgs 2
     txna ApplicationArgs 3; btoi 
     callsub __func__create_reward_period
     pushint 1; return
 route_set_reward_amount:
-    txn OnCompletion; pushint 0; ==; assert;                // assert OnCompletion == NoOp
+    txn OnCompletion; pushint 0; ==; assert                 // assert OnCompletion == NoOp
     txna ApplicationArgs 1; btoi 
     callsub __func__set_reward_amount
     pushint 1; return
 route_get_box:
-    txn OnCompletion; pushint 0; ==; assert;                // assert OnCompletion == NoOp
+    txn OnCompletion; pushint 0; ==; assert                 // assert OnCompletion == NoOp
     txna ApplicationArgs 1
     callsub __func__get_box
     // return int, bytes, bytes
@@ -93,20 +93,20 @@ route_get_box:
     uncover 2                                               // bytes
     concat
     concat
-    pushbytes 0x151f7c75; swap; concat; log;                // arc4 return log
+    pushbytes 0x151f7c75; swap; concat; log                 // arc4 return log
     pushint 1; return
 route_set_manager:
-    txn OnCompletion; pushint 0; ==; assert;                // assert OnCompletion == NoOp
+    txn OnCompletion; pushint 0; ==; assert                 // assert OnCompletion == NoOp
     txna ApplicationArgs 1
     callsub __func__set_manager
     pushint 1; return
 route_set_rewards_manager:
-    txn OnCompletion; pushint 0; ==; assert;                // assert OnCompletion == NoOp
+    txn OnCompletion; pushint 0; ==; assert                 // assert OnCompletion == NoOp
     txna ApplicationArgs 1
     callsub __func__set_rewards_manager
     pushint 1; return
 route_init:
-    txn OnCompletion; pushint 0; ==; assert;                // assert OnCompletion == NoOp
+    txn OnCompletion; pushint 0; ==; assert                 // assert OnCompletion == NoOp
     txna ApplicationArgs 1; btoi 
     callsub __func__init
     pushint 1; return
@@ -351,11 +351,11 @@ __func__claim_rewards:
         callsub __func__get_reward_period
         store 29                                            // reward_period
         // tl:137: reward_amount = btoi((itob(reward_period.total_reward_amount) b* account_cumulative_power_delta) b/ reward_period.total_cumulative_power_delta)
-        load 29; extract 0 8; btoi;                         // reward_period.total_reward_amount
+        load 29; extract 0 8; btoi// reward_period.total_reward_amount
         itob
         load 27                                             // account_cumulative_power_delta
         b*
-        load 29; extract 8 16;                              // reward_period.total_cumulative_power_delta
+        load 29; extract 8 16// reward_period.total_cumulative_power_delta
         b/
         btoi
         store 26                                            // reward_amount
@@ -693,7 +693,7 @@ __func__get_reward_period:
     *
     pushint REWARD_PERIOD_SIZE                              // 24
     box_extract
-    dup; len; pushint 24; ==; assert;                       // Bytes Size Assertion: 24 bytes
+    dup; len; pushint 24; ==; assert// Bytes Size Assertion: 24 bytes
     retsub
 
 // tl:240: func construct_reward_history(timestamp: int, reward_amount: int) bytes:
@@ -795,7 +795,7 @@ __func__get_reward_history:
     *
     pushint REWARD_HISTORY_SIZE                             // 16
     box_extract
-    dup; len; pushint 16; ==; assert;                       // Bytes Size Assertion: 16 bytes
+    dup; len; pushint 16; ==; assert// Bytes Size Assertion: 16 bytes
     retsub
 
 // tl:267: func get_reward_amount(timestamp: int, reward_history_index: int) int:
@@ -819,7 +819,7 @@ __func__get_reward_amount:
     callsub __func__get_reward_history
     store 68                                                // reward_history
     // tl:272: assert(reward_history.timestamp <= timestamp)
-    load 68; extract 0 8; btoi;                             // reward_history.timestamp
+    load 68; extract 0 8; btoi// reward_history.timestamp
     load 67                                                 // timestamp
     <=
     assert
@@ -841,12 +841,12 @@ __func__get_reward_amount:
         store 69                                            // next_reward_history
         // tl:276: assert(timestamp < next_reward_history.timestamp)
         load 67                                             // timestamp
-        load 69; extract 0 8; btoi;                         // next_reward_history.timestamp
+        load 69; extract 0 8; btoi// next_reward_history.timestamp
         <
         assert
     l2_end:
     // tl:278: return reward_history.reward_amount
-    load 68; extract 8 8; btoi;                             // reward_history.reward_amount
+    load 68; extract 8 8; btoi// reward_history.reward_amount
     retsub
 
 // tl:281: func check_and_save_claimed_reward(address: bytes, period_index: int):

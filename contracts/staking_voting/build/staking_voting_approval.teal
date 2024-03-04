@@ -48,16 +48,16 @@ route_create_application:
     callsub __func__create_application
     pushint 1; return
 route_update_application:
-    txn OnCompletion; pushint 4; ==; assert;                // assert OnCompletion == UpdateApplication
+    txn OnCompletion; pushint 4; ==; assert                 // assert OnCompletion == UpdateApplication
     callsub __func__update_application
     pushint 1; return
 route_increase_budget:
-    txn OnCompletion; pushint 0; ==; assert;                // assert OnCompletion == NoOp
+    txn OnCompletion; pushint 0; ==; assert                 // assert OnCompletion == NoOp
     txna ApplicationArgs 1; btoi 
     callsub __func__increase_budget
     pushint 1; return
 route_cast_vote:
-    txn OnCompletion; pushint 0; ==; assert;                // assert OnCompletion == NoOp
+    txn OnCompletion; pushint 0; ==; assert                 // assert OnCompletion == NoOp
     txna ApplicationArgs 1
     txna ApplicationArgs 2
     txna ApplicationArgs 3
@@ -65,17 +65,17 @@ route_cast_vote:
     callsub __func__cast_vote
     pushint 1; return
 route_create_proposal:
-    txn OnCompletion; pushint 0; ==; assert;                // assert OnCompletion == NoOp
-    txna ApplicationArgs 1; dup; len; pushint 59; ==; assert; 
+    txn OnCompletion; pushint 0; ==; assert                 // assert OnCompletion == NoOp
+    txna ApplicationArgs 1; dup; len; pushint 59; ==; assert// Bytes Size Assertion: 59 bytes
     callsub __func__create_proposal
     pushint 1; return
 route_cancel_proposal:
-    txn OnCompletion; pushint 0; ==; assert;                // assert OnCompletion == NoOp
+    txn OnCompletion; pushint 0; ==; assert                 // assert OnCompletion == NoOp
     txna ApplicationArgs 1
     callsub __func__cancel_proposal
     pushint 1; return
 route_get_box:
-    txn OnCompletion; pushint 0; ==; assert;                // assert OnCompletion == NoOp
+    txn OnCompletion; pushint 0; ==; assert                 // assert OnCompletion == NoOp
     txna ApplicationArgs 1
     callsub __func__get_box
     // return int, bytes, bytes
@@ -85,25 +85,25 @@ route_get_box:
     uncover 2                                               // bytes
     concat
     concat
-    pushbytes 0x151f7c75; swap; concat; log;                // arc4 return log
+    pushbytes 0x151f7c75; swap; concat; log                 // arc4 return log
     pushint 1; return
 route_set_manager:
-    txn OnCompletion; pushint 0; ==; assert;                // assert OnCompletion == NoOp
-    txna ApplicationArgs 1; dup; len; pushint 32; ==; assert; 
+    txn OnCompletion; pushint 0; ==; assert                 // assert OnCompletion == NoOp
+    txna ApplicationArgs 1; dup; len; pushint 32; ==; assert// Bytes Size Assertion: 32 bytes
     callsub __func__set_manager
     pushint 1; return
 route_set_proposal_manager:
-    txn OnCompletion; pushint 0; ==; assert;                // assert OnCompletion == NoOp
-    txna ApplicationArgs 1; dup; len; pushint 32; ==; assert; 
+    txn OnCompletion; pushint 0; ==; assert                 // assert OnCompletion == NoOp
+    txna ApplicationArgs 1; dup; len; pushint 32; ==; assert// Bytes Size Assertion: 32 bytes
     callsub __func__set_proposal_manager
     pushint 1; return
 route_set_voting_delay:
-    txn OnCompletion; pushint 0; ==; assert;                // assert OnCompletion == NoOp
+    txn OnCompletion; pushint 0; ==; assert                 // assert OnCompletion == NoOp
     txna ApplicationArgs 1; btoi 
     callsub __func__set_voting_delay
     pushint 1; return
 route_set_voting_duration:
-    txn OnCompletion; pushint 0; ==; assert;                // assert OnCompletion == NoOp
+    txn OnCompletion; pushint 0; ==; assert                 // assert OnCompletion == NoOp
     txna ApplicationArgs 1; btoi 
     callsub __func__set_voting_duration
     pushint 1; return
@@ -195,16 +195,16 @@ __func__create_proposal:
     // tl:86: proposal.index = app_global_get(PROPOSAL_INDEX_COUNTER_KEY)
     pushbytes PROPOSAL_INDEX_COUNTER_KEY                    // "proposal_index_counter"
     app_global_get
-    itob; load 8; pushint 0; uncover 2; box_replace;        // boxset proposal.index
+    itob; load 8; pushint 0; uncover 2; box_replace// boxset proposal.index
     // tl:87: proposal.creation_timestamp = Global.LatestTimestamp
     global LatestTimestamp
-    itob; load 8; pushint 8; uncover 2; box_replace;        // boxset proposal.creation_timestamp
+    itob; load 8; pushint 8; uncover 2; box_replace// boxset proposal.creation_timestamp
     // tl:88: proposal.voting_start_timestamp = voting_start_timestamp
     load 6                                                  // voting_start_timestamp
-    itob; load 8; pushint 16; uncover 2; box_replace;       // boxset proposal.voting_start_timestamp
+    itob; load 8; pushint 16; uncover 2; box_replace// boxset proposal.voting_start_timestamp
     // tl:89: proposal.voting_end_timestamp = voting_end_timestamp
     load 7                                                  // voting_end_timestamp
-    itob; load 8; pushint 24; uncover 2; box_replace;       // boxset proposal.voting_end_timestamp
+    itob; load 8; pushint 24; uncover 2; box_replace// boxset proposal.voting_end_timestamp
     // tl:90: app_global_put(PROPOSAL_INDEX_COUNTER_KEY, app_global_get(PROPOSAL_INDEX_COUNTER_KEY) + 1)
     pushbytes PROPOSAL_INDEX_COUNTER_KEY                    // "proposal_index_counter"
     pushbytes PROPOSAL_INDEX_COUNTER_KEY                    // "proposal_index_counter"
@@ -261,17 +261,17 @@ __func__cancel_proposal:
     
     // tl:107: assert(Global.LatestTimestamp < proposal.voting_end_timestamp)
     global LatestTimestamp
-    load 13; pushint 24; pushint 8; box_extract; btoi;      // proposal.voting_end_timestamp
+    load 13; pushint 24; pushint 8; box_extract; btoi// proposal.voting_end_timestamp
     <
     assert
     // tl:108: assert(proposal.is_cancelled == BYTES_FALSE)
-    load 13; pushint 48; pushint 1; box_extract;            // proposal.is_cancelled
+    load 13; pushint 48; pushint 1; box_extract// proposal.is_cancelled
     pushbytes BYTES_FALSE                                   // "\x00"
     ==
     assert
     // tl:109: proposal.is_cancelled = BYTES_TRUE
     pushbytes BYTES_TRUE                                    // "\x80"
-    load 13; pushint 48; uncover 2; box_replace;            // boxset proposal.is_cancelled
+    load 13; pushint 48; uncover 2; box_replace// boxset proposal.is_cancelled
     
     // tl:111: bytes proposal_data [slot 14]
     // tl:112: _, proposal_data = box_get(proposal_box_name)
@@ -318,17 +318,17 @@ __func__cast_vote:
     // Proposal Active
     // proposal.voting_start_timestamp <= Global.LatestTimestamp < proposal.voting_end_timestamp
     // tl:126: assert(proposal.voting_start_timestamp <= Global.LatestTimestamp)
-    load 21; pushint 16; pushint 8; box_extract; btoi;      // proposal.voting_start_timestamp
+    load 21; pushint 16; pushint 8; box_extract; btoi// proposal.voting_start_timestamp
     global LatestTimestamp
     <=
     assert
     // tl:127: assert(Global.LatestTimestamp < proposal.voting_end_timestamp)
     global LatestTimestamp
-    load 21; pushint 24; pushint 8; box_extract; btoi;      // proposal.voting_end_timestamp
+    load 21; pushint 24; pushint 8; box_extract; btoi// proposal.voting_end_timestamp
     <
     assert
     // tl:128: assert(proposal.is_cancelled == BYTES_FALSE)
-    load 21; pushint 48; pushint 1; box_extract;            // proposal.is_cancelled
+    load 21; pushint 48; pushint 1; box_extract// proposal.is_cancelled
     pushbytes BYTES_FALSE                                   // "\x00"
     ==
     assert
@@ -365,7 +365,7 @@ __func__cast_vote:
     assert
     
     // tl:137: int proposal_index = proposal.index [slot 23]
-    load 21; pushint 0; pushint 8; box_extract; btoi;       // proposal.index
+    load 21; pushint 0; pushint 8; box_extract; btoi// proposal.index
     store 23                                                // proposal_index
     // tl:138: check_and_set_user_as_voted(user_address, proposal_index)
     load 19                                                 // user_address
@@ -374,7 +374,7 @@ __func__cast_vote:
     
     // tl:140: int account_voting_power = get_account_voting_power_at(user_address, proposal.creation_timestamp, account_power_index) [slot 24]
     load 19                                                 // user_address
-    load 21; pushint 8; pushint 8; box_extract; btoi;       // proposal.creation_timestamp
+    load 21; pushint 8; pushint 8; box_extract; btoi// proposal.creation_timestamp
     load 15                                                 // account_power_index
     callsub __func__get_account_voting_power_at
     store 24                                                // account_voting_power
@@ -384,15 +384,15 @@ __func__cast_vote:
     
     // Update proposal
     // tl:144: proposal.vote_count = proposal.vote_count + 1
-    load 21; pushint 40; pushint 8; box_extract; btoi;      // proposal.vote_count
+    load 21; pushint 40; pushint 8; box_extract; btoi// proposal.vote_count
     pushint 1
     +
-    itob; load 21; pushint 40; uncover 2; box_replace;      // boxset proposal.vote_count
+    itob; load 21; pushint 40; uncover 2; box_replace// boxset proposal.vote_count
     // tl:145: proposal.voting_power = proposal.voting_power + account_voting_power
-    load 21; pushint 32; pushint 8; box_extract; btoi;      // proposal.voting_power
+    load 21; pushint 32; pushint 8; box_extract; btoi// proposal.voting_power
     load 24                                                 // account_voting_power
     +
-    itob; load 21; pushint 32; uncover 2; box_replace;      // boxset proposal.voting_power
+    itob; load 21; pushint 32; uncover 2; box_replace// boxset proposal.voting_power
     
     // tl:147: int option_vote_amount [slot 25]
     // tl:148: int asset_id [slot 26]
