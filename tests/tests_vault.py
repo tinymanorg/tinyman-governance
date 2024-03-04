@@ -112,9 +112,10 @@ class VaultTestCase(VaultAppMixin, BaseTestCase):
             }
         )
         
-        # Logs
+        # Assert Logs
         logs = app_call_txn[b'dt'][b'lg']
         events = decode_logs(logs, events=vault_events)
+
         self.assertEqual(len(events), 2)
         self.assertDictEqual(
             events[0],
@@ -133,15 +134,12 @@ class VaultTestCase(VaultAppMixin, BaseTestCase):
                 'event_name': 'init',
             }
         )
-        
-        # Boxes
-        total_powers_box_name = get_total_power_box_name(box_index=0)
 
-        total_powers = parse_box_total_power(self.ledger.boxes[VAULT_APP_ID][total_powers_box_name])
+        # Assert Boxes
+        total_powers = parse_box_total_power(self.ledger.boxes[VAULT_APP_ID][get_total_power_box_name(box_index=0)])
         self.assertEqual(len(total_powers), 1)
 
         total_power = total_powers[0]
-
         self.assertEqual(
             total_power,
             TotalPower(
@@ -206,14 +204,6 @@ class VaultTestCase(VaultAppMixin, BaseTestCase):
         lock_start_timestamp = block_timestamp
         lock_end_timestamp = get_start_timestamp_of_week(int((block_datetime + timedelta(days=50)).timestamp()))
 
-        account_state_box_name = get_account_state_box_name(address=self.user_address)
-        total_power_box_name = get_total_power_box_name(box_index=0)
-        account_power_box_name = get_account_power_box_name(address=self.user_address, box_index=0)
-        slope_change_box_name = get_slope_change_box_name(timestamp=lock_end_timestamp)
-
-        slope = get_slope(amount)
-        bias = get_bias(slope, (lock_end_timestamp - lock_start_timestamp))
-
         with unittest.mock.patch("time.time", return_value=lock_start_timestamp):
             txn_group = prepare_create_lock_transactions(
                 vault_app_id=VAULT_APP_ID,
@@ -228,6 +218,9 @@ class VaultTestCase(VaultAppMixin, BaseTestCase):
             )
         txn_group.sign_with_private_key(self.user_address, self.user_sk)
         block = self.ledger.eval_transactions(txn_group.signed_transactions, block_timestamp=lock_start_timestamp)
+
+        slope = get_slope(amount)
+        bias = get_bias(slope, (lock_end_timestamp - lock_start_timestamp))
 
         app_call_txn = get_first_app_call_txn(block[b'txns'])
 
@@ -279,7 +272,7 @@ class VaultTestCase(VaultAppMixin, BaseTestCase):
         
         # Assert Boxes
         self.assertEqual(
-            parse_box_account_state(self.ledger.boxes[VAULT_APP_ID][account_state_box_name]),
+            parse_box_account_state(self.ledger.boxes[VAULT_APP_ID][get_account_state_box_name(address=self.user_address)]),
             AccountState(
                 locked_amount=amount,
                 lock_end_time=lock_end_timestamp,
@@ -288,7 +281,7 @@ class VaultTestCase(VaultAppMixin, BaseTestCase):
             )
         )
         self.assertEqual(
-            parse_box_account_power(self.ledger.boxes[VAULT_APP_ID][account_power_box_name])[0],
+            parse_box_account_power(self.ledger.boxes[VAULT_APP_ID][get_account_power_box_name(address=self.user_address, box_index=0)])[0],
             AccountPower(
                 bias=bias,
                 timestamp=lock_start_timestamp,
@@ -297,7 +290,7 @@ class VaultTestCase(VaultAppMixin, BaseTestCase):
             )
         )
         self.assertEqual(
-            parse_box_total_power(self.ledger.boxes[VAULT_APP_ID][total_power_box_name])[1],
+            parse_box_total_power(self.ledger.boxes[VAULT_APP_ID][get_total_power_box_name(box_index=0)])[1],
             TotalPower(
                 bias=bias,
                 timestamp=lock_start_timestamp,
@@ -306,7 +299,7 @@ class VaultTestCase(VaultAppMixin, BaseTestCase):
             )
         )
         self.assertEqual(
-            parse_box_slope_change(self.ledger.boxes[VAULT_APP_ID][slope_change_box_name]),
+            parse_box_slope_change(self.ledger.boxes[VAULT_APP_ID][get_slope_change_box_name(timestamp=lock_end_timestamp)]),
             SlopeChange(
                 slope_delta=slope
             )
@@ -864,8 +857,34 @@ class VaultTestCase(VaultAppMixin, BaseTestCase):
         block = self.ledger.eval_transactions(txn_group.signed_transactions, block_timestamp=increase_lock_timestamp)
         app_call_txn = get_first_app_call_txn(block[b'txns'])
 
+        account_state_after_increase = parse_box_account_state(self.ledger.boxes[VAULT_APP_ID][get_account_state_box_name(address=self.user_address)])
+        account_powers = parse_box_account_power(self.ledger.boxes[VAULT_APP_ID][get_account_power_box_name(address=self.user_address, box_index=0)])
+        total_powers = parse_box_total_power(self.ledger.boxes[VAULT_APP_ID][get_total_power_box_name(box_index=0)])
+
+        # Assert Boxes
         slope = get_slope(amount_1 + amount_2)
         bias = get_bias(slope, lock_end_timestamp - increase_lock_timestamp)
+
+        # Assert that the account state is updated properly.
+        self.assertEqual(amount_1 + amount_2, account_state_after_increase.locked_amount)
+
+        slope_at_lock = get_slope(amount_1)
+        bias_at_lock = get_bias(slope_at_lock, lock_end_timestamp - lock_start_timestamp)
+        bias_just_before_increase = get_bias(slope_at_lock, lock_end_timestamp - increase_lock_timestamp)
+
+        # Assert that the account power is created properly.
+        account_power_after_increase = account_powers[1]
+
+        self.assertEqual(account_power_after_increase.bias, bias)
+        self.assertEqual(account_power_after_increase.slope, slope)
+        # self.assertEqual(account_power_after_increase.cumulative_power, get_cumulative_power_delta(bias_at_lock, slope_at_lock, account_power_after_increase.timestamp - lock_start_timestamp))
+        self.assertEqual(account_power_after_increase.cumulative_power, ((bias_at_lock + bias_just_before_increase) * (increase_lock_timestamp - lock_start_timestamp) // 2))
+
+        # Assert that the total power is created properly.
+        total_power_after_increase = total_powers[2]
+        self.assertEqual(total_power_after_increase.bias, account_power_after_increase.bias)
+        self.assertEqual(total_power_after_increase.slope, slope)
+        self.assertEqual(total_power_after_increase.cumulative_power, account_power_after_increase.cumulative_power)
 
         # Assert Logs
         logs = app_call_txn[b'dt'][b'lg']
