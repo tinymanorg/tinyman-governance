@@ -16,7 +16,7 @@ from tinyman.governance.vault.constants import TOTAL_LOCKED_AMOUNT_KEY, TOTAL_PO
 from tinyman.governance.vault.events import vault_events
 from tinyman.governance.vault.storage import VaultAppGlobalState, get_power_index_at
 from tinyman.governance.vault.storage import parse_box_total_power, parse_box_account_state, parse_box_account_power, parse_box_slope_change, TotalPower, AccountState, AccountPower, SlopeChange, get_account_state_box_name, get_account_power_box_name, get_total_power_box_name, get_slope_change_box_name
-from tinyman.governance.vault.utils import get_start_timestamp_of_week, get_slope, get_bias, get_cumulative_power_delta
+from tinyman.governance.vault.utils import get_start_timestamp_of_week, get_slope, get_bias, get_cumulative_power_delta, get_cumulative_power, get_cumulative_power_2
 from tinyman.governance.vault.transactions import prepare_init_transactions, prepare_create_lock_transactions, prepare_withdraw_transactions, prepare_get_cumulative_power_of_at_transactions, prepare_get_total_cumulative_power_at_transactions, prepare_get_tiny_power_of_transactions, prepare_get_total_tiny_power_of_at_transactions, prepare_extend_lock_end_time_transactions, prepare_increase_lock_amount_transactions, prepare_get_tiny_power_of_at_transactions, prepare_get_total_tiny_power_transactions, prepare_delete_account_state_transactions, prepare_delete_account_power_boxes_transactions, prepare_create_checkpoints_transactions, prepare_get_box_transaction
 from tinyman.utils import bytes_to_int, TransactionGroup
 
@@ -879,7 +879,7 @@ class VaultTestCase(VaultAppMixin, BaseTestCase):
 
         self.assertEqual(account_power_after_increase.bias, bias) # increase_lock_amount function uses account_state values to calculate the bias and slope.
         self.assertEqual(account_power_after_increase.slope, slope)
-        self.assertEqual(account_power_after_increase.cumulative_power, ((old_locked_amount_bias + bias_just_before_increase) * (increase_lock_timestamp - lock_start_timestamp) // 2))  # TODO: Replace this formula with get_cumulative_power util.
+        self.assertEqual(account_power_after_increase.cumulative_power, get_cumulative_power(old_locked_amount_bias, bias_just_before_increase, (increase_lock_timestamp - lock_start_timestamp)))
 
         # Assert that the total power is created properly.
         total_power_before_increase = total_powers[1]
@@ -889,7 +889,7 @@ class VaultTestCase(VaultAppMixin, BaseTestCase):
         # last_total_power.bias - bias_delta_since_last_event + account_bias_delta.
         self.assertEqual(total_power_after_increase.bias, total_power_before_increase.bias - bias_delta + (bias - bias_just_before_increase))
         self.assertEqual(total_power_after_increase.slope, slope)
-        self.assertEqual(total_power_after_increase.cumulative_power, total_power_before_increase.cumulative_power + ((total_power_before_increase.bias + (total_power_before_increase.bias - bias_delta)) * (increase_lock_timestamp - total_power_before_increase.timestamp) // 2))  # TODO: Replace this formula with get_cumulative_power util.
+        self.assertEqual(total_power_after_increase.cumulative_power, total_power_before_increase.cumulative_power + get_cumulative_power(total_power_before_increase.bias, (total_power_before_increase.bias - bias_delta), (increase_lock_timestamp - total_power_before_increase.timestamp)))
 
         # Assert Logs
         logs = app_call_txn[b'dt'][b'lg']
@@ -2270,12 +2270,9 @@ class VaultTestCase(VaultAppMixin, BaseTestCase):
 
         user_cumulative_power = bytes_to_int(block[b'txns'][0][b'dt'][b'lg'][-1][4:])
 
-        # There is a difference between the cumulative power calculated by the contract and the one calculated by the test.
-        # Same difference happens between get_cumulative_power_1 and get_cumulative_power_2 results.
-        # assert(user_cumulative_power == get_cumulative_power_delta(bias=get_bias(get_slope(amount), lock_duration), slope=get_slope(amount), time_delta=lock_duration))
         bias = get_bias(get_slope(amount), lock_duration)
         slope = get_slope(amount)
-        self.assertEqual(user_cumulative_power, int(((bias * bias) * TWO_TO_THE_64) / (slope * 2)))  # TODO: replace with get_cumulative_power util.
+        self.assertEqual(user_cumulative_power, get_cumulative_power_2(bias, slope))  # Cumulative power from start of lock to end of lock.
 
     def test_get_total_cumulative_power_at(self):
         block_datetime = datetime(year=2022, month=3, day=1, hour=1, tzinfo=ZoneInfo("UTC"))
