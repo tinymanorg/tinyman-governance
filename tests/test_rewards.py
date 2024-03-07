@@ -420,6 +420,10 @@ class RewardsTestCase(VaultAppMixin, RewardsAppMixin, BaseTestCase):
 
 
     def test_claim_rewards_two_years(self):
+        # 1. Create lock
+        # 2. Create checkpoints
+        # 3. Create reward periods
+        # 4. Claim all rewards
         block_datetime = datetime(year=2022, month=3, day=1, hour=1, tzinfo=ZoneInfo("UTC"))
         block_timestamp = int(block_datetime.timestamp())
 
@@ -462,11 +466,12 @@ class RewardsTestCase(VaultAppMixin, RewardsAppMixin, BaseTestCase):
 
         for period_index in range(120):
 
-            # Create checkpoints
+            # 2. Create checkpoints
             block_timestamp = first_period_start_timestamp + (WEEK * (period_index + 1))
             with unittest.mock.patch("time.time", return_value=block_timestamp):
                 self.create_checkpoints(self.user_address, self.user_sk, block_timestamp)
 
+                # 3. Create reward periods
                 txn_group = prepare_create_reward_period_transactions(
                     rewards_app_id=REWARDS_APP_ID,
                     vault_app_id=VAULT_APP_ID,
@@ -509,6 +514,7 @@ class RewardsTestCase(VaultAppMixin, RewardsAppMixin, BaseTestCase):
         period_index_start = 0
         period_count = 104
         account_power_indexes = [get_power_index_at(account_powers, first_period_start_timestamp + (WEEK * (period_index_start + i))) or 0 for i in range(period_count + 1)]
+        reward_periods = get_reward_periods(self.ledger)
 
         txn_group = prepare_claim_reward_transactions(
             rewards_app_id=REWARDS_APP_ID,
@@ -526,6 +532,13 @@ class RewardsTestCase(VaultAppMixin, RewardsAppMixin, BaseTestCase):
         app_call_txn = get_first_app_call_txn(block[b'txns'])
         logs = app_call_txn[b'dt'][b'lg']
         events = decode_logs(logs, events=rewards_events)
+
+        # Calculate reward amount for each period.
+        reward_amounts = []
+        for period_index in range(period_count):
+            account_cumulative_power_delta = bytes_to_int(app_call_txn[b"dt"][b"itx"][period_index][b"dt"][b"lg"][0][4:])
+            claimed_reward_amount = calculate_reward_amount(account_cumulative_power_delta, reward_periods[period_index])
+            reward_amounts.append(claimed_reward_amount)
         
         self.assertEqual(len(events), 1)
         self.assertEqual(
@@ -536,7 +549,7 @@ class RewardsTestCase(VaultAppMixin, RewardsAppMixin, BaseTestCase):
                 'total_reward_amount': ANY,
                 'period_index_start': period_index_start,
                 'period_count': period_count,
-                'reward_amounts': ANY
+                'reward_amounts': reward_amounts
             }
         )
         self.assertEqual(len(events[0]["reward_amounts"]), 104)
