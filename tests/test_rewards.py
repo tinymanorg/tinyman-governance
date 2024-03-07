@@ -11,7 +11,16 @@ from tinyman.governance.constants import WEEK
 from tinyman.governance.event import decode_logs
 from tinyman.governance.rewards.events import rewards_events
 from tinyman.governance.rewards.storage import RewardsAppGlobalState, RewardHistory, RewardClaimSheet, get_reward_history_box_name, parse_box_reward_history, get_account_reward_claim_sheet_box_name
-from tinyman.governance.rewards.transactions import prepare_claim_reward_transactions, prepare_init_transactions, prepare_create_reward_period_transactions, prepare_get_box_transaction, prepare_set_reward_amount_transactions, prepare_set_manager_transactions, prepare_set_rewards_manager_transactions, prepare_set_reward_amount_transactions
+from tinyman.governance.rewards.transactions import (
+    prepare_claim_reward_transactions,
+    prepare_init_transactions,
+    prepare_create_reward_period_transactions,
+    prepare_get_box_transaction,
+    prepare_set_reward_amount_transactions,
+    prepare_set_manager_transactions,
+    prepare_set_rewards_manager_transactions,
+    prepare_set_reward_amount_transactions,
+)
 from tinyman.governance.rewards.utils import calculate_reward_amount
 from tinyman.governance.rewards.constants import REWARDS_MANAGER_KEY
 from tinyman.governance.vault.constants import TOTAL_LOCKED_AMOUNT_KEY
@@ -52,19 +61,21 @@ class RewardsTestCase(VaultAppMixin, RewardsAppMixin, BaseTestCase):
         block_datetime = datetime(year=2022, month=3, day=2, tzinfo=ZoneInfo("UTC"))
         block_timestamp = int(block_datetime.timestamp())
 
-        txn_group = TransactionGroup([
-            transaction.ApplicationCreateTxn(
-                sender=self.app_creator_address,
-                sp=self.sp,
-                on_complete=transaction.OnComplete.NoOpOC,
-                approval_program=rewards_approval_program.bytecode,
-                clear_program=rewards_clear_state_program.bytecode,
-                global_schema=transaction.StateSchema(num_uints=5, num_byte_slices=2),
-                local_schema=transaction.StateSchema(num_uints=0, num_byte_slices=0),
-                extra_pages=3,
-                app_args=["create_application", TINY_ASSET_ID, VAULT_APP_ID],
-            )
-        ])
+        txn_group = TransactionGroup(
+            [
+                transaction.ApplicationCreateTxn(
+                    sender=self.app_creator_address,
+                    sp=self.sp,
+                    on_complete=transaction.OnComplete.NoOpOC,
+                    approval_program=rewards_approval_program.bytecode,
+                    clear_program=rewards_clear_state_program.bytecode,
+                    global_schema=transaction.StateSchema(num_uints=5, num_byte_slices=2),
+                    local_schema=transaction.StateSchema(num_uints=0, num_byte_slices=0),
+                    extra_pages=3,
+                    app_args=["create_application", TINY_ASSET_ID, VAULT_APP_ID],
+                )
+            ]
+        )
         txn_group.sign_with_private_key(self.app_creator_address, self.app_creator_sk)
         block = self.ledger.eval_transactions(txn_group.signed_transactions, block_timestamp=block_timestamp)
         app_id = block[b"txns"][0][b"apid"]
@@ -80,8 +91,8 @@ class RewardsTestCase(VaultAppMixin, RewardsAppMixin, BaseTestCase):
                 rewards_manager=decode_address(self.app_creator_address),
                 reward_history_count=0,
                 reward_period_count=0,
-                tiny_asset_id=TINY_ASSET_ID
-            )
+                tiny_asset_id=TINY_ASSET_ID,
+            ),
         )
 
     def test_init_app(self):
@@ -101,22 +112,22 @@ class RewardsTestCase(VaultAppMixin, RewardsAppMixin, BaseTestCase):
         )
         txn_group.sign_with_private_key(self.app_creator_address, self.app_creator_sk)
         block = self.ledger.eval_transactions(txn_group.signed_transactions, block_timestamp=block_timestamp)
-        app_call_txn = get_first_app_call_txn(block[b'txns'])
-        
+        app_call_txn = get_first_app_call_txn(block[b"txns"])
+
         # Opt-in Inner txn
-        opt_in_itx = app_call_txn[b'dt'][b'itx'][0][b'txn']
+        opt_in_itx = app_call_txn[b"dt"][b"itx"][0][b"txn"]
         self.assertDictEqual(
             opt_in_itx,
             {
-                b'arcv': decode_address(get_application_address(REWARDS_APP_ID)),
-                b'fv': ANY,
-                b'lv': ANY,
-                b'snd': decode_address(get_application_address(REWARDS_APP_ID)),
-                b'type': b'axfer',
-                b'xaid': TINY_ASSET_ID
-            }
+                b"arcv": decode_address(get_application_address(REWARDS_APP_ID)),
+                b"fv": ANY,
+                b"lv": ANY,
+                b"snd": decode_address(get_application_address(REWARDS_APP_ID)),
+                b"type": b"axfer",
+                b"xaid": TINY_ASSET_ID,
+            },
         )
-        
+
         # Global state
         rewards_app_global_state = get_rewards_app_global_state(self.ledger, REWARDS_APP_ID)
         self.assertEqual(
@@ -128,36 +139,24 @@ class RewardsTestCase(VaultAppMixin, RewardsAppMixin, BaseTestCase):
                 rewards_manager=decode_address(self.app_creator_address),
                 reward_history_count=1,
                 reward_period_count=0,
-                tiny_asset_id=TINY_ASSET_ID
-            )
+                tiny_asset_id=TINY_ASSET_ID,
+            ),
         )
-        
+
         # Assert Boxes
         reward_histories = parse_box_reward_history(self.ledger.boxes[REWARDS_APP_ID][reward_histories_box_name])
         self.assertEqual(len(reward_histories), 1)
 
         reward_history = reward_histories[0]
         next_week_timestamp = get_start_timestamp_of_week(block_timestamp) + WEEK
-        self.assertEqual(
-            reward_history,
-            RewardHistory(
-                timestamp=next_week_timestamp,
-                reward_amount=reward_amount
-            )
-        )
+        self.assertEqual(reward_history, RewardHistory(timestamp=next_week_timestamp, reward_amount=reward_amount))
 
         # Logs
-        logs = app_call_txn[b'dt'][b'lg']
+        logs = app_call_txn[b"dt"][b"lg"]
         events = decode_logs(logs, events=rewards_events)
         self.assertEqual(len(events), 2)
-        self.assertEqual(
-            events[0],
-            {'event_name': 'reward_history', 'index': 0, 'timestamp': next_week_timestamp, 'reward_amount': reward_amount}
-        )
-        self.assertEqual(
-            events[1],
-            {'event_name': 'init', 'first_period_timestamp': get_start_timestamp_of_week(block_timestamp) + WEEK, 'reward_amount': reward_amount}
-        )
+        self.assertEqual(events[0], {"event_name": "reward_history", "index": 0, "timestamp": next_week_timestamp, "reward_amount": reward_amount})
+        self.assertEqual(events[1], {"event_name": "init", "first_period_timestamp": get_start_timestamp_of_week(block_timestamp) + WEEK, "reward_amount": reward_amount})
 
     def test_claim_rewards_one_by_one(self):
         # 1. Create locks
@@ -179,26 +178,11 @@ class RewardsTestCase(VaultAppMixin, RewardsAppMixin, BaseTestCase):
         user_2_sk, user_2_address = generate_account()
         self.ledger.set_account_balance(user_2_address, 10_000_000)
 
-        self.ledger.move(
-            20_000_000,
-            asset_id=TINY_ASSET_ID,
-            sender=self.ledger.assets[TINY_ASSET_ID]["creator"],
-            receiver=user_1_address
-        )
+        self.ledger.move(20_000_000, asset_id=TINY_ASSET_ID, sender=self.ledger.assets[TINY_ASSET_ID]["creator"], receiver=user_1_address)
 
-        self.ledger.move(
-            10_000_000,
-            asset_id=TINY_ASSET_ID,
-            sender=self.ledger.assets[TINY_ASSET_ID]["creator"],
-            receiver=user_2_address
-        )
+        self.ledger.move(10_000_000, asset_id=TINY_ASSET_ID, sender=self.ledger.assets[TINY_ASSET_ID]["creator"], receiver=user_2_address)
 
-        self.ledger.move(
-            reward_amount * 3,
-            asset_id=TINY_ASSET_ID,
-            sender=self.ledger.assets[TINY_ASSET_ID]["creator"],
-            receiver=get_application_address(REWARDS_APP_ID)
-        )
+        self.ledger.move(reward_amount * 3, asset_id=TINY_ASSET_ID, sender=self.ledger.assets[TINY_ASSET_ID]["creator"], receiver=get_application_address(REWARDS_APP_ID))
 
         # 1. Create locks
         lock_end_timestamp_1 = get_start_timestamp_of_week(block_timestamp) + 10 * WEEK
@@ -255,19 +239,13 @@ class RewardsTestCase(VaultAppMixin, RewardsAppMixin, BaseTestCase):
                 )
                 txn_group.sign_with_private_key(self.user_address, self.user_sk)
                 block = self.ledger.eval_transactions(txn_group.signed_transactions, block_timestamp=block_timestamp)
-                app_call_txn = get_first_app_call_txn(block[b'txns'])
-                logs = app_call_txn[b'dt'][b'lg']
+                app_call_txn = get_first_app_call_txn(block[b"txns"])
+                logs = app_call_txn[b"dt"][b"lg"]
                 events = decode_logs(logs, events=rewards_events)
 
                 self.assertEqual(len(events), 2)
-                self.assertEqual(
-                    events[0],
-                    {'event_name': 'reward_period', 'index': period_index, 'total_reward_amount': reward_amount, 'total_cumulative_power_delta': ANY}
-                )
-                self.assertEqual(
-                    events[1],
-                    {'event_name': 'create_reward_period', 'index': period_index, 'total_reward_amount': reward_amount, 'total_cumulative_power_delta': ANY}
-                )
+                self.assertEqual(events[0], {"event_name": "reward_period", "index": period_index, "total_reward_amount": reward_amount, "total_cumulative_power_delta": ANY})
+                self.assertEqual(events[1], {"event_name": "create_reward_period", "index": period_index, "total_reward_amount": reward_amount, "total_cumulative_power_delta": ANY})
 
         reward_periods = get_reward_periods(self.ledger)
         # 4. Claim rewards for user_1
@@ -282,7 +260,7 @@ class RewardsTestCase(VaultAppMixin, RewardsAppMixin, BaseTestCase):
             if raw_box := self.ledger.boxes[REWARDS_APP_ID].get(get_account_reward_claim_sheet_box_name(user_1_address, 0)):
                 sheet = RewardClaimSheet(value=raw_box)
                 self.assertEqual(sheet.is_reward_claimed_for_period(period_index), False)
-            
+
             txn_group = prepare_claim_reward_transactions(
                 rewards_app_id=REWARDS_APP_ID,
                 vault_app_id=VAULT_APP_ID,
@@ -296,8 +274,8 @@ class RewardsTestCase(VaultAppMixin, RewardsAppMixin, BaseTestCase):
             )
             txn_group.sign_with_private_key(user_1_address, user_1_sk)
             block = self.ledger.eval_transactions(txn_group.signed_transactions, block_timestamp=block_timestamp)
-            app_call_txn = get_first_app_call_txn(block[b'txns'])
-            logs = app_call_txn[b'dt'][b'lg']
+            app_call_txn = get_first_app_call_txn(block[b"txns"])
+            logs = app_call_txn[b"dt"][b"lg"]
             events = decode_logs(logs, events=rewards_events)
 
             account_cumulative_power_delta = bytes_to_int(app_call_txn[b"dt"][b"itx"][0][b"dt"][b"lg"][0][4:])
@@ -306,54 +284,54 @@ class RewardsTestCase(VaultAppMixin, RewardsAppMixin, BaseTestCase):
             self.assertEqual(
                 events[0],
                 {
-                    'event_name': 'claim_rewards',
-                    'user_address': user_1_address,
-                    'total_reward_amount': ANY,
-                    'period_index_start': period_index,
-                    'period_count': 1,
-                    'reward_amounts': [claimed_reward_amount]
-                }
+                    "event_name": "claim_rewards",
+                    "user_address": user_1_address,
+                    "total_reward_amount": ANY,
+                    "period_index_start": period_index,
+                    "period_count": 1,
+                    "reward_amounts": [claimed_reward_amount],
+                },
             )
 
-            # Assert inner transactions
-            inner_txns = app_call_txn[b'dt'][b'itx']
+            # Assert inner transactions
+            inner_txns = app_call_txn[b"dt"][b"itx"]
             self.assertEqual(len(inner_txns), 2)
 
             self.assertEqual(
-                inner_txns[0][b'txn'],
+                inner_txns[0][b"txn"],
                 {
-                    b'apaa': [
-                        b'get_account_cumulative_power_delta',
+                    b"apaa": [
+                        b"get_account_cumulative_power_delta",
                         decode_address(user_1_address),
                         int_to_bytes(period_start_timestamp),
                         int_to_bytes(period_end_timestamp),
                         int_to_bytes(account_power_index_start),
-                        int_to_bytes(account_power_index_end)
+                        int_to_bytes(account_power_index_end),
                     ],
-                    b'apid': VAULT_APP_ID,
-                    b'fv': ANY,
-                    b'lv': ANY,
-                    b'snd': decode_address(get_application_address(REWARDS_APP_ID)),
-                    b'type': b'appl'
+                    b"apid": VAULT_APP_ID,
+                    b"fv": ANY,
+                    b"lv": ANY,
+                    b"snd": decode_address(get_application_address(REWARDS_APP_ID)),
+                    b"type": b"appl",
                 },
                 {
-                    b'fv': ANY,
-                    b'lv': ANY,
-                    b'snd': decode_address(get_application_address(REWARDS_APP_ID)),
-                    b'type': b'appl',
-                }
+                    b"fv": ANY,
+                    b"lv": ANY,
+                    b"snd": decode_address(get_application_address(REWARDS_APP_ID)),
+                    b"type": b"appl",
+                },
             )
             self.assertEqual(
-                inner_txns[1][b'txn'],
+                inner_txns[1][b"txn"],
                 {
-                    b'aamt': events[0]['total_reward_amount'],
-                    b'arcv': decode_address(user_1_address),
-                    b'fv': ANY,
-                    b'lv': ANY,
-                    b'snd': decode_address(get_application_address(REWARDS_APP_ID)),
-                    b'type': b'axfer',
-                    b'xaid': TINY_ASSET_ID
-                }
+                    b"aamt": events[0]["total_reward_amount"],
+                    b"arcv": decode_address(user_1_address),
+                    b"fv": ANY,
+                    b"lv": ANY,
+                    b"snd": decode_address(get_application_address(REWARDS_APP_ID)),
+                    b"type": b"axfer",
+                    b"xaid": TINY_ASSET_ID,
+                },
             )
             # Assert that claim sheet is marked so after the reward is claimed.
             sheet = RewardClaimSheet(value=self.ledger.boxes[REWARDS_APP_ID][get_account_reward_claim_sheet_box_name(user_1_address, 0)])
@@ -383,8 +361,8 @@ class RewardsTestCase(VaultAppMixin, RewardsAppMixin, BaseTestCase):
             )
             txn_group.sign_with_private_key(user_2_address, user_2_sk)
             block = self.ledger.eval_transactions(txn_group.signed_transactions, block_timestamp=block_timestamp)
-            app_call_txn = get_first_app_call_txn(block[b'txns'])
-            logs = app_call_txn[b'dt'][b'lg']
+            app_call_txn = get_first_app_call_txn(block[b"txns"])
+            logs = app_call_txn[b"dt"][b"lg"]
             events = decode_logs(logs, events=rewards_events)
 
             account_cumulative_power_delta = bytes_to_int(app_call_txn[b"dt"][b"itx"][0][b"dt"][b"lg"][0][4:])
@@ -393,31 +371,30 @@ class RewardsTestCase(VaultAppMixin, RewardsAppMixin, BaseTestCase):
             self.assertEqual(
                 events[0],
                 {
-                    'event_name': 'claim_rewards',
-                    'user_address': user_2_address,
-                    'total_reward_amount': ANY,
-                    'period_index_start': period_index,
-                    'period_count': 1,
-                    'reward_amounts': [claimed_reward_amount]
-                }
+                    "event_name": "claim_rewards",
+                    "user_address": user_2_address,
+                    "total_reward_amount": ANY,
+                    "period_index_start": period_index,
+                    "period_count": 1,
+                    "reward_amounts": [claimed_reward_amount],
+                },
             )
-            inner_txns = app_call_txn[b'dt'][b'itx']
+            inner_txns = app_call_txn[b"dt"][b"itx"]
             self.assertEqual(len(inner_txns), 2)
             self.assertEqual(
-                inner_txns[1][b'txn'],
+                inner_txns[1][b"txn"],
                 {
-                    b'aamt': events[0]['total_reward_amount'],
-                    b'arcv': decode_address(user_2_address),
-                    b'fv': ANY,
-                    b'lv': ANY,
-                    b'snd': decode_address(get_application_address(REWARDS_APP_ID)),
-                    b'type': b'axfer',
-                    b'xaid': TINY_ASSET_ID
-                }
+                    b"aamt": events[0]["total_reward_amount"],
+                    b"arcv": decode_address(user_2_address),
+                    b"fv": ANY,
+                    b"lv": ANY,
+                    b"snd": decode_address(get_application_address(REWARDS_APP_ID)),
+                    b"type": b"axfer",
+                    b"xaid": TINY_ASSET_ID,
+                },
             )
             sheet = RewardClaimSheet(value=self.ledger.boxes[REWARDS_APP_ID][get_account_reward_claim_sheet_box_name(user_2_address, 0)])
             self.assertEqual(sheet.is_reward_claimed_for_period(period_index), True)
-
 
     def test_claim_rewards_two_years(self):
         # 1. Create lock
@@ -431,22 +408,12 @@ class RewardsTestCase(VaultAppMixin, RewardsAppMixin, BaseTestCase):
         self.create_rewards_app(self.app_creator_address)
         first_period_start_timestamp = get_start_timestamp_of_week(self.vault_app_creation_timestamp) + WEEK
         self.init_rewards_app(first_period_start_timestamp, reward_amount)
-        self.ledger.move(
-            reward_amount * 1_000,
-            asset_id=TINY_ASSET_ID,
-            sender=self.ledger.assets[TINY_ASSET_ID]["creator"],
-            receiver=get_application_address(REWARDS_APP_ID)
-        )
+        self.ledger.move(reward_amount * 1_000, asset_id=TINY_ASSET_ID, sender=self.ledger.assets[TINY_ASSET_ID]["creator"], receiver=get_application_address(REWARDS_APP_ID))
 
-        # Create lock
+        # 1. Create lock
         lock_end_timestamp = get_start_timestamp_of_week(block_timestamp) + 200 * WEEK
         amount = 10_000_000
-        self.ledger.move(
-            amount * 100,
-            asset_id=TINY_ASSET_ID,
-            sender=self.ledger.assets[TINY_ASSET_ID]["creator"],
-            receiver=self.user_address
-        )
+        self.ledger.move(amount * 100, asset_id=TINY_ASSET_ID, sender=self.ledger.assets[TINY_ASSET_ID]["creator"], receiver=self.user_address)
 
         with unittest.mock.patch("time.time", return_value=block_timestamp):
             txn_group = prepare_create_lock_transactions(
@@ -510,7 +477,7 @@ class RewardsTestCase(VaultAppMixin, RewardsAppMixin, BaseTestCase):
                     txn_group.sign_with_private_key(self.app_creator_address, self.app_creator_sk)
                     self.ledger.eval_transactions(txn_group.signed_transactions, block_timestamp=block_timestamp)
 
-        account_powers = get_account_powers(self.ledger, self.user_address)        
+        account_powers = get_account_powers(self.ledger, self.user_address)
         period_index_start = 0
         period_count = 104
         account_power_indexes = [get_power_index_at(account_powers, first_period_start_timestamp + (WEEK * (period_index_start + i))) or 0 for i in range(period_count + 1)]
@@ -529,8 +496,8 @@ class RewardsTestCase(VaultAppMixin, RewardsAppMixin, BaseTestCase):
         )
         txn_group.sign_with_private_key(self.user_address, self.user_sk)
         block = self.ledger.eval_transactions(txn_group.signed_transactions, block_timestamp=block_timestamp)
-        app_call_txn = get_first_app_call_txn(block[b'txns'])
-        logs = app_call_txn[b'dt'][b'lg']
+        app_call_txn = get_first_app_call_txn(block[b"txns"])
+        logs = app_call_txn[b"dt"][b"lg"]
         events = decode_logs(logs, events=rewards_events)
 
         # Calculate reward amount for each period.
@@ -539,53 +506,47 @@ class RewardsTestCase(VaultAppMixin, RewardsAppMixin, BaseTestCase):
             account_cumulative_power_delta = bytes_to_int(app_call_txn[b"dt"][b"itx"][period_index][b"dt"][b"lg"][0][4:])
             claimed_reward_amount = calculate_reward_amount(account_cumulative_power_delta, reward_periods[period_index])
             reward_amounts.append(claimed_reward_amount)
-        
+
         self.assertEqual(len(events), 1)
         self.assertEqual(
             events[0],
             {
-                'event_name': 'claim_rewards',
-                'user_address': self.user_address,
-                'total_reward_amount': ANY,
-                'period_index_start': period_index_start,
-                'period_count': period_count,
-                'reward_amounts': reward_amounts
-            }
+                "event_name": "claim_rewards",
+                "user_address": self.user_address,
+                "total_reward_amount": ANY,
+                "period_index_start": period_index_start,
+                "period_count": period_count,
+                "reward_amounts": reward_amounts,
+            },
         )
         self.assertEqual(len(events[0]["reward_amounts"]), 104)
-        inner_txns = app_call_txn[b'dt'][b'itx']
+        inner_txns = app_call_txn[b"dt"][b"itx"]
         self.assertEqual(len(inner_txns), 104 + 1)
         self.assertEqual(
-            inner_txns[-1][b'txn'],
+            inner_txns[-1][b"txn"],
             {
-                b'aamt': events[0]['total_reward_amount'],
-                b'arcv': decode_address(self.user_address),
-                b'fv': ANY,
-                b'lv': ANY,
-                b'snd': decode_address(get_application_address(REWARDS_APP_ID)),
-                b'type': b'axfer',
-                b'xaid': TINY_ASSET_ID
-            }
+                b"aamt": events[0]["total_reward_amount"],
+                b"arcv": decode_address(self.user_address),
+                b"fv": ANY,
+                b"lv": ANY,
+                b"snd": decode_address(get_application_address(REWARDS_APP_ID)),
+                b"type": b"axfer",
+                b"xaid": TINY_ASSET_ID,
+            },
         )
 
         sheet = RewardClaimSheet(value=self.ledger.boxes[REWARDS_APP_ID][get_account_reward_claim_sheet_box_name(self.user_address, 0)])
         self.assertEqual(all(sheet.claim_sheet[:104]), True)
         self.assertEqual(sum(sheet.claim_sheet[104:]), 0)
 
-
     def test_budget_increase(self):
         self.create_rewards_app(self.app_creator_address)
 
-        txn = _prepare_budget_increase_transaction(
-            sender=self.user_address,
-            sp=self.sp,
-            index=REWARDS_APP_ID,
-            extra_app_args=[0]
-        )
+        txn = _prepare_budget_increase_transaction(sender=self.user_address, sp=self.sp, index=REWARDS_APP_ID, extra_app_args=[0])
         txn_group = TransactionGroup([txn])
         txn_group.sign_with_private_key(self.user_address, self.user_sk)
         self.ledger.eval_transactions(txn_group.signed_transactions)
-        
+
         txn = _prepare_budget_increase_transaction(
             sender=self.user_address,
             sp=self.sp,
@@ -597,8 +558,8 @@ class RewardsTestCase(VaultAppMixin, RewardsAppMixin, BaseTestCase):
         txn_group = TransactionGroup([txn])
         txn_group.sign_with_private_key(self.user_address, self.user_sk)
         block = self.ledger.eval_transactions(txn_group.signed_transactions)
-        app_call_txn = get_first_app_call_txn(block[b'txns'], ignore_budget_increase=False)
-        inner_txns = app_call_txn[b'dt'][b'itx']
+        app_call_txn = get_first_app_call_txn(block[b"txns"], ignore_budget_increase=False)
+        inner_txns = app_call_txn[b"dt"][b"itx"]
         self.assertEqual(len(inner_txns), 2)
 
     def test_set_reward_amount(self):
@@ -609,7 +570,7 @@ class RewardsTestCase(VaultAppMixin, RewardsAppMixin, BaseTestCase):
         reward_amount = 1_000_000
         self.create_rewards_app(self.app_creator_address)
         self.init_rewards_app(first_period_start_timestamp, reward_amount)
-        
+
         user_sk, user_address = generate_account()
         self.ledger.set_account_balance(user_address, 10_000_000)
         self.ledger.global_states[REWARDS_APP_ID][REWARDS_MANAGER_KEY] = decode_address(user_address)
@@ -624,8 +585,8 @@ class RewardsTestCase(VaultAppMixin, RewardsAppMixin, BaseTestCase):
         txn_group.sign_with_private_key(self.app_creator_address, self.app_creator_sk)
         with self.assertRaises(LogicEvalError) as e:
             self.ledger.eval_transactions(txn_group.signed_transactions)
-        self.assertEqual(e.exception.source['line'], 'assert(user_address == app_global_get(REWARDS_MANAGER_KEY))')
-        
+        self.assertEqual(e.exception.source["line"], "assert(user_address == app_global_get(REWARDS_MANAGER_KEY))")
+
         for i in range(20):
             new_reward_amount = 2_000_000 + i
             block_timestamp = block_timestamp + i
@@ -638,25 +599,19 @@ class RewardsTestCase(VaultAppMixin, RewardsAppMixin, BaseTestCase):
             )
             txn_group.sign_with_private_key(user_address, user_sk)
             block = self.ledger.eval_transactions(txn_group.signed_transactions, block_timestamp=block_timestamp)
-            app_call_txn = get_first_app_call_txn(block[b'txns'])
-            logs = app_call_txn[b'dt'][b'lg']
+            app_call_txn = get_first_app_call_txn(block[b"txns"])
+            logs = app_call_txn[b"dt"][b"lg"]
             events = decode_logs(logs, events=rewards_events)
             self.assertEqual(len(events), 2)
-            self.assertEqual(
-                events[0],
-                {'event_name': 'reward_history', 'index': i + 1, 'timestamp': block_timestamp, 'reward_amount': new_reward_amount}
-            )
-            self.assertEqual(
-                events[1],
-                {'event_name': 'set_reward_amount', 'timestamp': block_timestamp, 'reward_amount': new_reward_amount}
-            )
+            self.assertEqual(events[0], {"event_name": "reward_history", "index": i + 1, "timestamp": block_timestamp, "reward_amount": new_reward_amount})
+            self.assertEqual(events[1], {"event_name": "set_reward_amount", "timestamp": block_timestamp, "reward_amount": new_reward_amount})
             reward_history = get_reward_histories(self.ledger)[-1]
             self.assertEqual(
                 reward_history,
                 RewardHistory(
                     timestamp=block_timestamp,
                     reward_amount=new_reward_amount,
-                )
+                ),
             )
 
     def test_set_manager(self):
@@ -675,7 +630,7 @@ class RewardsTestCase(VaultAppMixin, RewardsAppMixin, BaseTestCase):
         txn_group.sign_with_private_key(user_address, user_sk)
         with self.assertRaises(LogicEvalError) as e:
             self.ledger.eval_transactions(txn_group.signed_transactions)
-        self.assertEqual(e.exception.source['line'], 'assert(user_address == app_global_get(MANAGER_KEY))')
+        self.assertEqual(e.exception.source["line"], "assert(user_address == app_global_get(MANAGER_KEY))")
 
         # Set user as manager
         txn_group = prepare_set_manager_transactions(
@@ -686,14 +641,11 @@ class RewardsTestCase(VaultAppMixin, RewardsAppMixin, BaseTestCase):
         )
         txn_group.sign_with_private_key(self.app_creator_address, self.app_creator_sk)
         block = self.ledger.eval_transactions(txn_group.signed_transactions)
-        logs = block[b'txns'][0][b'dt'][b'lg']
+        logs = block[b"txns"][0][b"dt"][b"lg"]
         events = decode_logs(logs, events=rewards_events)
         self.assertEqual(len(events), 1)
-        self.assertDictEqual(
-            events[0],
-            {'event_name': 'set_manager', 'manager': user_address}
-        )
-        
+        self.assertDictEqual(events[0], {"event_name": "set_manager", "manager": user_address})
+
         # Global state
         rewards_app_global_state = get_rewards_app_global_state(self.ledger, REWARDS_APP_ID)
         self.assertEqual(rewards_app_global_state.manager, decode_address(user_address))
@@ -707,14 +659,11 @@ class RewardsTestCase(VaultAppMixin, RewardsAppMixin, BaseTestCase):
         )
         txn_group.sign_with_private_key(user_address, user_sk)
         block = self.ledger.eval_transactions(txn_group.signed_transactions)
-        logs = block[b'txns'][0][b'dt'][b'lg']
+        logs = block[b"txns"][0][b"dt"][b"lg"]
         events = decode_logs(logs, events=rewards_events)
         self.assertEqual(len(events), 1)
-        self.assertDictEqual(
-            events[0],
-            {'event_name': 'set_manager', 'manager': self.app_creator_address}
-        )
-        
+        self.assertDictEqual(events[0], {"event_name": "set_manager", "manager": self.app_creator_address})
+
         # Global state
         rewards_app_global_state = get_rewards_app_global_state(self.ledger, REWARDS_APP_ID)
         self.assertEqual(rewards_app_global_state.manager, decode_address(self.app_creator_address))
@@ -735,7 +684,7 @@ class RewardsTestCase(VaultAppMixin, RewardsAppMixin, BaseTestCase):
         txn_group.sign_with_private_key(user_address, user_sk)
         with self.assertRaises(LogicEvalError) as e:
             self.ledger.eval_transactions(txn_group.signed_transactions)
-        self.assertEqual(e.exception.source['line'], 'assert(user_address == app_global_get(MANAGER_KEY))')
+        self.assertEqual(e.exception.source["line"], "assert(user_address == app_global_get(MANAGER_KEY))")
 
         # Set user as manager
         txn_group = prepare_set_rewards_manager_transactions(
@@ -746,13 +695,10 @@ class RewardsTestCase(VaultAppMixin, RewardsAppMixin, BaseTestCase):
         )
         txn_group.sign_with_private_key(self.app_creator_address, self.app_creator_sk)
         block = self.ledger.eval_transactions(txn_group.signed_transactions)
-        logs = block[b'txns'][0][b'dt'][b'lg']
+        logs = block[b"txns"][0][b"dt"][b"lg"]
         events = decode_logs(logs, events=rewards_events)
         self.assertEqual(len(events), 1)
-        self.assertDictEqual(
-            events[0],
-            {'event_name': 'set_rewards_manager', 'rewards_manager': user_address}
-        )
+        self.assertDictEqual(events[0], {"event_name": "set_rewards_manager", "rewards_manager": user_address})
 
         # Global state
         rewards_app_global_state = get_rewards_app_global_state(self.ledger, REWARDS_APP_ID)
@@ -767,43 +713,30 @@ class RewardsTestCase(VaultAppMixin, RewardsAppMixin, BaseTestCase):
         )
         txn_group.sign_with_private_key(self.app_creator_address, self.app_creator_sk)
         block = self.ledger.eval_transactions(txn_group.signed_transactions)
-        logs = block[b'txns'][0][b'dt'][b'lg']
+        logs = block[b"txns"][0][b"dt"][b"lg"]
         events = decode_logs(logs, events=rewards_events)
         self.assertEqual(len(events), 1)
-        self.assertDictEqual(
-            events[0],
-            {'event_name': 'set_rewards_manager', 'rewards_manager': self.app_creator_address}
-        )
+        self.assertDictEqual(events[0], {"event_name": "set_rewards_manager", "rewards_manager": self.app_creator_address})
 
         # Global state
         rewards_app_global_state = get_rewards_app_global_state(self.ledger, REWARDS_APP_ID)
         self.assertEqual(rewards_app_global_state.rewards_manager, decode_address(self.app_creator_address))
-    
+
     def test_get_box(self):
         block_timestamp = self.vault_app_creation_timestamp + WEEK // 2
         first_period_start_timestamp = get_start_timestamp_of_week(block_timestamp) + WEEK
-        
+
         reward_amount = 40_000_000
         self.create_rewards_app(self.app_creator_address)
         self.init_rewards_app(first_period_start_timestamp, reward_amount)
 
         user_1_sk, user_1_address = generate_account()
         self.ledger.set_account_balance(user_1_address, 10_000_000)
-        
-        self.ledger.move(
-            20_000_000,
-            asset_id=TINY_ASSET_ID,
-            sender=self.ledger.assets[TINY_ASSET_ID]["creator"],
-            receiver=user_1_address
-        )
-        
-        self.ledger.move(
-            reward_amount * 3,
-            asset_id=TINY_ASSET_ID,
-            sender=self.ledger.assets[TINY_ASSET_ID]["creator"],
-            receiver=get_application_address(REWARDS_APP_ID)
-        )
-        
+
+        self.ledger.move(20_000_000, asset_id=TINY_ASSET_ID, sender=self.ledger.assets[TINY_ASSET_ID]["creator"], receiver=user_1_address)
+
+        self.ledger.move(reward_amount * 3, asset_id=TINY_ASSET_ID, sender=self.ledger.assets[TINY_ASSET_ID]["creator"], receiver=get_application_address(REWARDS_APP_ID))
+
         lock_end_timestamp_1 = get_start_timestamp_of_week(block_timestamp) + 10 * WEEK
 
         with unittest.mock.patch("time.time", return_value=block_timestamp):
@@ -844,18 +777,12 @@ class RewardsTestCase(VaultAppMixin, RewardsAppMixin, BaseTestCase):
                 )
                 txn_group.sign_with_private_key(self.user_address, self.user_sk)
                 block = self.ledger.eval_transactions(txn_group.signed_transactions, block_timestamp=block_timestamp)
-                app_call_txn = get_first_app_call_txn(block[b'txns'])
-                logs = app_call_txn[b'dt'][b'lg']
+                app_call_txn = get_first_app_call_txn(block[b"txns"])
+                logs = app_call_txn[b"dt"][b"lg"]
                 events = decode_logs(logs, events=rewards_events)
                 self.assertEqual(len(events), 2)
-                self.assertEqual(
-                    events[0],
-                    {'event_name': 'reward_period', 'index': period_index, 'total_reward_amount': reward_amount, 'total_cumulative_power_delta': ANY}
-                )
-                self.assertEqual(
-                    events[1],
-                    {'event_name': 'create_reward_period', 'index': period_index, 'total_reward_amount': reward_amount, 'total_cumulative_power_delta': ANY}
-                )
+                self.assertEqual(events[0], {"event_name": "reward_period", "index": period_index, "total_reward_amount": reward_amount, "total_cumulative_power_delta": ANY})
+                self.assertEqual(events[1], {"event_name": "create_reward_period", "index": period_index, "total_reward_amount": reward_amount, "total_cumulative_power_delta": ANY})
 
         account_powers = get_account_powers(self.ledger, user_1_address)
         for period_index in range(3):
@@ -863,7 +790,7 @@ class RewardsTestCase(VaultAppMixin, RewardsAppMixin, BaseTestCase):
             period_end_timestamp = period_start_timestamp + WEEK
             account_power_index_start = get_power_index_at(account_powers, period_start_timestamp) or 0
             account_power_index_end = get_power_index_at(account_powers, period_end_timestamp)
-            
+
             txn_group = prepare_claim_reward_transactions(
                 rewards_app_id=REWARDS_APP_ID,
                 vault_app_id=VAULT_APP_ID,
@@ -888,35 +815,25 @@ class RewardsTestCase(VaultAppMixin, RewardsAppMixin, BaseTestCase):
         txn_group.sign_with_private_key(user_1_address, user_1_sk)
         block = self.ledger.eval_transactions(txn_group.signed_transactions)
 
-        _sheet = RewardClaimSheet(value=block[b'txns'][0][b'dt'][b'lg'][-1])
+        _sheet = RewardClaimSheet(value=block[b"txns"][0][b"dt"][b"lg"][-1])
         sheet = RewardClaimSheet(value=self.ledger.boxes[REWARDS_APP_ID][get_account_reward_claim_sheet_box_name(user_1_address, 0)])
         self.assertEqual(_sheet, sheet)
 
     def test_create_reward_period_with_invalid_reward_amount_index(self):
         block_timestamp = self.vault_app_creation_timestamp + WEEK // 2
         first_period_start_timestamp = get_start_timestamp_of_week(block_timestamp) + WEEK
-        
+
         reward_amount = 40_000_000
         self.create_rewards_app(self.app_creator_address)
         self.init_rewards_app(first_period_start_timestamp, reward_amount)
 
         user_1_sk, user_1_address = generate_account()
         self.ledger.set_account_balance(user_1_address, 10_000_000)
-        
-        self.ledger.move(
-            20_000_000,
-            asset_id=TINY_ASSET_ID,
-            sender=self.ledger.assets[TINY_ASSET_ID]["creator"],
-            receiver=user_1_address
-        )
-        
-        self.ledger.move(
-            reward_amount * 3,
-            asset_id=TINY_ASSET_ID,
-            sender=self.ledger.assets[TINY_ASSET_ID]["creator"],
-            receiver=get_application_address(REWARDS_APP_ID)
-        )
-        
+
+        self.ledger.move(20_000_000, asset_id=TINY_ASSET_ID, sender=self.ledger.assets[TINY_ASSET_ID]["creator"], receiver=user_1_address)
+
+        self.ledger.move(reward_amount * 3, asset_id=TINY_ASSET_ID, sender=self.ledger.assets[TINY_ASSET_ID]["creator"], receiver=get_application_address(REWARDS_APP_ID))
+
         lock_end_timestamp_1 = get_start_timestamp_of_week(block_timestamp) + 10 * WEEK
 
         with unittest.mock.patch("time.time", return_value=block_timestamp):
@@ -964,4 +881,4 @@ class RewardsTestCase(VaultAppMixin, RewardsAppMixin, BaseTestCase):
             txn_group.sign_with_private_key(self.user_address, self.user_sk)
             with self.assertRaises(LogicEvalError) as e:
                 self.ledger.eval_transactions(txn_group.signed_transactions, block_timestamp=block_timestamp)
-            self.assertEqual(e.exception.source['line'], 'assert(timestamp < next_reward_history.timestamp)')
+            self.assertEqual(e.exception.source["line"], "assert(timestamp < next_reward_history.timestamp)")
