@@ -5,7 +5,23 @@ from algosdk.account import generate_account
 from algosdk.encoding import decode_address
 from algosdk.logic import get_application_address
 from tinyman.governance.constants import TINY_ASSET_ID_KEY, VAULT_APP_ID_KEY, WEEK
-from tinyman.governance.proposal_voting.constants import APPROVAL_REQUIREMENT_KEY
+from tinyman.governance.staking_voting.constants import (
+    MANAGER_KEY,
+    PROPOSAL_MANAGER_KEY,
+    STAKING_VOTING_APP_MINIMUM_BALANCE_REQUIREMENT
+)
+from tinyman.governance.proposal_voting.constants import (
+    APPROVAL_REQUIREMENT_KEY,
+    MANAGER_KEY,
+    PROPOSAL_MANAGER_KEY,
+    PROPOSAL_INDEX_COUNTER_KEY,
+    PROPOSAL_THRESHOLD_KEY,
+    PROPOSAL_THRESHOLD_NUMERATOR_KEY,
+    PROPOSAL_VOTING_APP_MINIMUM_BALANCE_REQUIREMENT,
+    VOTING_DELAY_KEY,
+    VOTING_DURATION_KEY,
+    QUORUM_THRESHOLD_KEY,
+)
 from tinyman.governance.rewards.constants import (
     FIRST_PERIOD_TIMESTAMP,
     MANAGER_KEY,
@@ -29,7 +45,7 @@ from tinyman.governance.vault.constants import (
     VAULT_APP_MINIMUM_BALANCE_REQUIREMENT,
 )
 from tinyman.governance.vault.storage import get_total_power_box_name
-from tinyman.governance.vault.transactions import prepare_create_checkpoints_transactions, prepare_create_lock_transactions
+from tinyman.governance.vault.transactions import prepare_create_checkpoints_transactions, prepare_create_lock_transactions, prepare_increase_lock_amount_transactions
 from tinyman.governance.vault.utils import get_start_timestamp_of_week
 from tinyman.utils import int_to_bytes
 
@@ -62,14 +78,6 @@ class BaseTestCase(unittest.TestCase):
         self.ledger = JigLedger()
         self.ledger.create_asset(TINY_ASSET_ID, params=dict())
 
-    # def low_level_eval(self, signed_txns, block_timestamp):
-    #     from algojig.gojig import run
-    #     self.ledger.init_ledger_db(block_timestamp)
-    #     self.ledger.write()
-    #     self.ledger.write_transactions(signed_txns)
-    #     output = run("eval")
-    #     return output
-
     def init_app_boxes(self, app_id):
         if app_id not in self.ledger.boxes:
             self.ledger.boxes[app_id] = {}
@@ -82,15 +90,13 @@ class VaultAppMixin:
             self.ledger.set_account_balance(app_creator_address, 1_000_000)
 
         self.ledger.create_app(app_id=VAULT_APP_ID, approval_program=vault_approval_program, creator=app_creator_address, local_ints=0, local_bytes=0, global_ints=4, global_bytes=0)
-
         self.ledger.set_global_state(VAULT_APP_ID, {TINY_ASSET_ID_KEY: TINY_ASSET_ID, TOTAL_LOCKED_AMOUNT_KEY: 0, TOTAL_POWER_COUNT_KEY: 0, LAST_TOTAL_POWER_TIMESTAMP_KEY: 0})
 
+        self.ledger.set_account_balance(get_application_address(VAULT_APP_ID), VAULT_APP_MINIMUM_BALANCE_REQUIREMENT)  # Min balance requirement
+
     def init_vault_app(self, timestamp):
-        # Min balance requirement
-        self.ledger.set_account_balance(get_application_address(VAULT_APP_ID), VAULT_APP_MINIMUM_BALANCE_REQUIREMENT)
-        # Opt-in
-        self.ledger.set_account_balance(get_application_address(VAULT_APP_ID), 0, asset_id=TINY_ASSET_ID)
-        self.set_box_total_power(index=0, bias=0, timestamp=timestamp, slope=0, cumulative_power=0)
+        self.ledger.set_account_balance(get_application_address(VAULT_APP_ID), 0, asset_id=TINY_ASSET_ID)  # Opt-in to TINY ASA
+        self.set_box_total_power(index=0, bias=0, timestamp=timestamp, slope=0, cumulative_power=0)  # Set initial total power
 
         self.ledger.update_global_state(VAULT_APP_ID, {TOTAL_POWER_COUNT_KEY: 1, LAST_TOTAL_POWER_TIMESTAMP_KEY: timestamp})
 
@@ -108,10 +114,10 @@ class VaultAppMixin:
             self.ledger.eval_transactions(txn_group.signed_transactions, block_timestamp=block_timestamp)
             vault_app_global_state = get_vault_app_global_state(self.ledger)
 
-    def create_lock(self, user_address, user_sk, amount, lock_start_timestamp, lock_end_timestamp):
+    def create_lock(self, user_address, user_sk, amount, block_timestamp, lock_end_timestamp):
         self.ledger.move(amount * 100, asset_id=TINY_ASSET_ID, sender=self.ledger.assets[TINY_ASSET_ID]["creator"], receiver=user_address)
 
-        with unittest.mock.patch("time.time", return_value=lock_start_timestamp):
+        with unittest.mock.patch("time.time", return_value=block_timestamp):
             txn_group = prepare_create_lock_transactions(
                 vault_app_id=VAULT_APP_ID,
                 tiny_asset_id=TINY_ASSET_ID,
@@ -124,8 +130,23 @@ class VaultAppMixin:
                 suggested_params=self.sp,
             )
         txn_group.sign_with_private_key(user_address, user_sk)
-        block = self.ledger.eval_transactions(txn_group.signed_transactions, block_timestamp=lock_start_timestamp)
+        block = self.ledger.eval_transactions(txn_group.signed_transactions, block_timestamp=block_timestamp)
         return block
+
+    def increase_lock_amount(self, user_address, user_sk, amount, block_timestamp):
+        with unittest.mock.patch("time.time", return_value=block_timestamp):
+            txn_group = prepare_increase_lock_amount_transactions(
+                vault_app_id=VAULT_APP_ID,
+                tiny_asset_id=TINY_ASSET_ID,
+                sender=user_address,
+                locked_amount=amount,
+                vault_app_global_state=get_vault_app_global_state(self.ledger),
+                account_state=get_account_state(self.ledger, self.user_address),
+                suggested_params=self.sp,
+                app_call_note=None,
+            )
+        txn_group.sign_with_private_key(user_address, user_sk)
+        self.ledger.eval_transactions(txn_group.signed_transactions, block_timestamp=block_timestamp)
 
     def set_box_total_power(self, index, bias, timestamp, slope, cumulative_power):
         self.init_app_boxes(VAULT_APP_ID)
@@ -138,6 +159,7 @@ class VaultAppMixin:
             self.ledger.boxes[VAULT_APP_ID][box_name] = int_to_bytes(0, 1) * TOTAL_POWER_BOX_SIZE
 
         total_power = int_to_bytes(bias) + int_to_bytes(timestamp) + int_to_bytes(slope, 16) + int_to_bytes(cumulative_power, 16)
+
         start = array_index * TOTAL_POWER_SIZE
         end = start + TOTAL_POWER_SIZE
         data = bytearray(self.ledger.boxes[VAULT_APP_ID][box_name])
@@ -152,8 +174,6 @@ class RewardsAppMixin:
 
         self.ledger.create_app(app_id=REWARDS_APP_ID, approval_program=rewards_approval_program, creator=app_creator_address, local_ints=0, local_bytes=0, global_ints=16, global_bytes=16)
 
-        # 100_000 for basic min balance requirement
-        # self.ledger.set_account_balance(get_application_address(app_id), 1_000_000)
         self.ledger.set_global_state(
             REWARDS_APP_ID,
             {
@@ -166,13 +186,14 @@ class RewardsAppMixin:
                 REWARDS_MANAGER_KEY: decode_address(app_creator_address),
             },
         )
+        self.ledger.set_account_balance(get_application_address(REWARDS_APP_ID), REWARDS_APP_MINIMUM_BALANCE_REQUIREMENT)
 
     def init_rewards_app(self, first_period_timestamp, reward_amount=100_000_000):
         assert first_period_timestamp % WEEK == 0
-        # Min balance requirement
-        self.ledger.set_account_balance(get_application_address(REWARDS_APP_ID), REWARDS_APP_MINIMUM_BALANCE_REQUIREMENT)
-        # Opt-in
-        self.ledger.set_account_balance(get_application_address(REWARDS_APP_ID), 0, asset_id=TINY_ASSET_ID)
+
+        self.ledger.set_account_balance(get_application_address(REWARDS_APP_ID), REWARDS_APP_MINIMUM_BALANCE_REQUIREMENT)  # Min balance requirement
+
+        self.ledger.set_account_balance(get_application_address(REWARDS_APP_ID), 0, asset_id=TINY_ASSET_ID)  # Opt-in to TINY ASA
         self.set_box_reward_history(index=0, timestamp=first_period_timestamp, reward_amount=reward_amount)
 
         self.ledger.update_global_state(
@@ -215,19 +236,18 @@ class StakingVotingAppMixin:
             app_id=STAKING_VOTING_APP_ID, approval_program=staking_voting_approval_program, creator=app_creator_address, local_ints=0, local_bytes=0, global_ints=16, global_bytes=16
         )
 
-        # 100_000 for basic min balance requirement
-        # self.ledger.set_account_balance(get_application_address(app_id), 1_000_000)
         self.ledger.set_global_state(
             STAKING_VOTING_APP_ID,
             {
-                b"vault_app_id": VAULT_APP_ID,
-                b"proposal_index_counter": 0,
-                b"voting_delay": 1,
-                b"voting_duration": 7,
-                b"manager": decode_address(app_creator_address),
-                b"proposal_manager": decode_address(proposal_manager_address),
+                VAULT_APP_ID_KEY: VAULT_APP_ID,
+                PROPOSAL_INDEX_COUNTER_KEY: 0,
+                VOTING_DELAY_KEY: 1,
+                VOTING_DURATION_KEY: 7,
+                MANAGER_KEY: decode_address(app_creator_address),
+                PROPOSAL_MANAGER_KEY: decode_address(proposal_manager_address),
             },
         )
+        self.ledger.set_account_balance(get_application_address(STAKING_VOTING_APP_ID), STAKING_VOTING_APP_MINIMUM_BALANCE_REQUIREMENT)
 
 
 class ProposalVotingAppMixin:
@@ -241,22 +261,28 @@ class ProposalVotingAppMixin:
 
         # TODO: Update int and byte counts
         self.ledger.create_app(
-            app_id=PROPOSAL_VOTING_APP_ID, approval_program=proposal_voting_approval_program, creator=app_creator_address, local_ints=0, local_bytes=0, global_ints=16, global_bytes=16
+            app_id=PROPOSAL_VOTING_APP_ID,
+            approval_program=proposal_voting_approval_program,
+            creator=app_creator_address,
+            local_ints=0,
+            local_bytes=0,
+            global_ints=16,
+            global_bytes=16,
         )
 
-        # 100_000 for basic min balance requirement
         self.ledger.set_global_state(
             PROPOSAL_VOTING_APP_ID,
             {
-                b"vault_app_id": VAULT_APP_ID,
-                b"proposal_index_counter": 0,
-                b"proposal_threshold": proposal_threshold or 0,
-                b"proposal_threshold_numerator": 5,
-                b"voting_delay": 2,
-                b"voting_duration": 7,
-                b"quorum_threshold": 100_000_000_000,
+                VAULT_APP_ID_KEY: VAULT_APP_ID,
+                PROPOSAL_INDEX_COUNTER_KEY: 0,
+                PROPOSAL_THRESHOLD_KEY: proposal_threshold or 0,
+                PROPOSAL_THRESHOLD_NUMERATOR_KEY: 5,
+                VOTING_DELAY_KEY: 2,
+                VOTING_DURATION_KEY: 7,
+                QUORUM_THRESHOLD_KEY: 100_000_000_000,
                 APPROVAL_REQUIREMENT_KEY: 1,
-                b"manager": decode_address(app_creator_address),
-                b"proposal_manager": decode_address(proposal_manager_address),
+                MANAGER_KEY: decode_address(app_creator_address),
+                PROPOSAL_MANAGER_KEY: decode_address(proposal_manager_address),
             },
         )
+        self.ledger.set_account_balance(get_application_address(PROPOSAL_VOTING_APP_ID), PROPOSAL_VOTING_APP_MINIMUM_BALANCE_REQUIREMENT)
