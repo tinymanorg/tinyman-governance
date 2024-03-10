@@ -1,0 +1,1103 @@
+#pragma version 9
+//tealish version git+https://github.com/Hipo/tealish.git@c4f8c12b36dbcc8b63844df5f818164925735087
+
+// Name: rp<box_index><array_index>
+// Size: 24 bytes
+
+// Name: rh<box_index><array_index>
+// Size: 16 bytes
+
+#define WEEK 604800
+
+// Global states
+#define TINY_ASSET_ID_KEY "tiny_asset_id"
+#define VAULT_APP_ID_KEY "vault_app_id"
+#define FIRST_PERIOD_TIMESTAMP "first_period_timestamp"
+#define REWARD_PERIOD_COUNT_KEY "reward_period_count"
+#define REWARD_HISTORY_COUNT_KEY "reward_history_count"
+#define MANAGER_KEY "manager"
+#define REWARDS_MANAGER_KEY "rewards_manager"
+
+// Boxes
+#define REWARD_CLAIM_SHEET_BOX_PREFIX "c"
+// Boolean (1012 * 8 bits)
+#define REWARD_CLAIM_SHEET_BOX_SIZE 1012
+
+#define REWARD_PERIOD_BOX_PREFIX "rp"
+#define REWARD_PERIOD_SIZE 24
+#define REWARD_PERIOD_BOX_SIZE 1008
+#define REWARD_PERIOD_BOX_ARRAY_LEN 42
+
+#define REWARD_HISTORY_BOX_PREFIX "rh"
+#define REWARD_HISTORY_SIZE 16
+#define REWARD_HISTORY_BOX_SIZE 256
+#define REWARD_HISTORY_BOX_ARRAY_LEN 16
+
+
+// tl:45: router:
+pushbytes "create_application"
+pushbytes "update_application"
+pushbytes "claim_rewards"
+pushbytes "increase_budget"
+pushbytes "create_reward_period"
+pushbytes "set_reward_amount"
+pushbytes "get_box"
+pushbytes "set_manager"
+pushbytes "set_rewards_manager"
+pushbytes "init"
+txna ApplicationArgs 0
+match route_create_application route_update_application route_claim_rewards route_increase_budget route_create_reward_period route_set_reward_amount route_get_box route_set_manager route_set_rewards_manager route_init
+err                                                         // unexpected value
+route_create_application:
+    txn ApplicationID; pushint 0; ==; assert                // ApplicationID == 0
+    txna ApplicationArgs 1; btoi 
+    txna ApplicationArgs 2; btoi 
+    callsub __func__create_application
+    pushint 1; return
+route_update_application:
+    txn OnCompletion; pushint 4; ==; assert                 // assert OnCompletion == UpdateApplication
+    callsub __func__update_application
+    pushint 1; return
+route_claim_rewards:
+    txn OnCompletion; pushint 0; ==; assert                 // assert OnCompletion == NoOp
+    txna ApplicationArgs 1; btoi 
+    txna ApplicationArgs 2; btoi 
+    txna ApplicationArgs 3
+    callsub __func__claim_rewards
+    pushint 1; return
+route_increase_budget:
+    txn OnCompletion; pushint 0; ==; assert                 // assert OnCompletion == NoOp
+    txna ApplicationArgs 1; btoi 
+    callsub __func__increase_budget
+    pushint 1; return
+route_create_reward_period:
+    txn OnCompletion; pushint 0; ==; assert                 // assert OnCompletion == NoOp
+    txna ApplicationArgs 1
+    txna ApplicationArgs 2
+    txna ApplicationArgs 3; btoi 
+    callsub __func__create_reward_period
+    pushint 1; return
+route_set_reward_amount:
+    txn OnCompletion; pushint 0; ==; assert                 // assert OnCompletion == NoOp
+    txna ApplicationArgs 1; btoi 
+    callsub __func__set_reward_amount
+    pushint 1; return
+route_get_box:
+    txn OnCompletion; pushint 0; ==; assert                 // assert OnCompletion == NoOp
+    txna ApplicationArgs 1
+    callsub __func__get_box
+    // return int, bytes, bytes
+    // uncover 0 int
+    itob
+    uncover 1                                               // bytes
+    uncover 2                                               // bytes
+    concat
+    concat
+    pushbytes 0x151f7c75; swap; concat; log                 // arc4 return log
+    pushint 1; return
+route_set_manager:
+    txn OnCompletion; pushint 0; ==; assert                 // assert OnCompletion == NoOp
+    txna ApplicationArgs 1
+    callsub __func__set_manager
+    pushint 1; return
+route_set_rewards_manager:
+    txn OnCompletion; pushint 0; ==; assert                 // assert OnCompletion == NoOp
+    txna ApplicationArgs 1
+    callsub __func__set_rewards_manager
+    pushint 1; return
+route_init:
+    txn OnCompletion; pushint 0; ==; assert                 // assert OnCompletion == NoOp
+    txna ApplicationArgs 1; btoi 
+    callsub __func__init
+    pushint 1; return
+
+// tl:59: func create_application(tiny_asset_id: int, vault_app_id: int):
+__func__create_application:
+    store 1                                                 // vault_app_id [int]
+    store 2                                                 // tiny_asset_id [int]
+    // tl:60: app_global_put(TINY_ASSET_ID_KEY, tiny_asset_id)
+    pushbytes TINY_ASSET_ID_KEY                             // "tiny_asset_id"
+    load 2                                                  // tiny_asset_id
+    app_global_put
+    // tl:61: app_global_put(VAULT_APP_ID_KEY, vault_app_id)
+    pushbytes VAULT_APP_ID_KEY                              // "vault_app_id"
+    load 1                                                  // vault_app_id
+    app_global_put
+    // tl:62: app_global_put(REWARD_PERIOD_COUNT_KEY, 0)
+    pushbytes REWARD_PERIOD_COUNT_KEY                       // "reward_period_count"
+    pushint 0
+    app_global_put
+    // tl:63: app_global_put(REWARD_HISTORY_COUNT_KEY, 0)
+    pushbytes REWARD_HISTORY_COUNT_KEY                      // "reward_history_count"
+    pushint 0
+    app_global_put
+    // tl:64: app_global_put(FIRST_PERIOD_TIMESTAMP, 0)
+    pushbytes FIRST_PERIOD_TIMESTAMP                        // "first_period_timestamp"
+    pushint 0
+    app_global_put
+    // tl:65: app_global_put(MANAGER_KEY, Txn.Sender)
+    pushbytes MANAGER_KEY                                   // "manager"
+    txn Sender
+    app_global_put
+    // tl:66: app_global_put(REWARDS_MANAGER_KEY, Txn.Sender)
+    pushbytes REWARDS_MANAGER_KEY                           // "rewards_manager"
+    txn Sender
+    app_global_put
+    // tl:67: return
+    retsub
+
+// tl:71: func update_application():
+__func__update_application:
+    // tl:72: bytes user_address = Txn.Sender [slot 3]
+    txn Sender
+    store 3                                                 // user_address
+    // tl:73: assert(user_address == app_global_get(MANAGER_KEY))
+    load 3                                                  // user_address
+    pushbytes MANAGER_KEY                                   // "manager"
+    app_global_get
+    ==
+    assert
+    // tl:74: return
+    retsub
+
+// tl:78: func increase_budget(inner_app_call_count: int):
+__func__increase_budget:
+    store 4                                                 // inner_app_call_count [int]
+    // Box read budget and opcode budget will be incread using this method.
+    // tl:80: for _ in 0:inner_app_call_count:
+        pushint 0
+        dup
+        l0_for:
+        load 4                                              // inner_app_call_count
+        ==
+        bnz l0_end
+        // tl:81: inner_txn:
+        callsub _itxn_begin
+            // tl:82: TypeEnum: Appl
+            pushint 6                                       // Appl
+            itxn_field TypeEnum
+            // tl:83: ApplicationID: app_global_get(VAULT_APP_ID_KEY)
+            pushbytes VAULT_APP_ID_KEY                      // "vault_app_id"
+            app_global_get
+            itxn_field ApplicationID
+            // tl:84: ApplicationArgs[0]: "increase_budget"
+            pushbytes "increase_budget"
+            itxn_field ApplicationArgs
+            // tl:85: Fee: 0
+            pushint 0
+            itxn_field Fee
+        callsub _itxn_submit
+        // end inner_txn
+        pushint 1
+        +
+        dup
+        b l0_for
+        pop
+        l0_end:
+    // tl:88: return
+    retsub
+
+// tl:92: func create_reward_period(total_power_index_1: bytes, total_power_index_2: bytes, reward_amount_index: int):
+__func__create_reward_period:
+    store 5                                                 // reward_amount_index [int]
+    store 6                                                 // total_power_index_2 [bytes]
+    store 7                                                 // total_power_index_1 [bytes]
+    // tl:93: int period_index = app_global_get(REWARD_PERIOD_COUNT_KEY) [slot 8]
+    pushbytes REWARD_PERIOD_COUNT_KEY                       // "reward_period_count"
+    app_global_get
+    store 8                                                 // period_index
+    // tl:94: int period_start_timestamp = get_period_start_timestamp(period_index) [slot 9]
+    load 8                                                  // period_index
+    callsub __func__get_period_start_timestamp
+    store 9                                                 // period_start_timestamp
+    // tl:95: int period_end_timestamp = period_start_timestamp + WEEK [slot 10]
+    load 9                                                  // period_start_timestamp
+    pushint WEEK                                            // 604800
+    +
+    store 10                                                // period_end_timestamp
+    // tl:96: assert(period_end_timestamp <= Global.LatestTimestamp)
+    load 10                                                 // period_end_timestamp
+    global LatestTimestamp
+    <=
+    assert
+    
+    // tl:98: bytes cumulative_power_delta = get_total_cumulative_power_delta(period_start_timestamp, period_end_timestamp, total_power_index_1, total_power_index_2) [slot 11]
+    load 9                                                  // period_start_timestamp
+    load 10                                                 // period_end_timestamp
+    load 7                                                  // total_power_index_1
+    load 6                                                  // total_power_index_2
+    callsub __func__get_total_cumulative_power_delta
+    store 11                                                // cumulative_power_delta
+    // tl:99: int total_reward_amount = get_reward_amount(period_start_timestamp, reward_amount_index) [slot 12]
+    load 9                                                  // period_start_timestamp
+    load 5                                                  // reward_amount_index
+    callsub __func__get_reward_amount
+    store 12                                                // total_reward_amount
+    
+    // tl:101: bytes reward_period = construct_reward_period(total_reward_amount, cumulative_power_delta) [slot 13]
+    load 12                                                 // total_reward_amount
+    load 11                                                 // cumulative_power_delta
+    callsub __func__construct_reward_period
+    store 13                                                // reward_period
+    // tl:102: save_reward_period(reward_period)
+    load 13                                                 // reward_period
+    callsub __func__save_reward_period
+    // tl:103: log(Concat(method("create_reward_period(uint64,uint64,uint128)"), itob(period_index), itob(total_reward_amount), cumulative_power_delta))
+    method "create_reward_period(uint64,uint64,uint128)"
+    load 8                                                  // period_index
+    itob
+    load 12                                                 // total_reward_amount
+    itob
+    load 11                                                 // cumulative_power_delta
+    concat
+    concat
+    concat
+    log
+    // tl:104: return
+    retsub
+
+// tl:108: func claim_rewards(period_index_start: int, period_count: int, account_power_indexes: bytes):
+__func__claim_rewards:
+    store 14                                                // account_power_indexes [bytes]
+    store 15                                                // period_count [int]
+    store 16                                                // period_index_start [int]
+    // tl:109: bytes user_address = Txn.Sender [slot 17]
+    txn Sender
+    store 17                                                // user_address
+    // tl:110: assert(period_count)
+    load 15                                                 // period_count
+    assert
+    
+    // tl:112: int timestamp = get_period_start_timestamp(period_index_start) [slot 18]
+    load 16                                                 // period_index_start
+    callsub __func__get_period_start_timestamp
+    store 18                                                // timestamp
+    // tl:113: int total_reward_amount = 0 [slot 19]
+    pushint 0
+    store 19                                                // total_reward_amount
+    // tl:114: bytes reward_amounts = "" [slot 20]
+    pushbytes ""
+    store 20                                                // reward_amounts
+    
+    // tl:116: int period_index [slot 21]
+    // tl:117: int period_start_timestamp [slot 22]
+    // tl:118: int period_end_timestamp [slot 23]
+    // tl:119: bytes account_power_index_1 [slot 24]
+    // tl:120: bytes account_power_index_2 [slot 25]
+    // tl:121: int reward_amount [slot 26]
+    // tl:122: bytes account_cumulative_power_delta [slot 27]
+    
+    // tl:124: for i in 0:period_count:
+        pushint 0
+        store 28                                            // i
+        l1_for:
+        load 28                                             // i
+        load 15                                             // period_count
+        ==
+        bnz l1_end
+        // tl:125: period_index = period_index_start + i
+        load 16                                             // period_index_start
+        load 28                                             // i
+        +
+        store 21                                            // period_index
+        // tl:126: check_and_save_claimed_reward(user_address, period_index)
+        load 17                                             // user_address
+        load 21                                             // period_index
+        callsub __func__check_and_save_claimed_reward
+        
+        // tl:128: period_start_timestamp = timestamp + (i * WEEK)
+        load 18                                             // timestamp
+        load 28                                             // i
+        pushint WEEK                                        // 604800
+        *
+        +
+        store 22                                            // period_start_timestamp
+        // tl:129: period_end_timestamp = period_start_timestamp + WEEK
+        load 22                                             // period_start_timestamp
+        pushint WEEK                                        // 604800
+        +
+        store 23                                            // period_end_timestamp
+        
+        // tl:131: account_power_index_1 = extract3(account_power_indexes, (i * 8), 8)
+        load 14                                             // account_power_indexes
+        load 28                                             // i
+        pushint 8
+        *
+        pushint 8
+        extract3
+        store 24                                            // account_power_index_1
+        // tl:132: account_power_index_2 = extract3(account_power_indexes, ((i + 1) * 8), 8)
+        load 14                                             // account_power_indexes
+        load 28                                             // i
+        pushint 1
+        +
+        pushint 8
+        *
+        pushint 8
+        extract3
+        store 25                                            // account_power_index_2
+        
+        // tl:134: account_cumulative_power_delta = get_account_cumulative_power_delta(user_address, period_start_timestamp, period_end_timestamp, account_power_index_1, account_power_index_2)
+        load 17                                             // user_address
+        load 22                                             // period_start_timestamp
+        load 23                                             // period_end_timestamp
+        load 24                                             // account_power_index_1
+        load 25                                             // account_power_index_2
+        callsub __func__get_account_cumulative_power_delta
+        store 27                                            // account_cumulative_power_delta
+        
+        // tl:136: RewardPeriod reward_period = get_reward_period(period_index) [slot 29]
+        load 21                                             // period_index
+        callsub __func__get_reward_period
+        store 29                                            // reward_period
+        // tl:137: reward_amount = btoi((itob(reward_period.total_reward_amount) b* account_cumulative_power_delta) b/ reward_period.total_cumulative_power_delta)
+        load 29; extract 0 8; btoi// reward_period.total_reward_amount
+        itob
+        load 27                                             // account_cumulative_power_delta
+        b*
+        load 29; extract 8 16// reward_period.total_cumulative_power_delta
+        b/
+        btoi
+        store 26                                            // reward_amount
+        
+        // tl:139: reward_amounts = Concat(reward_amounts, itob(reward_amount))
+        load 20                                             // reward_amounts
+        load 26                                             // reward_amount
+        itob
+        concat
+        store 20                                            // reward_amounts
+        // tl:140: total_reward_amount = total_reward_amount + reward_amount
+        load 19                                             // total_reward_amount
+        load 26                                             // reward_amount
+        +
+        store 19                                            // total_reward_amount
+        load 28                                             // i
+        pushint 1
+        +
+        store 28                                            // i
+        b l1_for
+        l1_end:
+    
+    // tl:143: transfer(app_global_get(TINY_ASSET_ID_KEY), total_reward_amount, Global.CurrentApplicationAddress, user_address)
+    pushbytes TINY_ASSET_ID_KEY                             // "tiny_asset_id"
+    app_global_get
+    load 19                                                 // total_reward_amount
+    global CurrentApplicationAddress
+    load 17                                                 // user_address
+    callsub __func__transfer
+    
+    // claim_rewards(address, total_reward_amount, period_index_start, period_count, reward_amounts[])
+    // tl:146: log(Concat(method("claim_rewards(address,uint64,uint64,uint64,uint64[])"), user_address, itob(total_reward_amount), itob(period_index_start), itob(period_count), extract(6, 2, itob(period_count)), reward_amounts))
+    method "claim_rewards(address,uint64,uint64,uint64,uint64[])"
+    load 17                                                 // user_address
+    load 19                                                 // total_reward_amount
+    itob
+    load 16                                                 // period_index_start
+    itob
+    load 15                                                 // period_count
+    itob
+    load 15                                                 // period_count
+    itob
+    extract 6 2
+    load 20                                                 // reward_amounts
+    concat
+    concat
+    concat
+    concat
+    concat
+    concat
+    log
+    // tl:147: return
+    retsub
+
+// tl:151: func init(reward_amount: int):
+__func__init:
+    store 30                                                // reward_amount [int]
+    // tl:152: bytes user_address = Txn.Sender [slot 31]
+    txn Sender
+    store 31                                                // user_address
+    // tl:153: assert(user_address == app_global_get(REWARDS_MANAGER_KEY))
+    load 31                                                 // user_address
+    pushbytes REWARDS_MANAGER_KEY                           // "rewards_manager"
+    app_global_get
+    ==
+    assert
+    // tl:154: assert(!app_global_get(REWARD_HISTORY_COUNT_KEY))
+    pushbytes REWARD_HISTORY_COUNT_KEY                      // "reward_history_count"
+    app_global_get
+    !
+    assert
+    
+    // tl:156: int first_period_timestamp = ((Global.LatestTimestamp / WEEK) * WEEK) + WEEK [slot 32]
+    global LatestTimestamp
+    pushint WEEK                                            // 604800
+    /
+    pushint WEEK                                            // 604800
+    *
+    pushint WEEK                                            // 604800
+    +
+    store 32                                                // first_period_timestamp
+    // tl:157: app_global_put(FIRST_PERIOD_TIMESTAMP, first_period_timestamp)
+    pushbytes FIRST_PERIOD_TIMESTAMP                        // "first_period_timestamp"
+    load 32                                                 // first_period_timestamp
+    app_global_put
+    
+    // tl:159: bytes reward_history = construct_reward_history(first_period_timestamp, reward_amount) [slot 33]
+    load 32                                                 // first_period_timestamp
+    load 30                                                 // reward_amount
+    callsub __func__construct_reward_history
+    store 33                                                // reward_history
+    // tl:160: save_reward_history(reward_history)
+    load 33                                                 // reward_history
+    callsub __func__save_reward_history
+    
+    // opt-in to TINY
+    // tl:163: transfer(app_global_get(TINY_ASSET_ID_KEY), 0, Global.CurrentApplicationAddress, Global.CurrentApplicationAddress)
+    pushbytes TINY_ASSET_ID_KEY                             // "tiny_asset_id"
+    app_global_get
+    pushint 0
+    global CurrentApplicationAddress
+    global CurrentApplicationAddress
+    callsub __func__transfer
+    // tl:164: log(Concat(method("init(uint64,uint64)"), itob(first_period_timestamp), itob(reward_amount)))
+    method "init(uint64,uint64)"
+    load 32                                                 // first_period_timestamp
+    itob
+    load 30                                                 // reward_amount
+    itob
+    concat
+    concat
+    log
+    // tl:165: return
+    retsub
+
+// tl:169: func set_reward_amount(reward_amount: int):
+__func__set_reward_amount:
+    store 34                                                // reward_amount [int]
+    // tl:170: bytes user_address = Txn.Sender [slot 35]
+    txn Sender
+    store 35                                                // user_address
+    // tl:171: assert(user_address == app_global_get(REWARDS_MANAGER_KEY))
+    load 35                                                 // user_address
+    pushbytes REWARDS_MANAGER_KEY                           // "rewards_manager"
+    app_global_get
+    ==
+    assert
+    
+    // Ensure that the app is initialized.
+    // tl:174: assert(app_global_get(REWARD_HISTORY_COUNT_KEY))
+    pushbytes REWARD_HISTORY_COUNT_KEY                      // "reward_history_count"
+    app_global_get
+    assert
+    
+    // tl:176: bytes reward_history = construct_reward_history(Global.LatestTimestamp, reward_amount) [slot 36]
+    global LatestTimestamp
+    load 34                                                 // reward_amount
+    callsub __func__construct_reward_history
+    store 36                                                // reward_history
+    // tl:177: save_reward_history(reward_history)
+    load 36                                                 // reward_history
+    callsub __func__save_reward_history
+    // tl:178: log(Concat(method("set_reward_amount(uint64,uint64)"), itob(Global.LatestTimestamp), itob(reward_amount)))
+    method "set_reward_amount(uint64,uint64)"
+    global LatestTimestamp
+    itob
+    load 34                                                 // reward_amount
+    itob
+    concat
+    concat
+    log
+    // tl:179: return
+    retsub
+
+// tl:183: func set_manager(new_manager: bytes):
+__func__set_manager:
+    store 37                                                // new_manager [bytes]
+    // tl:184: bytes user_address = Txn.Sender [slot 38]
+    txn Sender
+    store 38                                                // user_address
+    // tl:185: assert(user_address == app_global_get(MANAGER_KEY))
+    load 38                                                 // user_address
+    pushbytes MANAGER_KEY                                   // "manager"
+    app_global_get
+    ==
+    assert
+    
+    // tl:187: assert(len(new_manager) == 32)
+    load 37                                                 // new_manager
+    len
+    pushint 32
+    ==
+    assert
+    // tl:188: app_global_put(MANAGER_KEY, new_manager)
+    pushbytes MANAGER_KEY                                   // "manager"
+    load 37                                                 // new_manager
+    app_global_put
+    // tl:189: log(Concat(method("set_manager(address)"), new_manager))
+    method "set_manager(address)"
+    load 37                                                 // new_manager
+    concat
+    log
+    // tl:190: return
+    retsub
+
+// tl:194: func set_rewards_manager(new_rewards_manager: bytes):
+__func__set_rewards_manager:
+    store 39                                                // new_rewards_manager [bytes]
+    // tl:195: bytes user_address = Txn.Sender [slot 40]
+    txn Sender
+    store 40                                                // user_address
+    // tl:196: assert(user_address == app_global_get(MANAGER_KEY))
+    load 40                                                 // user_address
+    pushbytes MANAGER_KEY                                   // "manager"
+    app_global_get
+    ==
+    assert
+    
+    // tl:198: assert(len(new_rewards_manager) == 32)
+    load 39                                                 // new_rewards_manager
+    len
+    pushint 32
+    ==
+    assert
+    // tl:199: app_global_put(REWARDS_MANAGER_KEY, new_rewards_manager)
+    pushbytes REWARDS_MANAGER_KEY                           // "rewards_manager"
+    load 39                                                 // new_rewards_manager
+    app_global_put
+    // tl:200: log(Concat(method("set_rewards_manager(address)"), new_rewards_manager))
+    method "set_rewards_manager(address)"
+    load 39                                                 // new_rewards_manager
+    concat
+    log
+    // tl:201: return
+    retsub
+
+// tl:205: func get_box(box_name: bytes) int, bytes, bytes:
+__func__get_box:
+    store 41                                                // box_name [bytes]
+    // tl:206: int exists [slot 42]
+    // tl:207: bytes data [slot 43]
+    // tl:208: exists, data = box_get(box_name)
+    load 41                                                 // box_name
+    box_get
+    store 42                                                // exists
+    store 43                                                // data
+    
+    // tl:210: return exists, extract(6, 2, itob(len(data))), data
+    load 43                                                 // data
+    load 43                                                 // data
+    len
+    itob
+    extract 6 2
+    load 42                                                 // exists
+    retsub
+
+// tl:213: func construct_reward_period(amount: int, cumulative_power_delta: bytes) bytes:
+__func__construct_reward_period:
+    store 44                                                // cumulative_power_delta [bytes]
+    store 45                                                // amount [int]
+    // tl:214: return Concat(itob(amount), (bzero(16) b| cumulative_power_delta))
+    load 45                                                 // amount
+    itob
+    pushint 16
+    bzero
+    load 44                                                 // cumulative_power_delta
+    b|
+    concat
+    retsub
+
+// tl:217: func save_reward_period(data: bytes):
+__func__save_reward_period:
+    store 46                                                // data [bytes]
+    // tl:218: int index = app_global_get(REWARD_PERIOD_COUNT_KEY) [slot 47]
+    pushbytes REWARD_PERIOD_COUNT_KEY                       // "reward_period_count"
+    app_global_get
+    store 47                                                // index
+    
+    // tl:220: assert(len(data) == REWARD_PERIOD_SIZE)
+    load 46                                                 // data
+    len
+    pushint REWARD_PERIOD_SIZE                              // 24
+    ==
+    assert
+    // tl:221: int box_index = index / REWARD_PERIOD_BOX_ARRAY_LEN [slot 48]
+    load 47                                                 // index
+    pushint REWARD_PERIOD_BOX_ARRAY_LEN                     // 42
+    /
+    store 48                                                // box_index
+    // tl:222: int array_index = index % REWARD_PERIOD_BOX_ARRAY_LEN [slot 49]
+    load 47                                                 // index
+    pushint REWARD_PERIOD_BOX_ARRAY_LEN                     // 42
+    %
+    store 49                                                // array_index
+    // tl:223: bytes box_name = Concat(REWARD_PERIOD_BOX_PREFIX, itob(box_index)) [slot 50]
+    pushbytes REWARD_PERIOD_BOX_PREFIX                      // "rp"
+    load 48                                                 // box_index
+    itob
+    concat
+    store 50                                                // box_name
+    // tl:224: _ = box_create(box_name, REWARD_PERIOD_BOX_SIZE)
+    load 50                                                 // box_name
+    pushint REWARD_PERIOD_BOX_SIZE                          // 1008
+    box_create
+    pop                                                     // discarding value for _
+    // tl:225: box_replace(box_name, (array_index * REWARD_PERIOD_SIZE), data)
+    load 50                                                 // box_name
+    load 49                                                 // array_index
+    pushint REWARD_PERIOD_SIZE                              // 24
+    *
+    load 46                                                 // data
+    box_replace
+    
+    // reward_period(index, total_reward_amount, total_cumulative_power_delta)
+    // tl:228: log(Concat(method("reward_period(uint64,uint64,uint128)"), itob(index), data))
+    method "reward_period(uint64,uint64,uint128)"
+    load 47                                                 // index
+    itob
+    load 46                                                 // data
+    concat
+    concat
+    log
+    // tl:229: app_global_put(REWARD_PERIOD_COUNT_KEY, index + 1)
+    pushbytes REWARD_PERIOD_COUNT_KEY                       // "reward_period_count"
+    load 47                                                 // index
+    pushint 1
+    +
+    app_global_put
+    // tl:230: return
+    retsub
+
+// tl:233: func get_reward_period(index: int) RewardPeriod:
+__func__get_reward_period:
+    store 51                                                // index [int]
+    // tl:234: int box_index = index / REWARD_PERIOD_BOX_ARRAY_LEN [slot 52]
+    load 51                                                 // index
+    pushint REWARD_PERIOD_BOX_ARRAY_LEN                     // 42
+    /
+    store 52                                                // box_index
+    // tl:235: int array_index = index % REWARD_PERIOD_BOX_ARRAY_LEN [slot 53]
+    load 51                                                 // index
+    pushint REWARD_PERIOD_BOX_ARRAY_LEN                     // 42
+    %
+    store 53                                                // array_index
+    // tl:236: bytes box_name = Concat(REWARD_PERIOD_BOX_PREFIX, itob(box_index)) [slot 54]
+    pushbytes REWARD_PERIOD_BOX_PREFIX                      // "rp"
+    load 52                                                 // box_index
+    itob
+    concat
+    store 54                                                // box_name
+    // tl:237: return Cast(box_extract(box_name, (array_index * REWARD_PERIOD_SIZE), REWARD_PERIOD_SIZE), RewardPeriod)
+    load 54                                                 // box_name
+    load 53                                                 // array_index
+    pushint REWARD_PERIOD_SIZE                              // 24
+    *
+    pushint REWARD_PERIOD_SIZE                              // 24
+    box_extract
+    dup; len; pushint 24; ==; assert// Bytes Size Assertion: 24 bytes
+    retsub
+
+// tl:240: func construct_reward_history(timestamp: int, reward_amount: int) bytes:
+__func__construct_reward_history:
+    store 55                                                // reward_amount [int]
+    store 56                                                // timestamp [int]
+    // tl:241: return Concat(itob(timestamp), itob(reward_amount))
+    load 56                                                 // timestamp
+    itob
+    load 55                                                 // reward_amount
+    itob
+    concat
+    retsub
+
+// tl:244: func save_reward_history(data: bytes):
+__func__save_reward_history:
+    store 57                                                // data [bytes]
+    // tl:245: int index = app_global_get(REWARD_HISTORY_COUNT_KEY) [slot 58]
+    pushbytes REWARD_HISTORY_COUNT_KEY                      // "reward_history_count"
+    app_global_get
+    store 58                                                // index
+    
+    // tl:247: assert(len(data) == REWARD_HISTORY_SIZE)
+    load 57                                                 // data
+    len
+    pushint REWARD_HISTORY_SIZE                             // 16
+    ==
+    assert
+    // tl:248: int box_index = index / REWARD_HISTORY_BOX_ARRAY_LEN [slot 59]
+    load 58                                                 // index
+    pushint REWARD_HISTORY_BOX_ARRAY_LEN                    // 16
+    /
+    store 59                                                // box_index
+    // tl:249: int array_index = index % REWARD_HISTORY_BOX_ARRAY_LEN [slot 60]
+    load 58                                                 // index
+    pushint REWARD_HISTORY_BOX_ARRAY_LEN                    // 16
+    %
+    store 60                                                // array_index
+    // tl:250: bytes box_name = Concat(REWARD_HISTORY_BOX_PREFIX, itob(box_index)) [slot 61]
+    pushbytes REWARD_HISTORY_BOX_PREFIX                     // "rh"
+    load 59                                                 // box_index
+    itob
+    concat
+    store 61                                                // box_name
+    // tl:251: _ = box_create(box_name, REWARD_HISTORY_BOX_SIZE)
+    load 61                                                 // box_name
+    pushint REWARD_HISTORY_BOX_SIZE                         // 256
+    box_create
+    pop                                                     // discarding value for _
+    // tl:252: box_replace(box_name, (array_index * REWARD_HISTORY_SIZE), data)
+    load 61                                                 // box_name
+    load 60                                                 // array_index
+    pushint REWARD_HISTORY_SIZE                             // 16
+    *
+    load 57                                                 // data
+    box_replace
+    
+    // reward_history(index, timestamp, reward_amount)
+    // tl:255: log(Concat(method("reward_history(uint64,uint64,uint64)"), itob(index), data))
+    method "reward_history(uint64,uint64,uint64)"
+    load 58                                                 // index
+    itob
+    load 57                                                 // data
+    concat
+    concat
+    log
+    // tl:256: app_global_put(REWARD_HISTORY_COUNT_KEY, index + 1)
+    pushbytes REWARD_HISTORY_COUNT_KEY                      // "reward_history_count"
+    load 58                                                 // index
+    pushint 1
+    +
+    app_global_put
+    // tl:257: return
+    retsub
+
+// tl:260: func get_reward_history(index: int) RewardHistory:
+__func__get_reward_history:
+    store 62                                                // index [int]
+    // tl:261: int box_index = index / REWARD_HISTORY_BOX_ARRAY_LEN [slot 63]
+    load 62                                                 // index
+    pushint REWARD_HISTORY_BOX_ARRAY_LEN                    // 16
+    /
+    store 63                                                // box_index
+    // tl:262: int array_index = index % REWARD_HISTORY_BOX_ARRAY_LEN [slot 64]
+    load 62                                                 // index
+    pushint REWARD_HISTORY_BOX_ARRAY_LEN                    // 16
+    %
+    store 64                                                // array_index
+    // tl:263: bytes box_name = Concat(REWARD_HISTORY_BOX_PREFIX, itob(box_index)) [slot 65]
+    pushbytes REWARD_HISTORY_BOX_PREFIX                     // "rh"
+    load 63                                                 // box_index
+    itob
+    concat
+    store 65                                                // box_name
+    // tl:264: return Cast(box_extract(box_name, (array_index * REWARD_HISTORY_SIZE), REWARD_HISTORY_SIZE), RewardHistory)
+    load 65                                                 // box_name
+    load 64                                                 // array_index
+    pushint REWARD_HISTORY_SIZE                             // 16
+    *
+    pushint REWARD_HISTORY_SIZE                             // 16
+    box_extract
+    dup; len; pushint 16; ==; assert// Bytes Size Assertion: 16 bytes
+    retsub
+
+// tl:267: func get_reward_amount(timestamp: int, reward_history_index: int) int:
+__func__get_reward_amount:
+    store 66                                                // reward_history_index [int]
+    store 67                                                // timestamp [int]
+    // tl:268: assert(reward_history_index < app_global_get(REWARD_HISTORY_COUNT_KEY))
+    load 66                                                 // reward_history_index
+    pushbytes REWARD_HISTORY_COUNT_KEY                      // "reward_history_count"
+    app_global_get
+    <
+    assert
+    // tl:269: assert(timestamp <= Global.LatestTimestamp)
+    load 67                                                 // timestamp
+    global LatestTimestamp
+    <=
+    assert
+    
+    // tl:271: RewardHistory reward_history = get_reward_history(reward_history_index) [slot 68]
+    load 66                                                 // reward_history_index
+    callsub __func__get_reward_history
+    store 68                                                // reward_history
+    // tl:272: assert(reward_history.timestamp <= timestamp)
+    load 68; extract 0 8; btoi// reward_history.timestamp
+    load 67                                                 // timestamp
+    <=
+    assert
+    
+    // tl:274: if (reward_history_index + 1) < app_global_get(REWARD_HISTORY_COUNT_KEY):
+    load 66                                                 // reward_history_index
+    pushint 1
+    +
+    pushbytes REWARD_HISTORY_COUNT_KEY                      // "reward_history_count"
+    app_global_get
+    <
+    bz l2_end
+    // then:
+        // tl:275: RewardHistory next_reward_history = get_reward_history(reward_history_index + 1) [slot 69]
+        load 66                                             // reward_history_index
+        pushint 1
+        +
+        callsub __func__get_reward_history
+        store 69                                            // next_reward_history
+        // tl:276: assert(timestamp < next_reward_history.timestamp)
+        load 67                                             // timestamp
+        load 69; extract 0 8; btoi// next_reward_history.timestamp
+        <
+        assert
+    l2_end:
+    // tl:278: return reward_history.reward_amount
+    load 68; extract 8 8; btoi// reward_history.reward_amount
+    retsub
+
+// tl:281: func check_and_save_claimed_reward(address: bytes, period_index: int):
+__func__check_and_save_claimed_reward:
+    store 70                                                // period_index [int]
+    store 71                                                // address [bytes]
+    // tl:282: int box_index = period_index / (REWARD_CLAIM_SHEET_BOX_SIZE * 8) [slot 72]
+    load 70                                                 // period_index
+    pushint REWARD_CLAIM_SHEET_BOX_SIZE                     // 1012
+    pushint 8
+    *
+    /
+    store 72                                                // box_index
+    // tl:283: int array_index = period_index % (REWARD_CLAIM_SHEET_BOX_SIZE * 8) [slot 73]
+    load 70                                                 // period_index
+    pushint REWARD_CLAIM_SHEET_BOX_SIZE                     // 1012
+    pushint 8
+    *
+    %
+    store 73                                                // array_index
+    // tl:284: bytes box_name = Concat(REWARD_CLAIM_SHEET_BOX_PREFIX, address, itob(box_index)) [slot 74]
+    pushbytes REWARD_CLAIM_SHEET_BOX_PREFIX                 // "c"
+    load 71                                                 // address
+    load 72                                                 // box_index
+    itob
+    concat
+    concat
+    store 74                                                // box_name
+    
+    // tl:286: bytes sheet [slot 75]
+    // tl:287: _ = box_create(box_name, REWARD_CLAIM_SHEET_BOX_SIZE)
+    load 74                                                 // box_name
+    pushint REWARD_CLAIM_SHEET_BOX_SIZE                     // 1012
+    box_create
+    pop                                                     // discarding value for _
+    // tl:288: _, sheet = box_get(box_name)
+    load 74                                                 // box_name
+    box_get
+    pop                                                     // discarding value for _
+    store 75                                                // sheet
+    // tl:289: assert(!getbit(sheet, array_index))
+    load 75                                                 // sheet
+    load 73                                                 // array_index
+    getbit
+    !
+    assert
+    // tl:290: sheet = setbit(sheet, array_index, 1)
+    load 75                                                 // sheet
+    load 73                                                 // array_index
+    pushint 1
+    setbit
+    store 75                                                // sheet
+    // tl:291: box_put(box_name, sheet)
+    load 74                                                 // box_name
+    load 75                                                 // sheet
+    box_put
+    // tl:292: return
+    retsub
+
+// tl:295: func get_period_start_timestamp(period_index: int) int:
+__func__get_period_start_timestamp:
+    store 76                                                // period_index [int]
+    // tl:296: return app_global_get(FIRST_PERIOD_TIMESTAMP) + (period_index * WEEK)
+    pushbytes FIRST_PERIOD_TIMESTAMP                        // "first_period_timestamp"
+    app_global_get
+    load 76                                                 // period_index
+    pushint WEEK                                            // 604800
+    *
+    +
+    retsub
+
+// Inner Txns
+// tl:300: func get_account_cumulative_power_delta(address: bytes, timestamp_1: int, timestamp_2: int, account_power_index_1: bytes, account_power_index_2: bytes) bytes:
+__func__get_account_cumulative_power_delta:
+    store 77                                                // account_power_index_2 [bytes]
+    store 78                                                // account_power_index_1 [bytes]
+    store 79                                                // timestamp_2 [int]
+    store 80                                                // timestamp_1 [int]
+    store 81                                                // address [bytes]
+    // tl:301: inner_txn:
+    callsub _itxn_begin
+        // tl:302: TypeEnum: Appl
+        pushint 6                                           // Appl
+        itxn_field TypeEnum
+        // tl:303: ApplicationID: app_global_get(VAULT_APP_ID_KEY)
+        pushbytes VAULT_APP_ID_KEY                          // "vault_app_id"
+        app_global_get
+        itxn_field ApplicationID
+        // tl:304: ApplicationArgs[0]: "get_account_cumulative_power_delta"
+        pushbytes "get_account_cumulative_power_delta"
+        itxn_field ApplicationArgs
+        // tl:305: ApplicationArgs[1]: address
+        load 81                                             // address
+        itxn_field ApplicationArgs
+        // tl:306: ApplicationArgs[2]: itob(timestamp_1)
+        load 80                                             // timestamp_1
+        itob
+        itxn_field ApplicationArgs
+        // tl:307: ApplicationArgs[3]: itob(timestamp_2)
+        load 79                                             // timestamp_2
+        itob
+        itxn_field ApplicationArgs
+        // tl:308: ApplicationArgs[4]: account_power_index_1
+        load 78                                             // account_power_index_1
+        itxn_field ApplicationArgs
+        // tl:309: ApplicationArgs[5]: account_power_index_2
+        load 77                                             // account_power_index_2
+        itxn_field ApplicationArgs
+        // tl:310: Fee: 0
+        pushint 0
+        itxn_field Fee
+    callsub _itxn_submit
+    // end inner_txn
+    
+    // tl:313: bytes cumulative_power_delta = extract(4, 16, Itxn.LastLog) [slot 82]
+    itxn LastLog
+    extract 4 16
+    store 82                                                // cumulative_power_delta
+    // tl:314: return cumulative_power_delta
+    load 82                                                 // cumulative_power_delta
+    retsub
+
+// tl:317: func get_total_cumulative_power_delta(timestamp_1: int, timestamp_2: int, total_power_index_1: bytes, total_power_index_2: bytes) bytes:
+__func__get_total_cumulative_power_delta:
+    store 83                                                // total_power_index_2 [bytes]
+    store 84                                                // total_power_index_1 [bytes]
+    store 85                                                // timestamp_2 [int]
+    store 86                                                // timestamp_1 [int]
+    // tl:318: inner_txn:
+    callsub _itxn_begin
+        // tl:319: TypeEnum: Appl
+        pushint 6                                           // Appl
+        itxn_field TypeEnum
+        // tl:320: ApplicationID: app_global_get(VAULT_APP_ID_KEY)
+        pushbytes VAULT_APP_ID_KEY                          // "vault_app_id"
+        app_global_get
+        itxn_field ApplicationID
+        // tl:321: ApplicationArgs[0]: "get_total_cumulative_power_delta"
+        pushbytes "get_total_cumulative_power_delta"
+        itxn_field ApplicationArgs
+        // tl:322: ApplicationArgs[1]: itob(timestamp_1)
+        load 86                                             // timestamp_1
+        itob
+        itxn_field ApplicationArgs
+        // tl:323: ApplicationArgs[2]: itob(timestamp_2)
+        load 85                                             // timestamp_2
+        itob
+        itxn_field ApplicationArgs
+        // tl:324: ApplicationArgs[3]: total_power_index_1
+        load 84                                             // total_power_index_1
+        itxn_field ApplicationArgs
+        // tl:325: ApplicationArgs[4]: total_power_index_2
+        load 83                                             // total_power_index_2
+        itxn_field ApplicationArgs
+        // tl:326: Fee: 0
+        pushint 0
+        itxn_field Fee
+    callsub _itxn_submit
+    // end inner_txn
+    
+    // tl:329: bytes cumulative_power_delta = extract(4, 16, Itxn.LastLog) [slot 87]
+    itxn LastLog
+    extract 4 16
+    store 87                                                // cumulative_power_delta
+    // tl:330: return cumulative_power_delta
+    load 87                                                 // cumulative_power_delta
+    retsub
+
+// tl:333: func transfer(asset_id: int, amount: int, sender: bytes, receiver: bytes):
+__func__transfer:
+    store 88                                                // receiver [bytes]
+    store 89                                                // sender [bytes]
+    store 90                                                // amount [int]
+    store 91                                                // asset_id [int]
+    // This function is copied from Tinyman AMM Contracts V2.
+    // "asset_id == 0" is updated as "!asset_id" for budget optimization.
+    // https://github.com/tinymanorg/tinyman-amm-contracts-v2/blob/main/contracts/amm_approval.tl#L1146
+    
+    // tl:338: if !asset_id:
+    load 91                                                 // asset_id
+    !
+    bz l3_else
+    // then:
+        // tl:339: inner_txn:
+        callsub _itxn_begin
+            // tl:340: TypeEnum: Pay
+            pushint 1                                       // Pay
+            itxn_field TypeEnum
+            // tl:341: Sender: sender
+            load 89                                         // sender
+            itxn_field Sender
+            // tl:342: Receiver: receiver
+            load 88                                         // receiver
+            itxn_field Receiver
+            // tl:343: Amount: amount
+            load 90                                         // amount
+            itxn_field Amount
+            // tl:344: Fee: 0
+            pushint 0
+            itxn_field Fee
+        callsub _itxn_submit
+        // end inner_txn
+        b l3_end
+    l3_else:
+    // tl:346: else:
+        // tl:347: inner_txn:
+        callsub _itxn_begin
+            // tl:348: TypeEnum: Axfer
+            pushint 4                                       // Axfer
+            itxn_field TypeEnum
+            // tl:349: Sender: sender
+            load 89                                         // sender
+            itxn_field Sender
+            // tl:350: AssetReceiver: receiver
+            load 88                                         // receiver
+            itxn_field AssetReceiver
+            // tl:351: AssetAmount: amount
+            load 90                                         // amount
+            itxn_field AssetAmount
+            // tl:352: XferAsset: asset_id
+            load 91                                         // asset_id
+            itxn_field XferAsset
+            // tl:353: Fee: 0
+            pushint 0
+            itxn_field Fee
+        callsub _itxn_submit
+        // end inner_txn
+    l3_end:
+    // tl:356: return
+    retsub
+
+
+_itxn_group_begin:
+  load 92; !; assert                                        // ensure no group active
+  int 1; store 92; retsub                                   // set group flag
+
+_itxn_begin:
+  load 92
+  switch _itxn_begin__0 _itxn_begin__1 _itxn_begin__2
+  err
+  _itxn_begin__0: itxn_begin; retsub                        // no group
+  _itxn_begin__1: itxn_begin; int 2; store 92; retsub       // start first txn of group
+  _itxn_begin__2: itxn_next; retsub                         // start next txn of group
+
+_itxn_submit:
+  load 92
+  bz _itxn_submit__0
+  retsub                                                    // in a group, don't submit
+  _itxn_submit__0: itxn_submit; retsub                      // no group, submit
+
+_itxn_group_submit:
+  itxn_submit
+  int 0; store 92; retsub                                   // set group flag to 0
+

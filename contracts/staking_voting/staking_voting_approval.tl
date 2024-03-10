@@ -35,23 +35,24 @@ const bytes ATTENDANCE_BOX_PREFIX = "a"
 const int PROPOSAL_ASSET_BOX_SIZE = 8
 const int ACCOUNT_ATTENDANCE_SHEET_BOX_SIZE = 24
 
-if !Txn.ApplicationID:
-    jump create_app
+
+router:
+    create_application
+    update_application
+    increase_budget
+    cast_vote
+    create_proposal
+    cancel_proposal
+    get_box
+    set_manager
+    set_proposal_manager
+    set_voting_delay
+    set_voting_duration
 end
 
-switch Txn.OnCompletion:
-    NoOp: main
-    OptIn: fail
-    CloseOut: fail
-    UpdateApplication: update_app
-    DeleteApplication: fail
-end
 
-block fail:
-    exit(0)
-end
-
-block create_app:
+@public(OnCompletion=CreateApplication)
+func create_application(vault_app_id: int):
     app_global_put(VAULT_APP_ID_KEY, btoi(Txn.ApplicationArgs[0]))
     app_global_put(PROPOSAL_INDEX_COUNTER_KEY, 0)
 
@@ -60,201 +61,182 @@ block create_app:
 
     app_global_put(MANAGER_KEY, Txn.Sender)
     app_global_put(PROPOSAL_MANAGER_KEY, Txn.Sender)
-    exit(1)
+    return
 end
 
-block update_app:
+@public(OnCompletion=UpdateApplication)
+func update_application():
     bytes user_address = Txn.Sender
     assert(user_address == app_global_get(MANAGER_KEY))
-    exit(1)
+    return
 end
 
-block main:
-    switch Txn.ApplicationArgs[0]:
-        "increase_budget": increase_budget
-        "cast_vote": cast_vote
-        "create_proposal": create_proposal
-        "cancel_proposal": cancel_proposal
-        "get_box": get_box
-        "set_manager": set_manager
-        "set_proposal_manager": set_proposal_manager
-        "set_voting_delay": set_voting_delay
-        "set_voting_duration": set_voting_duration
-    end
+@public()
+func create_proposal(proposal_id: bytes[59]):
+    bytes user_address = Txn.Sender
+    assert(user_address == app_global_get(PROPOSAL_MANAGER_KEY))
 
-    block create_proposal:
-        bytes user_address = Txn.Sender
-        assert(user_address == app_global_get(PROPOSAL_MANAGER_KEY))
+    # proposal id will be calculated off-chain. it is base32 string representation of CID (base32 - cidv1 - raw - (sha2-256 : 256 : <metadata>))
+    bytes proposal_box_name = Concat(PROPOSAL_BOX_PREFIX, proposal_id)
 
-        # proposal id will be calculated off-chain. it is base32 string representation of CID (base32 - cidv1 - raw - (sha2-256 : 256 : <metadata>))
-        bytes proposal_id = Txn.ApplicationArgs[1]
-        assert(len(proposal_id) == 59)
-        bytes proposal_box_name = Concat(PROPOSAL_BOX_PREFIX, proposal_id)
+    int voting_start_timestamp = get_voting_start_timestamp()
+    int voting_end_timestamp = voting_start_timestamp + (app_global_get(VOTING_DURATION_KEY) * DAY)
 
-        int voting_start_timestamp = get_voting_start_timestamp()
-        int voting_end_timestamp = voting_start_timestamp + (app_global_get(VOTING_DURATION_KEY) * DAY)
+    box<Proposal> proposal = CreateBox(proposal_box_name)
+    proposal.index = app_global_get(PROPOSAL_INDEX_COUNTER_KEY)
+    proposal.creation_timestamp = Global.LatestTimestamp
+    proposal.voting_start_timestamp = voting_start_timestamp
+    proposal.voting_end_timestamp = voting_end_timestamp
+    app_global_put(PROPOSAL_INDEX_COUNTER_KEY, app_global_get(PROPOSAL_INDEX_COUNTER_KEY) + 1)
 
-        box<Proposal> proposal = CreateBox(proposal_box_name)
-        proposal.index = app_global_get(PROPOSAL_INDEX_COUNTER_KEY)
-        proposal.creation_timestamp = Global.LatestTimestamp
-        proposal.voting_start_timestamp = voting_start_timestamp
-        proposal.voting_end_timestamp = voting_end_timestamp
-        app_global_put(PROPOSAL_INDEX_COUNTER_KEY, app_global_get(PROPOSAL_INDEX_COUNTER_KEY) + 1)
-
-        bytes proposal_data
-        _, proposal_data = box_get(proposal_box_name)
-        log(Concat(method("proposal(byte[59],uint64,uint64,uint64,uint64,uint64,uint64,bool)"), proposal_id, proposal_data))
-        log(Concat(method("create_proposal(address,byte[59])"), user_address, proposal_id))
-        exit(1)
-    end
-
-    block cancel_proposal:
-        bytes user_address = Txn.Sender
-        assert(user_address == app_global_get(PROPOSAL_MANAGER_KEY))
-
-        bytes proposal_id = Txn.ApplicationArgs[1]
-        bytes proposal_box_name = Concat(PROPOSAL_BOX_PREFIX, proposal_id)
-        box<Proposal> proposal = OpenBox(proposal_box_name)
-
-        assert(Global.LatestTimestamp < proposal.voting_end_timestamp)
-        assert(proposal.is_cancelled == BYTES_FALSE)
-        proposal.is_cancelled = BYTES_TRUE
-
-        bytes proposal_data
-        _, proposal_data = box_get(proposal_box_name)
-        log(Concat(method("proposal(byte[59],uint64,uint64,uint64,uint64,uint64,uint64,bool)"), proposal_id, proposal_data))
-        log(Concat(method("cancel_proposal(address,byte[59])"), user_address, proposal_id))
-        exit(1)
-    end
-
-    block cast_vote:
-        bytes user_address = Txn.Sender
-        bytes proposal_id = Txn.ApplicationArgs[1]
-        bytes votes_as_percentage = Txn.ApplicationArgs[2]
-        bytes asset_ids = Txn.ApplicationArgs[3]
-        bytes account_power_index = Txn.ApplicationArgs[4]
-
-        bytes proposal_box_name = Concat(PROPOSAL_BOX_PREFIX, proposal_id)
-        box<Proposal> proposal = OpenBox(proposal_box_name)
-
-        # Proposal Active
-        # proposal.voting_start_timestamp <= Global.LatestTimestamp < proposal.voting_end_timestamp
-        assert(proposal.voting_start_timestamp <= Global.LatestTimestamp)
-        assert(Global.LatestTimestamp < proposal.voting_end_timestamp)
-        assert(proposal.is_cancelled == BYTES_FALSE)
-
-        # vote count and asset count must be equal
-        assert(len(votes_as_percentage))
-        assert(len(asset_ids) == len(votes_as_percentage))
-        assert(!(len(votes_as_percentage) % 8))
-        int option_count = len(votes_as_percentage) / 8
-        assert(option_count <= MAX_OPTION_COUNT)
-
-        int proposal_index = proposal.index
-        check_and_set_user_as_voted(user_address, proposal_index)
-
-        int account_voting_power = get_account_voting_power_at(user_address, proposal.creation_timestamp, account_power_index)
-        assert(account_voting_power)
-
-        # Update proposal
-        proposal.vote_count = proposal.vote_count + 1
-        proposal.voting_power = proposal.voting_power + account_voting_power
-
-        int option_vote_amount
-        int asset_id
-        int total_percentage = 0
-        int tmp_index
-        int tmp_vote_percentage
-        for i in 0:option_count:
-            tmp_index = i * 8
-
-            # validate percentages
-            tmp_vote_percentage = extract_uint64(votes_as_percentage, tmp_index)
-            assert(tmp_vote_percentage)
-            total_percentage = total_percentage + tmp_vote_percentage
-            assert(total_percentage <= 100)
-
-            # update vote amounts
-            option_vote_amount = tmp_vote_percentage * (account_voting_power / 100)
-            asset_id = extract_uint64(asset_ids, tmp_index)
-            add_vote_amount(proposal_index, asset_id, option_vote_amount)
-
-            log(Concat(method("vote(uint64,uint64,uint64)"), itob(asset_id), itob(option_vote_amount), itob(tmp_vote_percentage)))
-        end
-        assert(total_percentage == 100)
-
-        bytes proposal_data
-        _, proposal_data = box_get(proposal_box_name)
-        log(Concat(method("proposal(byte[59],uint64,uint64,uint64,uint64,uint64,uint64,bool)"), proposal_id, proposal_data))
-        log(Concat(method("cast_vote(address,byte[59],uint64)"), user_address, proposal_id, itob(account_voting_power)))
-        exit(1)
-    end
-
-    block increase_budget:
-        # Box read budget and opcode budget will be incread using this method.
-        if Txn.NumAppArgs > 1:
-            int inner_app_call_count = btoi(Txn.ApplicationArgs[1])
-            for _ in 0:inner_app_call_count:
-                increase_budget()
-            end
-        end
-        exit(1)
-    end
-
-    block set_voting_delay:
-        bytes user_address = Txn.Sender
-        assert(user_address == app_global_get(PROPOSAL_MANAGER_KEY))
-
-        int new_voting_delay = btoi(Txn.ApplicationArgs[1])
-        app_global_put(VOTING_DELAY_KEY, new_voting_delay)
-        log(Concat(method("set_voting_delay(uint64)"), itob(new_voting_delay)))
-        exit(1)
-    end
-
-    block set_voting_duration:
-        bytes user_address = Txn.Sender
-        assert(user_address == app_global_get(PROPOSAL_MANAGER_KEY))
-
-        int new_voting_duration = btoi(Txn.ApplicationArgs[1])
-        assert(new_voting_duration)
-        app_global_put(VOTING_DURATION_KEY, new_voting_duration)
-        log(Concat(method("set_voting_duration(uint64)"), itob(new_voting_duration)))
-        exit(1)
-    end
-
-    block set_manager:
-        bytes user_address = Txn.Sender
-        assert(user_address == app_global_get(MANAGER_KEY))
-
-        bytes new_manager = Txn.ApplicationArgs[1]
-        assert(len(new_manager) == 32)
-        app_global_put(MANAGER_KEY, new_manager)
-        log(Concat(method("set_manager(address)"), new_manager))
-        exit(1)
-    end
-
-    block set_proposal_manager:
-        bytes user_address = Txn.Sender
-        assert(user_address == app_global_get(MANAGER_KEY))
-
-        bytes set_proposal_manager = Txn.ApplicationArgs[1]
-        assert(len(set_proposal_manager) == 32)
-        app_global_put(PROPOSAL_MANAGER_KEY, set_proposal_manager)
-        log(Concat(method("set_proposal_manager(address)"), set_proposal_manager))
-        exit(1)
-    end
-
-    block get_box:
-        bytes box_name = Txn.ApplicationArgs[1]
-
-        int exists
-        bytes data
-        exists, data = box_get(box_name)
-
-        log(Concat(method("return"), itob(exists), extract(6, 2, itob(len(data))), data))
-        exit(1)
-    end
+    bytes proposal_data
+    _, proposal_data = box_get(proposal_box_name)
+    log(Concat(method("proposal(byte[59],uint64,uint64,uint64,uint64,uint64,uint64,bool)"), proposal_id, proposal_data))
+    log(Concat(method("create_proposal(address,byte[59])"), user_address, proposal_id))
+    return
 end
+
+@public()
+func cancel_proposal(proposal_id: bytes):
+    bytes user_address = Txn.Sender
+    assert(user_address == app_global_get(PROPOSAL_MANAGER_KEY))
+
+    bytes proposal_box_name = Concat(PROPOSAL_BOX_PREFIX, proposal_id)
+    box<Proposal> proposal = OpenBox(proposal_box_name)
+
+    assert(Global.LatestTimestamp < proposal.voting_end_timestamp)
+    assert(proposal.is_cancelled == BYTES_FALSE)
+    proposal.is_cancelled = BYTES_TRUE
+
+    bytes proposal_data
+    _, proposal_data = box_get(proposal_box_name)
+    log(Concat(method("proposal(byte[59],uint64,uint64,uint64,uint64,uint64,uint64,bool)"), proposal_id, proposal_data))
+    log(Concat(method("cancel_proposal(address,byte[59])"), user_address, proposal_id))
+    return
+end
+
+@public()
+func cast_vote(proposal_id: bytes, votes_as_percentage: bytes, asset_ids: bytes, account_power_index: bytes):
+    bytes user_address = Txn.Sender
+    bytes proposal_box_name = Concat(PROPOSAL_BOX_PREFIX, proposal_id)
+    box<Proposal> proposal = OpenBox(proposal_box_name)
+
+    # Proposal Active
+    # proposal.voting_start_timestamp <= Global.LatestTimestamp < proposal.voting_end_timestamp
+    assert(proposal.voting_start_timestamp <= Global.LatestTimestamp)
+    assert(Global.LatestTimestamp < proposal.voting_end_timestamp)
+    assert(proposal.is_cancelled == BYTES_FALSE)
+
+    # vote count and asset count must be equal
+    assert(len(votes_as_percentage))
+    assert(len(asset_ids) == len(votes_as_percentage))
+    assert(!(len(votes_as_percentage) % 8))
+    int option_count = len(votes_as_percentage) / 8
+    assert(option_count <= MAX_OPTION_COUNT)
+
+    int proposal_index = proposal.index
+    check_and_set_user_as_voted(user_address, proposal_index)
+
+    int account_voting_power = get_account_voting_power_at(user_address, proposal.creation_timestamp, account_power_index)
+    assert(account_voting_power)
+
+    # Update proposal
+    proposal.vote_count = proposal.vote_count + 1
+    proposal.voting_power = proposal.voting_power + account_voting_power
+
+    int option_vote_amount
+    int asset_id
+    int total_percentage = 0
+    int tmp_index
+    int tmp_vote_percentage
+    for i in 0:option_count:
+        tmp_index = i * 8
+
+        # validate percentages
+        tmp_vote_percentage = extract_uint64(votes_as_percentage, tmp_index)
+        assert(tmp_vote_percentage)
+        total_percentage = total_percentage + tmp_vote_percentage
+        assert(total_percentage <= 100)
+
+        # update vote amounts
+        option_vote_amount = tmp_vote_percentage * (account_voting_power / 100)
+        asset_id = extract_uint64(asset_ids, tmp_index)
+        add_vote_amount(proposal_index, asset_id, option_vote_amount)
+
+        log(Concat(method("vote(uint64,uint64,uint64)"), itob(asset_id), itob(option_vote_amount), itob(tmp_vote_percentage)))
+    end
+    assert(total_percentage == 100)
+
+    bytes proposal_data
+    _, proposal_data = box_get(proposal_box_name)
+    log(Concat(method("proposal(byte[59],uint64,uint64,uint64,uint64,uint64,uint64,bool)"), proposal_id, proposal_data))
+    log(Concat(method("cast_vote(address,byte[59],uint64)"), user_address, proposal_id, itob(account_voting_power)))
+    return
+end
+
+@public()
+func increase_budget(inner_app_call_count: int):
+    # Box read budget and opcode budget will be incread using this method.
+    for _ in 0:inner_app_call_count:
+        inner_txn:
+            TypeEnum: Appl
+            ApplicationID: app_global_get(VAULT_APP_ID_KEY)
+            ApplicationArgs[0]: "increase_budget"
+            Fee: 0
+        end
+    end
+    return
+end
+
+@public()
+func set_voting_delay(new_voting_delay: int):
+    bytes user_address = Txn.Sender
+    assert(user_address == app_global_get(PROPOSAL_MANAGER_KEY))
+
+    app_global_put(VOTING_DELAY_KEY, new_voting_delay)
+    log(Concat(method("set_voting_delay(uint64)"), itob(new_voting_delay)))
+    return
+end
+
+@public()
+func set_voting_duration(new_voting_duration: int):
+    bytes user_address = Txn.Sender
+    assert(user_address == app_global_get(PROPOSAL_MANAGER_KEY))
+
+    assert(new_voting_duration)
+    app_global_put(VOTING_DURATION_KEY, new_voting_duration)
+    log(Concat(method("set_voting_duration(uint64)"), itob(new_voting_duration)))
+    return
+end
+
+@public()
+func set_manager(new_manager: bytes[32]):
+    bytes user_address = Txn.Sender
+    assert(user_address == app_global_get(MANAGER_KEY))
+
+    app_global_put(MANAGER_KEY, new_manager)
+    log(Concat(method("set_manager(address)"), new_manager))
+    return
+end
+
+@public()
+func set_proposal_manager(new_proposal_manager: bytes[32]):
+    bytes user_address = Txn.Sender
+    assert(user_address == app_global_get(MANAGER_KEY))
+
+    app_global_put(PROPOSAL_MANAGER_KEY, new_proposal_manager)
+    log(Concat(method("set_proposal_manager(address)"), new_proposal_manager))
+    return
+end
+
+@public()
+func get_box(box_name: bytes) int, bytes, bytes:
+    int exists
+    bytes data
+    exists, data = box_get(box_name)
+    return exists, extract(6, 2, itob(len(data))), data
+end
+
 
 func check_and_set_user_as_voted(address: bytes, proposal_index: int):
     int box_index = proposal_index / (ACCOUNT_ATTENDANCE_SHEET_BOX_SIZE * 8)
@@ -286,15 +268,6 @@ func get_voting_start_timestamp() int:
 end
 
 # Inner Txns
-func increase_budget():
-    inner_txn:
-        TypeEnum: Appl
-        ApplicationID: app_global_get(VAULT_APP_ID_KEY)
-        ApplicationArgs[0]: "increase_budget"
-        Fee: 0
-    end
-    return
-end
 
 func get_account_voting_power_at(address: bytes, snapshot_timestamp: int, account_power_index: bytes) int:
     inner_txn:
