@@ -209,6 +209,8 @@ func execute_proposal(proposal_id: bytes):
     assert(proposal.executor == user_address)
     proposal.is_executed = BYTES_TRUE
 
+    assert(user_address == proposal.executor)
+
     bytes proposal_data
     _, proposal_data = box_get(proposal_box_name)
     log(Concat(method("proposal(byte[59],uint64,uint64,uint64,uint64,uint64,uint64,uint64,uint64,uint64,uint64,bool,bool,bool,bool,address,byte[34],address)"), proposal_id, proposal_data))
