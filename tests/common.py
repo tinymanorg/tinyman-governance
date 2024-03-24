@@ -45,7 +45,7 @@ from tinyman.governance.vault.constants import (
     VAULT_APP_MINIMUM_BALANCE_REQUIREMENT,
 )
 from tinyman.governance.vault.storage import get_total_power_box_name
-from tinyman.governance.vault.transactions import prepare_create_checkpoints_transactions, prepare_create_lock_transactions, prepare_increase_lock_amount_transactions
+from tinyman.governance.vault.transactions import prepare_create_checkpoints_transactions, prepare_create_lock_transactions, prepare_increase_lock_amount_transactions, prepare_extend_lock_end_time_transactions
 from tinyman.governance.vault.utils import get_start_timestamp_of_week
 from tinyman.utils import int_to_bytes
 
@@ -115,8 +115,6 @@ class VaultAppMixin:
             vault_app_global_state = get_vault_app_global_state(self.ledger)
 
     def create_lock(self, user_address, user_sk, amount, block_timestamp, lock_end_timestamp):
-        self.ledger.move(amount * 100, asset_id=TINY_ASSET_ID, sender=self.ledger.assets[TINY_ASSET_ID]["creator"], receiver=user_address)
-
         with unittest.mock.patch("time.time", return_value=block_timestamp):
             txn_group = prepare_create_lock_transactions(
                 vault_app_id=VAULT_APP_ID,
@@ -130,8 +128,7 @@ class VaultAppMixin:
                 suggested_params=self.sp,
             )
         txn_group.sign_with_private_key(user_address, user_sk)
-        block = self.ledger.eval_transactions(txn_group.signed_transactions, block_timestamp=block_timestamp)
-        return block
+        self.ledger.eval_transactions(txn_group.signed_transactions, block_timestamp=block_timestamp)
 
     def increase_lock_amount(self, user_address, user_sk, amount, block_timestamp):
         with unittest.mock.patch("time.time", return_value=block_timestamp):
@@ -141,7 +138,22 @@ class VaultAppMixin:
                 sender=user_address,
                 locked_amount=amount,
                 vault_app_global_state=get_vault_app_global_state(self.ledger),
-                account_state=get_account_state(self.ledger, self.user_address),
+                account_state=get_account_state(self.ledger, user_address),
+                suggested_params=self.sp,
+                app_call_note=None,
+            )
+        txn_group.sign_with_private_key(user_address, user_sk)
+        self.ledger.eval_transactions(txn_group.signed_transactions, block_timestamp=block_timestamp)
+
+    def extend_lock_end_time(self, user_address, user_sk, block_timestamp, new_lock_end_timestamp):
+        with unittest.mock.patch("time.time", return_value=block_timestamp):
+            txn_group = prepare_extend_lock_end_time_transactions(
+                vault_app_id=VAULT_APP_ID,
+                sender=user_address,
+                new_lock_end_time=new_lock_end_timestamp,
+                vault_app_global_state=get_vault_app_global_state(self.ledger),
+                account_state=get_account_state(self.ledger, user_address),
+                slope_change_at_new_lock_end_time=get_slope_change_at(self.ledger, new_lock_end_timestamp),
                 suggested_params=self.sp,
                 app_call_note=None,
             )

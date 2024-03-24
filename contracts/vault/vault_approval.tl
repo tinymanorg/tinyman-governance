@@ -37,7 +37,7 @@ end
 # 7 * DAY
 const int WEEK = 604800
 # 4 * 365 * DAY
-const int MAX_LOCK_TIME = 126144000
+const int MAX_LOCK_TIME = 125798400
 const int MIN_LOCK_AMOUNT = 10000000
 const int MIN_LOCK_AMOUNT_INCREMENT = 10000000
 const bytes TWO_TO_THE_64 = "\x01\x00\x00\x00\x00\x00\x00\x00\x00"
