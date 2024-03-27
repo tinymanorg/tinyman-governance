@@ -2978,275 +2978,6 @@ class UtilityMethodsTestCase(VaultAppMixin, BaseTestCase):
         self.ledger.move(100_000_000, asset_id=TINY_ASSET_ID, sender=self.ledger.assets[TINY_ASSET_ID]["creator"], receiver=self.user_2_address)
         self.ledger.move(100_000_000, asset_id=TINY_ASSET_ID, sender=self.ledger.assets[TINY_ASSET_ID]["creator"], receiver=self.user_3_address)
 
-    def test_get_total_tiny_power(self):
-        # 1. Get total power, there is no lock
-        # 2. Create lock
-        # 3. Get total power
-        # 4. Get total power (after 1 day)
-        # 5. Get total power (after 1 week)
-        # 6. Get total power - Expired
-        # 7. Withdraw
-        # 8. Get total power
-
-        block_datetime = datetime(year=2022, month=3, day=1, hour=1, tzinfo=ZoneInfo("UTC"))
-        block_timestamp = int(block_datetime.timestamp())
-        last_checkpoint_timestamp = block_timestamp - 10
-
-        self.create_vault_app(self.app_creator_address)
-        self.init_vault_app(timestamp=last_checkpoint_timestamp)
-
-        # 1. Get total power, there is no lock
-        txn_group = prepare_get_total_tiny_power_transactions(
-            vault_app_id=VAULT_APP_ID,
-            sender=self.user_address,
-            vault_app_global_state=get_vault_app_global_state(self.ledger),
-            suggested_params=self.sp,
-        )
-        txn_group.sign_with_private_key(self.user_address, self.user_sk)
-        block = self.ledger.eval_transactions(txn_group.signed_transactions, block_timestamp=block_timestamp)
-        self.assertEqual(bytes_to_int(block[b'txns'][0][b'dt'][b'lg'][-1][4:]), 0)
-
-        lock_start_timestamp = block_timestamp
-        lock_end_timestamp = get_start_timestamp_of_week(block_timestamp) + 5 * WEEK
-
-        amount = 20_000_000
-        self.ledger.move(
-            amount,
-            asset_id=TINY_ASSET_ID,
-            sender=self.ledger.assets[TINY_ASSET_ID]["creator"],
-            receiver=self.user_address
-        )
-
-        # 2. Create lock
-        with unittest.mock.patch("time.time", return_value=lock_start_timestamp):
-            txn_group = prepare_create_lock_transactions(
-                vault_app_id=VAULT_APP_ID,
-                tiny_asset_id=TINY_ASSET_ID,
-                sender=self.user_address,
-                locked_amount=amount,
-                lock_end_time=lock_end_timestamp,
-                vault_app_global_state=get_vault_app_global_state(self.ledger),
-                account_state=get_account_state(self.ledger, self.user_address),
-                slope_change_at_lock_end_time=get_slope_change_at(self.ledger, lock_end_timestamp),
-                suggested_params=self.sp,
-            )
-        txn_group.sign_with_private_key(self.user_address, self.user_sk)
-        self.ledger.eval_transactions(txn_group.signed_transactions, block_timestamp=lock_start_timestamp)
-
-        slope = get_slope(amount)
-        bias = get_bias(slope, (lock_end_timestamp - lock_start_timestamp))
-
-        # 3. Get total power
-        txn_group = prepare_get_total_tiny_power_transactions(
-            vault_app_id=VAULT_APP_ID,
-            sender=self.user_address,
-            vault_app_global_state=get_vault_app_global_state(self.ledger),
-            suggested_params=self.sp,
-        )
-        txn_group.sign_with_private_key(self.user_address, self.user_sk)
-        block = self.ledger.eval_transactions(txn_group.signed_transactions, block_timestamp=lock_start_timestamp)
-        self.assertEqual(bytes_to_int(block[b'txns'][0][b'dt'][b'lg'][-1][4:]), bias)
-
-        # 4. Get total power (after 1 day)
-        block_timestamp += DAY
-        bias_delta = get_bias(slope, block_timestamp - lock_start_timestamp)
-
-        block = self.ledger.eval_transactions(txn_group.signed_transactions, block_timestamp=block_timestamp)
-        self.assertAlmostEqual(bytes_to_int(block[b'txns'][0][b'dt'][b'lg'][-1][4:]), bias - bias_delta, delta=(block_timestamp - lock_start_timestamp) // DAY)
-
-        # 5. Get total power (after 1 week)
-        block_timestamp += WEEK
-        self.create_checkpoints(self.user_address, self.user_sk, block_timestamp)
-        bias_delta = get_bias(slope, block_timestamp - lock_start_timestamp)
-
-        block = self.ledger.eval_transactions(txn_group.signed_transactions, block_timestamp=block_timestamp)
-        self.assertAlmostEqual(bytes_to_int(block[b'txns'][0][b'dt'][b'lg'][-1][4:]), bias - bias_delta, delta=(block_timestamp - lock_start_timestamp) // DAY)
-
-        # 6. Get total power - Expired
-        block_timestamp = lock_end_timestamp
-        self.create_checkpoints(self.user_address, self.user_sk, block_timestamp)
-
-        block = self.ledger.eval_transactions(txn_group.signed_transactions, block_timestamp=block_timestamp)
-        self.assertEqual(bytes_to_int(block[b'txns'][0][b'dt'][b'lg'][-1][4:]), 0)
-
-        block_timestamp = lock_end_timestamp + 1
-        block = self.ledger.eval_transactions(txn_group.signed_transactions, block_timestamp=block_timestamp)
-        self.assertEqual(bytes_to_int(block[b'txns'][0][b'dt'][b'lg'][-1][4:]), 0)
-
-        # 7. Withdraw
-        txn_group = prepare_withdraw_transactions(
-            vault_app_id=VAULT_APP_ID,
-            tiny_asset_id=TINY_ASSET_ID,
-            sender=self.user_address,
-            account_state=get_account_state(self.ledger, self.user_address),
-            suggested_params=self.sp,
-            app_call_note=None,
-        )
-        txn_group.sign_with_private_key(self.user_address, self.user_sk)
-        self.ledger.eval_transactions(txn_group.signed_transactions, block_timestamp=block_timestamp)
-
-        # 8. Get total power
-        txn_group = prepare_get_total_tiny_power_transactions(
-            vault_app_id=VAULT_APP_ID,
-            sender=self.user_address,
-            vault_app_global_state=get_vault_app_global_state(self.ledger),
-            suggested_params=self.sp,
-        )
-        txn_group.sign_with_private_key(self.user_address, self.user_sk)
-        block = self.ledger.eval_transactions(txn_group.signed_transactions, block_timestamp=block_timestamp)
-        self.assertEqual(bytes_to_int(block[b'txns'][0][b'dt'][b'lg'][-1][4:]), 0)
-
-    def test_get_total_tiny_power_at(self):
-        # 1. User 1 create lock, end datetime A
-        # 2. User 2 create lock, end datetime A
-        # 3. User 3 create lock, end datetime B
-
-        block_datetime = datetime(year=2022, month=3, day=1, hour=1, tzinfo=ZoneInfo("UTC"))
-        block_timestamp = int(block_datetime.timestamp())
-
-        last_checkpoint_timestamp = block_timestamp - 10
-
-        self.create_vault_app(self.app_creator_address)
-        self.init_vault_app(timestamp=last_checkpoint_timestamp)
-
-        # Get total power, there is no lock
-        txn_group = prepare_get_total_tiny_power_of_at_transactions(
-            vault_app_id=VAULT_APP_ID,
-            sender=self.user_address,
-            timestamp=block_timestamp - DAY,
-            total_powers=get_all_total_powers(self.ledger, get_vault_app_global_state(self.ledger).total_power_count),
-            suggested_params=self.sp,
-        )
-        txn_group.sign_with_private_key(self.user_address, self.user_sk)
-        block = self.ledger.eval_transactions(txn_group.signed_transactions, block_timestamp=block_timestamp)
-        self.assertEqual(bytes_to_int(block[b'txns'][0][b'dt'][b'lg'][-1][4:]), 0)
-
-        # User 1
-        amount_1 = 200_000_000
-        # User 2
-        amount_2 = 10_000_000
-
-        # User 3
-        amount_3 = 500_000_000
-
-        # Create locks
-        lock_start_timestamp = block_timestamp
-        lock_end_timestamp_1 = get_start_timestamp_of_week(int((block_datetime + timedelta(days=50)).timestamp()))
-        lock_end_timestamp_2 = lock_end_timestamp_1 + WEEK
-
-        with unittest.mock.patch("time.time", return_value=block_timestamp):
-            txn_group = prepare_create_lock_transactions(
-                vault_app_id=VAULT_APP_ID,
-                tiny_asset_id=TINY_ASSET_ID,
-                sender=self.user_address,
-                locked_amount=amount_1,
-                lock_end_time=lock_end_timestamp_1,
-                vault_app_global_state=get_vault_app_global_state(self.ledger),
-                account_state=get_account_state(self.ledger, self.user_address),
-                slope_change_at_lock_end_time=get_slope_change_at(self.ledger, lock_end_timestamp_1),
-                suggested_params=self.sp,
-            )
-        txn_group.sign_with_private_key(self.user_address, self.user_sk)
-        self.ledger.eval_transactions(txn_group.signed_transactions, block_timestamp=block_timestamp)
-
-        with unittest.mock.patch("time.time", return_value=block_timestamp):
-            txn_group = prepare_create_lock_transactions(
-                vault_app_id=VAULT_APP_ID,
-                tiny_asset_id=TINY_ASSET_ID,
-                sender=self.user_2_address,
-                locked_amount=amount_2,
-                lock_end_time=lock_end_timestamp_1,
-                vault_app_global_state=get_vault_app_global_state(self.ledger),
-                account_state=get_account_state(self.ledger, self.user_2_address),
-                slope_change_at_lock_end_time=get_slope_change_at(self.ledger, lock_end_timestamp_1),
-                suggested_params=self.sp,
-            )
-        txn_group.sign_with_private_key(self.user_2_address, self.user_2_sk)
-        self.ledger.eval_transactions(txn_group.signed_transactions, block_timestamp=block_timestamp)
-
-        with unittest.mock.patch("time.time", return_value=block_timestamp):
-            txn_group = prepare_create_lock_transactions(
-                vault_app_id=VAULT_APP_ID,
-                tiny_asset_id=TINY_ASSET_ID,
-                sender=self.user_3_address,
-                locked_amount=amount_3,
-                lock_end_time=lock_end_timestamp_2,
-                vault_app_global_state=get_vault_app_global_state(self.ledger),
-                account_state=get_account_state(self.ledger, self.user_3_address),
-                slope_change_at_lock_end_time=get_slope_change_at(self.ledger, lock_end_timestamp_2),
-                suggested_params=self.sp,
-            )
-        txn_group.sign_with_private_key(self.user_3_address, self.user_3_sk)
-        self.ledger.eval_transactions(txn_group.signed_transactions, block_timestamp=block_timestamp)
-
-        slope_3 = get_slope(amount_3)
-
-        block_timestamp = lock_end_timestamp_2 + DAY
-        self.create_checkpoints(self.user_address, self.user_sk, block_timestamp)
-
-        # Assert that after lock_end_timestamp_1, the total power is equal to the bias of the user 3.
-        total_powers = total_powers = parse_box_total_power(self.ledger.boxes[VAULT_APP_ID][get_total_power_box_name(box_index=0)])
-
-        power_at = lock_end_timestamp_1
-
-        txn_group = prepare_get_total_tiny_power_of_at_transactions(
-            vault_app_id=VAULT_APP_ID,
-            sender=self.user_address,
-            timestamp=power_at,
-            total_powers=get_all_total_powers(self.ledger, get_vault_app_global_state(self.ledger).total_power_count),
-            suggested_params=self.sp,
-        )
-        txn_group.sign_with_private_key(self.user_address, self.user_sk)
-        block = self.ledger.eval_transactions(txn_group.signed_transactions, block_timestamp=block_timestamp)
-
-        total_power_index = get_power_index_at(total_powers, power_at)
-        bias_delta = get_bias(slope_3, power_at - total_powers[total_power_index].timestamp)
-        self.assertEqual(bytes_to_int(block[b'txns'][0][b'dt'][b'lg'][-1][4:]), total_powers[total_power_index].bias - bias_delta)
-
-        # Assert Total Powers
-        power_at += DAY
-
-        txn_group = prepare_get_total_tiny_power_of_at_transactions(
-            vault_app_id=VAULT_APP_ID,
-            sender=self.user_address,
-            timestamp=power_at,
-            total_powers=get_all_total_powers(self.ledger, get_vault_app_global_state(self.ledger).total_power_count),
-            suggested_params=self.sp,
-        )
-        txn_group.sign_with_private_key(self.user_address, self.user_sk)
-        block = self.ledger.eval_transactions(txn_group.signed_transactions, block_timestamp=block_timestamp)
-
-        total_power_index = get_power_index_at(total_powers, power_at)
-        bias_delta = get_bias(slope_3, power_at - total_powers[total_power_index].timestamp)
-        self.assertEqual(bytes_to_int(block[b'txns'][0][b'dt'][b'lg'][-1][4:]), total_powers[total_power_index].bias - bias_delta)
-
-        # All locks are expired, total power is 0.
-        power_at = lock_end_timestamp_2
-
-        txn_group = prepare_get_total_tiny_power_of_at_transactions(
-            vault_app_id=VAULT_APP_ID,
-            sender=self.user_address,
-            timestamp=power_at,
-            total_powers=get_all_total_powers(self.ledger, get_vault_app_global_state(self.ledger).total_power_count),
-            suggested_params=self.sp,
-        )
-        txn_group.sign_with_private_key(self.user_address, self.user_sk)
-        block = self.ledger.eval_transactions(txn_group.signed_transactions, block_timestamp=block_timestamp)
-        self.assertEqual(bytes_to_int(block[b'txns'][0][b'dt'][b'lg'][-1][4:]), 0)
-
-        power_at += 1
-
-        txn_group = prepare_get_total_tiny_power_of_at_transactions(
-            vault_app_id=VAULT_APP_ID,
-            sender=self.user_address,
-            timestamp=power_at,
-            total_powers=get_all_total_powers(self.ledger, get_vault_app_global_state(self.ledger).total_power_count),
-            suggested_params=self.sp,
-        )
-        txn_group.sign_with_private_key(self.user_address, self.user_sk)
-        block = self.ledger.eval_transactions(txn_group.signed_transactions, block_timestamp=block_timestamp)
-        self.assertEqual(bytes_to_int(block[b'txns'][0][b'dt'][b'lg'][-1][4:]), 0)
-
     def test_create_checkpoints(self):
         block_datetime = datetime(year=2022, month=3, day=1, hour=1, tzinfo=ZoneInfo("UTC"))
         block_timestamp = int(block_datetime.timestamp())
@@ -3262,27 +2993,7 @@ class UtilityMethodsTestCase(VaultAppMixin, BaseTestCase):
 
         amount = 20_000_000
         slope = get_slope(amount)
-        self.ledger.move(
-            amount,
-            asset_id=TINY_ASSET_ID,
-            sender=self.ledger.assets[TINY_ASSET_ID]["creator"],
-            receiver=self.user_address
-        )
-
-        with unittest.mock.patch("time.time", return_value=lock_start_timestamp):
-            txn_group = prepare_create_lock_transactions(
-                vault_app_id=VAULT_APP_ID,
-                tiny_asset_id=TINY_ASSET_ID,
-                sender=self.user_address,
-                locked_amount=amount,
-                lock_end_time=lock_end_timestamp,
-                vault_app_global_state=get_vault_app_global_state(self.ledger),
-                account_state=get_account_state(self.ledger, self.user_address),
-                slope_change_at_lock_end_time=get_slope_change_at(self.ledger, lock_end_timestamp),
-                suggested_params=self.sp,
-            )
-        txn_group.sign_with_private_key(self.user_address, self.user_sk)
-        self.ledger.eval_transactions(txn_group.signed_transactions, block_timestamp=lock_start_timestamp)
+        self.create_lock(self.user_address, amount, lock_start_timestamp, lock_end_timestamp)
         self.assertEqual(self.ledger.global_states[VAULT_APP_ID][TOTAL_LOCKED_AMOUNT_KEY], amount)
         
         # Global state
@@ -3371,7 +3082,7 @@ class UtilityMethodsTestCase(VaultAppMixin, BaseTestCase):
         logs = app_call_txn[b'dt'][b'lg']
         events = decode_logs(logs, events=vault_events)
         self.assertEqual(len(events), 10)
-        
+
         # Global state
         self.assertEqual(get_vault_app_global_state(self.ledger, VAULT_APP_ID).total_power_count, 14)
         self.assertEqual(len(parse_box_total_power(self.ledger.boxes[VAULT_APP_ID][get_total_power_box_name(box_index=0)])), 14)
@@ -3408,50 +3119,17 @@ class UtilityMethodsTestCase(VaultAppMixin, BaseTestCase):
         self.init_vault_app(timestamp=last_checkpoint_timestamp)
 
         # Create lock
+        lock_start_timestamp = block_timestamp
         lock_end_timestamp = get_start_timestamp_of_week(block_timestamp) + 20 * WEEK
-
         amount = 10_000_000
-        self.ledger.move(
-            amount * 200,
-            asset_id=TINY_ASSET_ID,
-            sender=self.ledger.assets[TINY_ASSET_ID]["creator"],
-            receiver=self.user_address
-        )
-
-        with unittest.mock.patch("time.time", return_value=block_timestamp):
-            txn_group = prepare_create_lock_transactions(
-                vault_app_id=VAULT_APP_ID,
-                tiny_asset_id=TINY_ASSET_ID,
-                sender=self.user_address,
-                locked_amount=amount,
-                lock_end_time=lock_end_timestamp,
-                vault_app_global_state=get_vault_app_global_state(self.ledger),
-                account_state=get_account_state(self.ledger, self.user_address),
-                slope_change_at_lock_end_time=get_slope_change_at(self.ledger, lock_end_timestamp),
-                suggested_params=self.sp,
-            )
-            txn_group.sign_with_private_key(self.user_address, self.user_sk)
-            self.ledger.eval_transactions(txn_group.signed_transactions, block_timestamp=block_timestamp)
-            self.assertEqual(self.ledger.global_states[VAULT_APP_ID][TOTAL_LOCKED_AMOUNT_KEY], amount)
+        self.create_lock(self.user_address, self.user_sk, amount, lock_start_timestamp, lock_end_timestamp)
+        self.assertEqual(self.ledger.global_states[VAULT_APP_ID][TOTAL_LOCKED_AMOUNT_KEY], amount)
 
         while True:
             block_timestamp += DAY
             if block_timestamp > lock_end_timestamp:
                 break
-
-            with unittest.mock.patch("time.time", return_value=block_timestamp):
-                txn_group = prepare_increase_lock_amount_transactions(
-                    vault_app_id=VAULT_APP_ID,
-                    tiny_asset_id=TINY_ASSET_ID,
-                    sender=self.user_address,
-                    locked_amount=amount,
-                    vault_app_global_state=get_vault_app_global_state(self.ledger),
-                    account_state=get_account_state(self.ledger, self.user_address),
-                    suggested_params=self.sp,
-                    app_call_note=None,
-                )
-                txn_group.sign_with_private_key(self.user_address, self.user_sk)
-                self.ledger.eval_transactions(txn_group.signed_transactions, block_timestamp=block_timestamp)
+            self.increase_lock_amount(self.user_address, self.user_sk, amount, block_timestamp)
 
         txn_group = prepare_withdraw_transactions(
             vault_app_id=VAULT_APP_ID,
