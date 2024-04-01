@@ -36,8 +36,8 @@ end
 
 # 7 * DAY
 const int WEEK = 604800
-# 4 * 365 * DAY
-const int MAX_LOCK_TIME = 126144000
+# 4 * 52 * WEEK
+const int MAX_LOCK_TIME = 125798400
 const int MIN_LOCK_AMOUNT = 10000000
 const int MIN_LOCK_AMOUNT_INCREMENT = 10000000
 const bytes TWO_TO_THE_64 = "\x01\x00\x00\x00\x00\x00\x00\x00\x00"
@@ -110,7 +110,7 @@ func init():
     save_total_power(total_power)
 
     # opt-in to TINY
-    transfer(app_global_get(TINY_ASSET_ID_KEY), 0, Global.CurrentApplicationAddress, Global.CurrentApplicationAddress)
+    tiny_transfer(0, Global.CurrentApplicationAddress, Global.CurrentApplicationAddress)
     log(method("init()"))
     return
 end
@@ -291,7 +291,7 @@ func withdraw():
     bytes account_power = construct_account_power(0, account_state.lock_end_time, bzero(16), cumulative_power)
     save_account_power(user_address, account_power_index, account_power)
 
-    transfer(app_global_get(TINY_ASSET_ID_KEY), locked_amount, Global.CurrentApplicationAddress, user_address)
+    tiny_transfer(locked_amount, Global.CurrentApplicationAddress, user_address)
     decrease_total_locked_amount(locked_amount)
 
     account_state.locked_amount = 0
@@ -433,7 +433,7 @@ func delete_account_power_boxes(box_count: int):
     for i in box_index_start:box_index_end:
         min_balance_delta = min_balance_delta + delete_box(Concat(user_address, itob(i)))
     end
-    transfer(0, min_balance_delta, Global.CurrentApplicationAddress, user_address)
+    algo_transfer(min_balance_delta, Global.CurrentApplicationAddress, user_address)
 
     # address, box_index_start, box_count
     log(Concat(method("delete_account_power_boxes(address,uint64,uint64)"), user_address, itob(box_index_start), itob(box_count)))
@@ -466,7 +466,7 @@ func delete_account_state():
 
     # delete account state
     min_balance_delta = min_balance_delta + delete_box(user_address)
-    transfer(0, min_balance_delta, Global.CurrentApplicationAddress, user_address)
+    algo_transfer(min_balance_delta, Global.CurrentApplicationAddress, user_address)
 
     # address, box_index_start, box_count
     log(Concat(method("delete_account_state(address,uint64,uint64)"), user_address, itob((box_index + 1) - box_count), itob(box_count)))
@@ -746,28 +746,25 @@ func delete_box(box_name: bytes) int:
     return min_balance_delta
 end
 
-func transfer(asset_id: int, amount: int, sender: bytes, receiver: bytes):
-    # This function is copied from Tinyman AMM Contracts V2.
-    # "asset_id == 0" is updated as "!asset_id" for budget optimization.
-    # https://github.com/tinymanorg/tinyman-amm-contracts-v2/blob/main/contracts/amm_approval.tl#L1146
+func algo_transfer(amount: int, sender: bytes, receiver: bytes):
+    inner_txn:
+        TypeEnum: Pay
+        Sender: sender
+        Receiver: receiver
+        Amount: amount
+        Fee: 0
+    end
+    return
+end
 
-    if !asset_id:
-        inner_txn:
-            TypeEnum: Pay
-            Sender: sender
-            Receiver: receiver
-            Amount: amount
-            Fee: 0
-        end
-    else:
-        inner_txn:
-            TypeEnum: Axfer
-            Sender: sender
-            AssetReceiver: receiver
-            AssetAmount: amount
-            XferAsset: asset_id
-            Fee: 0
-        end
+func tiny_transfer(amount: int, sender: bytes, receiver: bytes):
+    inner_txn:
+        TypeEnum: Axfer
+        Sender: sender
+        AssetReceiver: receiver
+        AssetAmount: amount
+        XferAsset: app_global_get(TINY_ASSET_ID_KEY)
+        Fee: 0
     end
     return
 end

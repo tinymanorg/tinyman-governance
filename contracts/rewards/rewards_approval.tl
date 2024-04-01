@@ -140,7 +140,7 @@ func claim_rewards(period_index_start: int, period_count: int, account_power_ind
         total_reward_amount = total_reward_amount + reward_amount
     end
 
-    transfer(app_global_get(TINY_ASSET_ID_KEY), total_reward_amount, Global.CurrentApplicationAddress, user_address)
+    tiny_transfer(total_reward_amount, Global.CurrentApplicationAddress, user_address)
 
     # claim_rewards(address, total_reward_amount, period_index_start, period_count, reward_amounts[])
     log(Concat(method("claim_rewards(address,uint64,uint64,uint64,uint64[])"), user_address, itob(total_reward_amount), itob(period_index_start), itob(period_count), extract(6, 2, itob(period_count)), reward_amounts))
@@ -160,7 +160,7 @@ func init(reward_amount: int):
     save_reward_history(reward_history)
 
     # opt-in to TINY
-    transfer(app_global_get(TINY_ASSET_ID_KEY), 0, Global.CurrentApplicationAddress, Global.CurrentApplicationAddress)
+    tiny_transfer(0, Global.CurrentApplicationAddress, Global.CurrentApplicationAddress)
     log(Concat(method("init(uint64,uint64)"), itob(first_period_timestamp), itob(reward_amount)))
     return
 end
@@ -330,28 +330,14 @@ func get_total_cumulative_power_delta(timestamp_1: int, timestamp_2: int, total_
     return cumulative_power_delta
 end
 
-func transfer(asset_id: int, amount: int, sender: bytes, receiver: bytes):
-    # This function is copied from Tinyman AMM Contracts V2.
-    # "asset_id == 0" is updated as "!asset_id" for budget optimization.
-    # https://github.com/tinymanorg/tinyman-amm-contracts-v2/blob/main/contracts/amm_approval.tl#L1146
-
-    if !asset_id:
-        inner_txn:
-            TypeEnum: Pay
-            Sender: sender
-            Receiver: receiver
-            Amount: amount
-            Fee: 0
-        end
-    else:
-        inner_txn:
-            TypeEnum: Axfer
-            Sender: sender
-            AssetReceiver: receiver
-            AssetAmount: amount
-            XferAsset: asset_id
-            Fee: 0
-        end
+func tiny_transfer(amount: int, sender: bytes, receiver: bytes):
+    inner_txn:
+        TypeEnum: Axfer
+        Sender: sender
+        AssetReceiver: receiver
+        AssetAmount: amount
+        XferAsset: app_global_get(TINY_ASSET_ID_KEY)
+        Fee: 0
     end
     return
 end
