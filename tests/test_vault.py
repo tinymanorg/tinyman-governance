@@ -3178,10 +3178,36 @@ class PowerMethodsTestCase(VaultAppMixin, BaseTestCase):
         self.assertEqual(bytes_to_int(block[b'txns'][0][b'dt'][b'lg'][-1][4:]), user_1_cumulative_power_2 - user_1_cumulative_power_1)
 
     def test_get_account_cumulative_power_delta_after_withdraw(self):
-        pass
+        self.setScene()
 
-    def test_get_account_cumulative_power_delta_after_latest_timestamp(self):
-        pass
+        block_timestamp = self.user_extend_1_new_lock_end_timestamp + 1
+
+        # Till extend.
+        slope = get_slope(self.user_locked_amount)
+        bias_at_start = get_bias(slope, (self.user_lock_end_timestamp - self.user_lock_start_timestamp))
+        bias = get_bias(slope, (self.user_lock_end_timestamp - self.user_extend_txn_1_timestamp))
+        user_cumulative_power = get_cumulative_power(bias_at_start, bias, (self.user_extend_txn_1_timestamp - self.user_lock_start_timestamp))
+
+        # After extend.
+        bias = get_bias(slope, (self.user_extend_1_new_lock_end_timestamp - self.user_extend_txn_1_timestamp))
+        user_cumulative_power += get_cumulative_power_2(
+            bias=bias, 
+            slope=slope
+        )
+        power_at_timestamp_1 = self.user_lock_start_timestamp
+        power_at_timestamp_2 = self.user_extend_1_new_lock_end_timestamp + 1
+        txn_group = prepare_get_account_cumulative_power_delta_transactions(
+            vault_app_id=VAULT_APP_ID,
+            sender=self.user_address,
+            user_address=self.user_address,
+            user_account_powers=get_account_powers(self.ledger, self.user_address),
+            timestamp_1=power_at_timestamp_1,
+            timestamp_2=power_at_timestamp_2,
+            suggested_params=self.sp,
+        )
+        txn_group.sign_with_private_key(self.user_address, self.user_sk)
+        block = self.ledger.eval_transactions(txn_group.signed_transactions, block_timestamp=block_timestamp)
+        self.assertEqual(bytes_to_int(block[b'txns'][0][b'dt'][b'lg'][-1][4:]), user_cumulative_power)
 
     def test_get_total_cumulative_power_delta_before_lock(self):
         pass
