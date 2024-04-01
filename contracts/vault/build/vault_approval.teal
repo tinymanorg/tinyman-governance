@@ -268,12 +268,12 @@ __func__init:
 
 // tl:119: func create_checkpoints():
 __func__create_checkpoints:
-    // tl:120: create_checkpoints_(0, bzero(16), 0)
+    // tl:120: create_checkpoints_internal(0, bzero(16), 0)
     pushint 0
     pushint 16
     bzero
     pushint 0
-    callsub __func__create_checkpoints_
+    callsub __func__create_checkpoints_internal
     // tl:121: log(method("create_checkpoints()"))
     method "create_checkpoints()"
     log
@@ -408,11 +408,11 @@ __func__create_lock:
     load 12                                                 // account_power
     callsub __func__save_account_power
     
-    // tl:171: create_checkpoints_(bias, slope, 1)
+    // tl:171: create_checkpoints_internal(bias, slope, 1)
     load 9                                                  // bias
     load 8                                                  // slope
     pushint 1
-    callsub __func__create_checkpoints_
+    callsub __func__create_checkpoints_internal
     // tl:172: update_or_create_slope_change(lock_end_time, slope)
     load 3                                                  // lock_end_time
     load 8                                                  // slope
@@ -561,11 +561,11 @@ __func__increase_lock_amount:
     load 29                                                 // account_power
     callsub __func__save_account_power
     
-    // tl:222: create_checkpoints_(bias_delta, slope_delta, 1)
+    // tl:222: create_checkpoints_internal(bias_delta, slope_delta, 1)
     load 25                                                 // bias_delta
     load 22                                                 // slope_delta
     pushint 1
-    callsub __func__create_checkpoints_
+    callsub __func__create_checkpoints_internal
     // tl:223: update_or_create_slope_change(lock_end_time, slope_delta)
     load 16                                                 // lock_end_time
     load 22                                                 // slope_delta
@@ -710,12 +710,12 @@ __func__extend_lock_end_time:
     load 42                                                 // account_power
     callsub __func__save_account_power
     
-    // tl:265: create_checkpoints_(bias_delta, bzero(16), 1)
+    // tl:265: create_checkpoints_internal(bias_delta, bzero(16), 1)
     load 38                                                 // bias_delta
     pushint 16
     bzero
     pushint 1
-    callsub __func__create_checkpoints_
+    callsub __func__create_checkpoints_internal
     // tl:266: revert_slope_change(current_lock_end_time, slope)
     load 33                                                 // current_lock_end_time
     load 35                                                 // slope
@@ -1836,8 +1836,8 @@ __func__get_total_cumulative_power_at:
     load 150                                                // total_cumulative_power
     retsub
 
-// tl:599: func create_checkpoints_(account_bias_delta: int, account_slope_delta: bytes, has_account_event: int):
-__func__create_checkpoints_:
+// tl:599: func create_checkpoints_internal(account_bias_delta: int, account_slope_delta: bytes, has_account_event: int):
+__func__create_checkpoints_internal:
     store 156                                               // has_account_event [int]
     store 157                                               // account_slope_delta [bytes]
     store 158                                               // account_bias_delta [int]
@@ -2352,10 +2352,10 @@ __func__delete_box:
     load 197                                                // min_balance_delta
     retsub
 
-// tl:746: func algo_transfer(amount: int, sender: bytes[32], receiver: bytes[32]):
+// tl:746: func algo_transfer(amount: int, sender: bytes, receiver: bytes):
 __func__algo_transfer:
-    store 198                                               // receiver [bytes[32]]
-    store 199                                               // sender [bytes[32]]
+    store 198                                               // receiver [bytes]
+    store 199                                               // sender [bytes]
     store 200                                               // amount [int]
     // tl:747: inner_txn:
     callsub _itxn_begin
@@ -2379,10 +2379,10 @@ __func__algo_transfer:
     // tl:754: return
     retsub
 
-// tl:757: func tiny_transfer(amount: int, sender: bytes[32], receiver: bytes[32]):
+// tl:757: func tiny_transfer(amount: int, sender: bytes, receiver: bytes):
 __func__tiny_transfer:
-    store 201                                               // receiver [bytes[32]]
-    store 202                                               // sender [bytes[32]]
+    store 201                                               // receiver [bytes]
+    store 202                                               // sender [bytes]
     store 203                                               // amount [int]
     // tl:758: inner_txn:
     callsub _itxn_begin

@@ -117,7 +117,7 @@ end
 
 @public()
 func create_checkpoints():
-    create_checkpoints_(0, bzero(16), 0)
+    create_checkpoints_internal(0, bzero(16), 0)
     log(method("create_checkpoints()"))
     return
 end
@@ -168,7 +168,7 @@ func create_lock(lock_end_time: int):
     AccountPower account_power = construct_account_power(bias, Global.LatestTimestamp, slope, cumulative_power)
     save_account_power(user_address, account_power_index, account_power)
 
-    create_checkpoints_(bias, slope, 1)
+    create_checkpoints_internal(bias, slope, 1)
     update_or_create_slope_change(lock_end_time, slope)
     increase_total_locked_amount(amount)
 
@@ -219,7 +219,7 @@ func increase_lock_amount():
     AccountPower account_power = construct_account_power(new_bias, Global.LatestTimestamp, new_locked_amount_slope, cumulative_power)
     save_account_power(user_address, account_power_index, account_power)
 
-    create_checkpoints_(bias_delta, slope_delta, 1)
+    create_checkpoints_internal(bias_delta, slope_delta, 1)
     update_or_create_slope_change(lock_end_time, slope_delta)
     increase_total_locked_amount(amount)
 
@@ -262,7 +262,7 @@ func extend_lock_end_time(new_lock_end_time: int):
     AccountPower account_power = construct_account_power(new_bias, Global.LatestTimestamp, slope, cumulative_power)
     save_account_power(user_address, account_power_index, account_power)
 
-    create_checkpoints_(bias_delta, bzero(16), 1)
+    create_checkpoints_internal(bias_delta, bzero(16), 1)
     revert_slope_change(current_lock_end_time, slope)
     update_or_create_slope_change(new_lock_end_time, slope)
 
@@ -596,7 +596,7 @@ func get_total_cumulative_power_at(timestamp: int, total_power_index: int) bytes
     return total_cumulative_power
 end
 
-func create_checkpoints_(account_bias_delta: int, account_slope_delta: bytes, has_account_event: int):
+func create_checkpoints_internal(account_bias_delta: int, account_slope_delta: bytes, has_account_event: int):
     # https://github.com/curvefi/curve-dao-contracts/blob/master/contracts/VotingEscrow.vy#L234
 
     TotalPower last_total_power = get_total_power(app_global_get(TOTAL_POWER_COUNT_KEY) - 1)
