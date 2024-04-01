@@ -66,14 +66,14 @@ end
 
 @public(OnCompletion=UpdateApplication)
 func update_application():
-    bytes user_address = Txn.Sender
+    bytes[32] user_address = Txn.Sender
     assert(user_address == app_global_get(MANAGER_KEY))
     return
 end
 
 @public()
 func create_proposal(proposal_id: bytes[59]):
-    bytes user_address = Txn.Sender
+    bytes[32] user_address = Txn.Sender
     assert(user_address == app_global_get(PROPOSAL_MANAGER_KEY))
 
     # proposal id will be calculated off-chain. it is base32 string representation of CID (base32 - cidv1 - raw - (sha2-256 : 256 : <metadata>))
@@ -97,8 +97,8 @@ func create_proposal(proposal_id: bytes[59]):
 end
 
 @public()
-func cancel_proposal(proposal_id: bytes):
-    bytes user_address = Txn.Sender
+func cancel_proposal(proposal_id: bytes[59]):
+    bytes[32] user_address = Txn.Sender
     assert(user_address == app_global_get(PROPOSAL_MANAGER_KEY))
 
     bytes proposal_box_name = Concat(PROPOSAL_BOX_PREFIX, proposal_id)
@@ -116,8 +116,8 @@ func cancel_proposal(proposal_id: bytes):
 end
 
 @public()
-func cast_vote(proposal_id: bytes, votes_as_percentage: bytes, asset_ids: bytes, account_power_index: bytes):
-    bytes user_address = Txn.Sender
+func cast_vote(proposal_id: bytes[59], votes_as_percentage: bytes, asset_ids: bytes, account_power_index: bytes):
+    bytes[32] user_address = Txn.Sender
     bytes proposal_box_name = Concat(PROPOSAL_BOX_PREFIX, proposal_id)
     box<Proposal> proposal = OpenBox(proposal_box_name)
 
@@ -190,7 +190,7 @@ end
 
 @public()
 func set_voting_delay(new_voting_delay: int):
-    bytes user_address = Txn.Sender
+    bytes[32] user_address = Txn.Sender
     assert(user_address == app_global_get(PROPOSAL_MANAGER_KEY))
 
     app_global_put(VOTING_DELAY_KEY, new_voting_delay)
@@ -200,7 +200,7 @@ end
 
 @public()
 func set_voting_duration(new_voting_duration: int):
-    bytes user_address = Txn.Sender
+    bytes[32] user_address = Txn.Sender
     assert(user_address == app_global_get(PROPOSAL_MANAGER_KEY))
 
     assert(new_voting_duration)
@@ -211,7 +211,7 @@ end
 
 @public()
 func set_manager(new_manager: bytes[32]):
-    bytes user_address = Txn.Sender
+    bytes[32] user_address = Txn.Sender
     assert(user_address == app_global_get(MANAGER_KEY))
 
     app_global_put(MANAGER_KEY, new_manager)
@@ -221,7 +221,7 @@ end
 
 @public()
 func set_proposal_manager(new_proposal_manager: bytes[32]):
-    bytes user_address = Txn.Sender
+    bytes[32] user_address = Txn.Sender
     assert(user_address == app_global_get(MANAGER_KEY))
 
     app_global_put(PROPOSAL_MANAGER_KEY, new_proposal_manager)
@@ -238,7 +238,7 @@ func get_box(box_name: bytes) int, bytes, bytes:
 end
 
 
-func check_and_set_user_as_voted(address: bytes, proposal_index: int):
+func check_and_set_user_as_voted(address: bytes[32], proposal_index: int):
     int box_index = proposal_index / (ACCOUNT_ATTENDANCE_SHEET_BOX_SIZE * 8)
     int array_index = proposal_index % (ACCOUNT_ATTENDANCE_SHEET_BOX_SIZE * 8)
     bytes box_name = Concat(ATTENDANCE_BOX_PREFIX, Concat(address, itob(box_index)))
@@ -269,7 +269,7 @@ end
 
 # Inner Txns
 
-func get_account_voting_power_at(address: bytes, snapshot_timestamp: int, account_power_index: bytes) int:
+func get_account_voting_power_at(address: bytes[32], snapshot_timestamp: int, account_power_index: bytes) int:
     inner_txn:
         TypeEnum: Appl
         ApplicationID: app_global_get(VAULT_APP_ID_KEY)

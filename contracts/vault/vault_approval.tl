@@ -106,7 +106,7 @@ end
 func init():
     # create the first total power
     assert(!app_global_get(TOTAL_POWER_COUNT_KEY))
-    bytes total_power = construct_total_power(0, Global.LatestTimestamp, bzero(16), bzero(16))
+    TotalPower total_power = construct_total_power(0, Global.LatestTimestamp, bzero(16), bzero(16))
     save_total_power(total_power)
 
     # opt-in to TINY
@@ -128,7 +128,7 @@ func create_lock(lock_end_time: int):
     # 1) Accounts which have never had a token lock before.
     # 2) Accounts that have previously withdrawn their locked token amount.
 
-    bytes user_address = Txn.Sender
+    bytes[32] user_address = Txn.Sender
     int amount = get_received_tiny_amount()
 
     assert(amount >= MIN_LOCK_AMOUNT)
@@ -165,7 +165,7 @@ func create_lock(lock_end_time: int):
     end
 
     # Crate a new account power
-    bytes account_power = construct_account_power(bias, Global.LatestTimestamp, slope, cumulative_power)
+    AccountPower account_power = construct_account_power(bias, Global.LatestTimestamp, slope, cumulative_power)
     save_account_power(user_address, account_power_index, account_power)
 
     create_checkpoints_(bias, slope, 1)
@@ -181,7 +181,7 @@ end
 func increase_lock_amount():
     # This method enables users to increase their currently locked token amount before the lock expiration time.
 
-    bytes user_address = Txn.Sender
+    bytes[32] user_address = Txn.Sender
     int amount = get_received_tiny_amount()
 
     assert(amount >= MIN_LOCK_AMOUNT_INCREMENT)
@@ -216,7 +216,7 @@ func increase_lock_amount():
     bytes cumulative_power = last_account_power.cumulative_power b+ get_cumulative_power_1(last_account_power.bias, current_bias, time_delta)
 
     # Crate a new account power
-    bytes account_power = construct_account_power(new_bias, Global.LatestTimestamp, new_locked_amount_slope, cumulative_power)
+    AccountPower account_power = construct_account_power(new_bias, Global.LatestTimestamp, new_locked_amount_slope, cumulative_power)
     save_account_power(user_address, account_power_index, account_power)
 
     create_checkpoints_(bias_delta, slope_delta, 1)
@@ -232,7 +232,7 @@ end
 func extend_lock_end_time(new_lock_end_time: int):
     # This method enables users to extend remaining lock duration.
 
-    bytes user_address = Txn.Sender
+    bytes[32] user_address = Txn.Sender
 
     box<AccountState> account_state = OpenBox(user_address)
     int current_lock_end_time = account_state.lock_end_time
@@ -259,7 +259,7 @@ func extend_lock_end_time(new_lock_end_time: int):
     bytes cumulative_power = last_account_power.cumulative_power b+ get_cumulative_power_1(last_account_power.bias, current_bias, time_delta)
 
     # Create AccountPower
-    bytes account_power = construct_account_power(new_bias, Global.LatestTimestamp, slope, cumulative_power)
+    AccountPower account_power = construct_account_power(new_bias, Global.LatestTimestamp, slope, cumulative_power)
     save_account_power(user_address, account_power_index, account_power)
 
     create_checkpoints_(bias_delta, bzero(16), 1)
@@ -273,7 +273,7 @@ end
 
 @public()
 func withdraw():
-    bytes user_address = Txn.Sender
+    bytes[32] user_address = Txn.Sender
 
     box<AccountState> account_state = OpenBox(user_address)
     int locked_amount = account_state.locked_amount
@@ -288,7 +288,7 @@ func withdraw():
     bytes cumulative_power = last_account_power.cumulative_power b+ get_cumulative_power_1(last_account_power.bias, 0, account_state.lock_end_time - last_account_power.timestamp)
 
     # Create AccountPower
-    bytes account_power = construct_account_power(0, account_state.lock_end_time, bzero(16), cumulative_power)
+    AccountPower account_power = construct_account_power(0, account_state.lock_end_time, bzero(16), cumulative_power)
     save_account_power(user_address, account_power_index, account_power)
 
     tiny_transfer(locked_amount, Global.CurrentApplicationAddress, user_address)
@@ -303,7 +303,7 @@ func withdraw():
 end
 
 @public()
-func get_tiny_power_of(user_address: bytes) int:
+func get_tiny_power_of(user_address: bytes[32]) int:
     # Current power can be calculated by using account state and account power.
     # The calculation is made using the account state to reduce required box references.
     int timestamp = Global.LatestTimestamp
@@ -324,7 +324,7 @@ func get_tiny_power_of(user_address: bytes) int:
 end
 
 @public()
-func get_tiny_power_of_at(user_address: bytes, timestamp: int, index: int) int:
+func get_tiny_power_of_at(user_address: bytes[32], timestamp: int, index: int) int:
     int tiny_power = 0
     assert(timestamp <= Global.LatestTimestamp)
 
@@ -387,7 +387,7 @@ func get_total_tiny_power_at(timestamp: int, total_power_index: int) int:
 end
 
 @public()
-func get_account_cumulative_power_delta(user_address: bytes, timestamp_1: int, timestamp_2: int, account_power_index_1: int, account_power_index_2: int) bytes:
+func get_account_cumulative_power_delta(user_address: bytes[32], timestamp_1: int, timestamp_2: int, account_power_index_1: int, account_power_index_2: int) bytes:
     bytes account_cumulative_power_1 = get_cumulative_power_of_at(user_address, timestamp_1, account_power_index_1)
     bytes account_cumulative_power_2 = get_cumulative_power_of_at(user_address, timestamp_2, account_power_index_2)
     bytes cumulative_power_delta = account_cumulative_power_2 b- account_cumulative_power_1
@@ -415,7 +415,7 @@ end
 
 @public()
 func delete_account_power_boxes(box_count: int):
-    bytes user_address = Txn.Sender
+    bytes[32] user_address = Txn.Sender
 
     box<AccountState> account_state = Box(user_address)
     int account_power_count = account_state.power_count
@@ -442,7 +442,7 @@ end
 
 @public()
 func delete_account_state():
-    bytes user_address = Txn.Sender
+    bytes[32] user_address = Txn.Sender
 
     box<AccountState> account_state = Box(user_address)
     int account_power_count = account_state.power_count
@@ -473,12 +473,11 @@ func delete_account_state():
     return
 end
 
-func construct_account_power(bias: int, timestamp: int, slope: bytes, cumulative_power: bytes) bytes:
-    return Concat(itob(bias), itob(timestamp), (bzero(16) b| slope), (bzero(16) b| cumulative_power))
+func construct_account_power(bias: int, timestamp: int, slope: bytes, cumulative_power: bytes) AccountPower:
+    return Cast(Concat(itob(bias), itob(timestamp), (bzero(16) b| slope), (bzero(16) b| cumulative_power)), AccountPower)
 end
 
-func save_account_power(address: bytes, index: int, data: bytes):
-    assert(len(data) == ACCOUNT_POWER_SIZE)
+func save_account_power(address: bytes[32], index: int, data: AccountPower):
     int box_index = index / ACCOUNT_POWER_BOX_ARRAY_LEN
     int array_index = index % ACCOUNT_POWER_BOX_ARRAY_LEN
     bytes box_name = Concat(address, itob(box_index))
@@ -489,21 +488,19 @@ func save_account_power(address: bytes, index: int, data: bytes):
     return
 end
 
-func get_account_power(address: bytes, index: int) AccountPower:
+func get_account_power(address: bytes[32], index: int) AccountPower:
     int box_index = index / ACCOUNT_POWER_BOX_ARRAY_LEN
     int array_index = index % ACCOUNT_POWER_BOX_ARRAY_LEN
     bytes box_name = Concat(address, itob(box_index))
     return Cast(box_extract(box_name, (array_index * ACCOUNT_POWER_SIZE), ACCOUNT_POWER_SIZE), AccountPower)
 end
 
-func construct_total_power(bias: int, timestamp: int, slope: bytes, cumulative_power: bytes) bytes:
-    return Concat(itob(bias), itob(timestamp), (bzero(16) b| slope), (bzero(16) b| cumulative_power))
+func construct_total_power(bias: int, timestamp: int, slope: bytes, cumulative_power: bytes) TotalPower:
+    return Cast(Concat(itob(bias), itob(timestamp), (bzero(16) b| slope), (bzero(16) b| cumulative_power)), TotalPower)
 end
 
-func save_total_power(data: bytes):
+func save_total_power(data: TotalPower):
     int index = app_global_get(TOTAL_POWER_COUNT_KEY)
-
-    assert(len(data) == TOTAL_POWER_SIZE)
     int box_index = index / TOTAL_POWER_BOX_ARRAY_LEN
     int array_index = index % TOTAL_POWER_BOX_ARRAY_LEN
     bytes box_name = Concat(TOTAL_POWER_BOX_PREFIX, itob(box_index))
@@ -524,7 +521,7 @@ func get_total_power(index: int) TotalPower:
 end
 
 @public()
-func get_cumulative_power_of_at(user_address: bytes, timestamp: int, account_power_index: int) bytes:
+func get_cumulative_power_of_at(user_address: bytes[32], timestamp: int, account_power_index: int) bytes:
     bytes cumulative_power
     assert(timestamp <= Global.LatestTimestamp)
 
