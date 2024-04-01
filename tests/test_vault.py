@@ -3123,7 +3123,59 @@ class PowerMethodsTestCase(VaultAppMixin, BaseTestCase):
         self.assertEqual(bytes_to_int(block[b'txns'][0][b'dt'][b'lg'][-1][4:]), user_cumulative_power_2 - user_cumulative_power_1)
 
     def test_get_account_cumulative_power_delta_after_increase(self):
-        pass
+        self.setScene()
+
+        block_timestamp = self.latest_timestamp
+
+        slope = get_slope(self.user_1_locked_amount)
+        bias_at_start = get_bias(slope, (self.user_1_lock_end_timestamp - self.user_1_lock_start_timestamp))
+
+        # Get Cumulative Power Delta Between Increase and after a day.
+        power_at_timestamp_1 = self.user_1_increase_txn_1_timestamp
+        power_at_timestamp_2 = self.user_1_increase_txn_1_timestamp + DAY
+
+        bias = get_bias(slope, (self.user_1_lock_end_timestamp - power_at_timestamp_1))
+        user_1_cumulative_power_1 = get_cumulative_power(bias_at_start, bias, (power_at_timestamp_1 - self.user_1_lock_start_timestamp))
+        
+        slope_at_increase = get_slope(self.user_1_locked_amount + self.user_1_increase_1_amount)
+        bias_at_increase = get_bias(slope_at_increase, (self.user_1_lock_end_timestamp - self.user_1_increase_txn_1_timestamp))
+
+        bias = bias_at_increase - get_bias(slope_at_increase, (power_at_timestamp_2 - power_at_timestamp_1))
+        user_1_cumulative_power_2 = user_1_cumulative_power_1 + get_cumulative_power(bias_at_increase, bias, (power_at_timestamp_2 - power_at_timestamp_1))
+        txn_group = prepare_get_account_cumulative_power_delta_transactions(
+            vault_app_id=VAULT_APP_ID,
+            sender=self.user_1_address,
+            user_address=self.user_1_address,
+            user_account_powers=get_account_powers(self.ledger, self.user_address),
+            timestamp_1=power_at_timestamp_1,
+            timestamp_2=power_at_timestamp_2,
+            suggested_params=self.sp,
+        )
+        txn_group.sign_with_private_key(self.user_1_address, self.user_1_sk)
+        block = self.ledger.eval_transactions(txn_group.signed_transactions, block_timestamp=block_timestamp)
+        self.assertEqual(bytes_to_int(block[b'txns'][0][b'dt'][b'lg'][-1][4:]), user_1_cumulative_power_2 - user_1_cumulative_power_1)
+
+        # Get Cumulative Power Delta Between Increase and after a week.
+        power_at_timestamp_1 = power_at_timestamp_2
+        power_at_timestamp_2 += WEEK
+        block_timestamp = power_at_timestamp_2 + 1
+
+        cumulative_power_at_increase = user_1_cumulative_power_1
+        user_1_cumulative_power_1 = user_1_cumulative_power_2
+        bias = bias_at_increase - get_bias(slope_at_increase, (power_at_timestamp_2 - self.user_1_increase_txn_1_timestamp))
+        user_1_cumulative_power_2 = cumulative_power_at_increase + get_cumulative_power(bias_at_increase, bias, (power_at_timestamp_2 - self.user_1_increase_txn_1_timestamp))
+        txn_group = prepare_get_account_cumulative_power_delta_transactions(
+            vault_app_id=VAULT_APP_ID,
+            sender=self.user_1_address,
+            user_address=self.user_1_address,
+            user_account_powers=get_account_powers(self.ledger, self.user_address),
+            timestamp_1=power_at_timestamp_1,
+            timestamp_2=power_at_timestamp_2,
+            suggested_params=self.sp,
+        )
+        txn_group.sign_with_private_key(self.user_1_address, self.user_1_sk)
+        block = self.ledger.eval_transactions(txn_group.signed_transactions, block_timestamp=block_timestamp)
+        self.assertEqual(bytes_to_int(block[b'txns'][0][b'dt'][b'lg'][-1][4:]), user_1_cumulative_power_2 - user_1_cumulative_power_1)
 
     def test_get_account_cumulative_power_delta_after_withdraw(self):
         pass
