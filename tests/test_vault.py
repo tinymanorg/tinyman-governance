@@ -90,8 +90,7 @@ from tests.vault.utils import (
 )
 
 
-class CreateLockTestCase(VaultAppMixin, BaseTestCase):
-
+class VaultBaseTestCase(VaultAppMixin, BaseTestCase):
     @classmethod
     def setUpClass(cls) -> None:
         super().setUpClass()
@@ -114,6 +113,200 @@ class CreateLockTestCase(VaultAppMixin, BaseTestCase):
         self.ledger.move(100_000_000, asset_id=TINY_ASSET_ID, sender=self.ledger.assets[TINY_ASSET_ID]["creator"], receiver=self.user_2_address)
         self.ledger.move(100_000_000, asset_id=TINY_ASSET_ID, sender=self.ledger.assets[TINY_ASSET_ID]["creator"], receiver=self.user_3_address)
 
+    def setScene(self):
+        block_datetime = datetime(year=2022, month=3, day=1, hour=1, tzinfo=ZoneInfo("UTC"))
+        block_timestamp = int(block_datetime.timestamp())
+        last_checkpoint_timestamp = block_timestamp - 10
+
+        self.create_vault_app(self.app_creator_address)
+        self.init_vault_app(timestamp=last_checkpoint_timestamp)
+
+        # User events in chronological order
+        current_timestamp = last_checkpoint_timestamp
+        self.user_lock_start_timestamp = current_timestamp + WEEK
+        self.user_lock_end_timestamp = get_start_timestamp_of_week(self.user_lock_start_timestamp) + WEEK + 4 * WEEK
+        self.user_locked_amount = 20_000_000
+        self.create_lock(self.user_address, self.user_sk, self.user_locked_amount, self.user_lock_start_timestamp, self.user_lock_end_timestamp)
+
+        self.user_1_lock_start_timestamp = self.user_lock_start_timestamp + DAY // 2
+        self.user_1_lock_end_timestamp = get_start_timestamp_of_week(self.user_1_lock_start_timestamp) + WEEK + 6 * WEEK
+        self.user_1_locked_amount = 30_000_000
+        self.create_lock(self.user_1_address, self.user_1_sk, self.user_1_locked_amount, self.user_1_lock_start_timestamp, self.user_1_lock_end_timestamp)
+
+        self.user_2_lock_start_timestamp = self.user_1_lock_start_timestamp
+        self.user_2_lock_end_timestamp = self.user_1_lock_end_timestamp + 2 * WEEK
+        self.user_2_locked_amount = 40_000_000
+        self.create_lock(self.user_2_address, self.user_2_sk, self.user_2_locked_amount, self.user_2_lock_start_timestamp, self.user_2_lock_end_timestamp)
+
+        self.user_3_lock_start_timestamp = get_start_timestamp_of_week(self.user_2_lock_start_timestamp) + WEEK
+        self.user_3_lock_end_timestamp = self.user_3_lock_start_timestamp + WEEK + 8 * WEEK
+        self.user_3_locked_amount = 30_000_137
+        self.create_lock(self.user_3_address, self.user_3_sk, self.user_3_locked_amount, self.user_3_lock_start_timestamp, self.user_3_lock_end_timestamp)
+
+        self.user_extend_txn_1_timestamp = self.user_lock_start_timestamp + WEEK + DAY // 3
+        self.user_extend_1_new_lock_end_timestamp = self.user_lock_end_timestamp + 4 * WEEK
+        self.extend_lock_end_time(self.user_address, self.user_sk, self.user_extend_txn_1_timestamp, self.user_extend_1_new_lock_end_timestamp)
+
+        self.user_1_increase_txn_1_timestamp = self.user_1_lock_start_timestamp + WEEK + DAY // 2  # user + week + day
+        self.user_1_increase_1_amount = 10_000_000
+        self.increase_lock_amount(self.user_1_address, self.user_1_sk, self.user_1_increase_1_amount, self.user_1_increase_txn_1_timestamp)
+
+        self.user_2_extend_txn_1_timestamp = self.user_2_lock_start_timestamp + WEEK + DAY
+        self.user_2_extend_1_new_lock_end_timestamp = self.user_2_lock_end_timestamp + 5 * WEEK
+        self.extend_lock_end_time(self.user_2_address, self.user_2_sk, self.user_2_extend_txn_1_timestamp, self.user_2_extend_1_new_lock_end_timestamp)
+
+        self.user_2_increase_txn_1_timestamp = self.user_2_extend_txn_1_timestamp
+        self.user_2_increase_1_amount = 10_000_123
+        self.increase_lock_amount(self.user_2_address, self.user_2_sk, self.user_2_increase_1_amount, self.user_2_increase_txn_1_timestamp)
+
+        self.user_2_increase_txn_2_timestamp = self.user_2_extend_txn_1_timestamp + DAY
+        self.user_2_increase_2_amount = 10_000_001
+        self.increase_lock_amount(self.user_2_address, self.user_2_sk, self.user_2_increase_2_amount, self.user_2_increase_txn_2_timestamp)
+
+        self.latest_timestamp = self.user_2_increase_txn_2_timestamp
+
+class CreateInitVaultTestCase(VaultBaseTestCase):
+    def test_create_app(self):
+        block_datetime = datetime(year=2022, month=3, day=1, tzinfo=ZoneInfo("UTC"))
+        block_timestamp = int(block_datetime.timestamp())
+        
+        txn_group = TransactionGroup([
+            transaction.ApplicationCreateTxn(
+                sender=self.app_creator_address,
+                sp=self.sp,
+                on_complete=transaction.OnComplete.NoOpOC,
+                approval_program=vault_approval_program.bytecode,
+                clear_program=vault_clear_state_program.bytecode,
+                global_schema=transaction.StateSchema(num_uints=4, num_byte_slices=0),
+                local_schema=transaction.StateSchema(num_uints=0, num_byte_slices=0),
+                extra_pages=3,
+                app_args=["create_application", TINY_ASSET_ID],
+            )
+        ])
+        txn_group.sign_with_private_key(self.app_creator_address, self.app_creator_sk)
+        block = self.ledger.eval_transactions(txn_group.signed_transactions, block_timestamp=block_timestamp)
+        app_id = block[b"txns"][0][b"apid"]
+
+        # Global state
+        vault_app_global_state = get_vault_app_global_state(self.ledger, app_id)
+        self.assertEqual(
+            vault_app_global_state,
+            VaultAppGlobalState(
+                tiny_asset_id=TINY_ASSET_ID,
+                total_locked_amount=0,
+                total_power_count=0,
+                last_total_power_timestamp=0
+            )
+        )
+
+    def test_init_app(self):
+        self.create_vault_app(self.app_creator_address)
+
+        block_datetime = datetime(year=2022, month=3, day=1, hour=1, tzinfo=ZoneInfo("UTC"))
+        block_timestamp = int(block_datetime.timestamp())
+        
+        # Init app
+        txn_group = prepare_init_transactions(
+            vault_app_id=VAULT_APP_ID,
+            tiny_asset_id=TINY_ASSET_ID,
+            sender=self.user_address,
+            suggested_params=self.sp
+        )
+        txn_group.sign_with_private_key(self.user_address, self.user_sk)
+        block = self.ledger.eval_transactions(txn_group.signed_transactions, block_timestamp=int(block_datetime.timestamp()))
+        
+        # Global state
+        vault_app_global_state = get_vault_app_global_state(self.ledger, VAULT_APP_ID)
+        self.assertEqual(vault_app_global_state.total_power_count, 1)
+        self.assertEqual(vault_app_global_state.last_total_power_timestamp, block_timestamp)
+        
+        # Opt-in TINY
+        app_call_txn = get_first_app_call_txn(block[b'txns'])
+        opt_in_inner_txn = app_call_txn[b'dt'][b'itx'][0][b'txn']
+        self.assertDictEqual(
+            opt_in_inner_txn,
+            {
+                b'arcv': decode_address(get_application_address(VAULT_APP_ID)),
+                b'fv': ANY,
+                b'lv': ANY,
+                b'snd': decode_address(get_application_address(VAULT_APP_ID)),
+                b'type': b'axfer',
+                b'xaid': TINY_ASSET_ID
+            }
+        )
+        
+        # Assert Logs
+        logs = app_call_txn[b'dt'][b'lg']
+        events = decode_logs(logs, events=vault_events)
+
+        self.assertEqual(len(events), 2)
+        self.assertDictEqual(
+            events[0],
+            {
+                'event_name': 'total_power',
+                'index': 0,
+                'bias': 0,
+                'timestamp': block_timestamp,
+                'slope': 0,
+                'cumulative_power': 0
+            }
+        )
+        self.assertDictEqual(
+            events[1],
+            {
+                'event_name': 'init',
+            }
+        )
+
+        # Assert Boxes
+        total_powers = parse_box_total_power(self.ledger.boxes[VAULT_APP_ID][get_total_power_box_name(box_index=0)])
+        self.assertEqual(len(total_powers), 1)
+
+        total_power = total_powers[0]
+        self.assertEqual(
+            total_power,
+            TotalPower(
+                bias=0,
+                slope=0,
+                cumulative_power=0,
+                timestamp=block_timestamp
+            )
+        )
+
+        # Calling init again more than one time should fail.
+        txn_group = prepare_init_transactions(
+            vault_app_id=VAULT_APP_ID,
+            tiny_asset_id=TINY_ASSET_ID,
+            sender=self.user_address,
+            suggested_params=self.sp
+        )
+        txn_group.sign_with_private_key(self.user_address, self.user_sk)
+        with self.assertRaises(Exception):
+            self.ledger.eval_transactions(txn_group.signed_transactions, block_timestamp=int(block_datetime.timestamp()))
+
+    def test_budget_increase(self):
+        self.create_vault_app(self.app_creator_address)
+
+        block_datetime = datetime(year=2022, month=3, day=1, hour=1, tzinfo=ZoneInfo("UTC"))
+        block_timestamp = int(block_datetime.timestamp())
+
+        self.init_vault_app(timestamp=block_timestamp)
+        block_timestamp =+ 10
+
+        txn_group = TransactionGroup(
+            [
+                _prepare_budget_increase_transaction(
+                    sender=self.user_address,
+                    sp=self.sp,
+                    index=VAULT_APP_ID,
+                )
+            ]
+        )
+        txn_group.sign_with_private_key(self.user_address, self.user_sk)
+        self.ledger.eval_transactions(txn_group.signed_transactions, block_timestamp=block_timestamp)
+
+
+class CreateLockTestCase(VaultBaseTestCase):
     def test_successful_create_lock(self):
         block_datetime = datetime(year=2022, month=3, day=1, hour=1, tzinfo=ZoneInfo("UTC"))
         block_timestamp = int(block_datetime.timestamp())
@@ -473,30 +666,7 @@ class CreateLockTestCase(VaultAppMixin, BaseTestCase):
         self.assertEqual(e.exception.source['line'], 'assert(amount >= MIN_LOCK_AMOUNT)')
 
 
-class IncreaseLockAmountTestCase(VaultAppMixin, BaseTestCase):
-
-    @classmethod
-    def setUpClass(cls) -> None:
-        super().setUpClass()
-        cls.app_creator_sk, cls.app_creator_address = generate_account()
-        cls.user_sk, cls.user_address = generate_account()
-        cls.user_1_sk, cls.user_1_address = generate_account()
-        cls.user_2_sk, cls.user_2_address = generate_account()
-        cls.user_3_sk, cls.user_3_address = generate_account()
-
-    def setUp(self):
-        super().setUp()
-        self.ledger.set_account_balance(self.app_creator_address, 1_000_000)
-        self.ledger.set_account_balance(self.user_address, 100_000_000)
-        self.ledger.set_account_balance(self.user_1_address, 100_000_000)
-        self.ledger.set_account_balance(self.user_2_address, 100_000_000)
-        self.ledger.set_account_balance(self.user_3_address, 100_000_000)
-
-        self.ledger.move(100_000_000, asset_id=TINY_ASSET_ID, sender=self.ledger.assets[TINY_ASSET_ID]["creator"], receiver=self.user_address)
-        self.ledger.move(100_000_000, asset_id=TINY_ASSET_ID, sender=self.ledger.assets[TINY_ASSET_ID]["creator"], receiver=self.user_1_address)
-        self.ledger.move(100_000_000, asset_id=TINY_ASSET_ID, sender=self.ledger.assets[TINY_ASSET_ID]["creator"], receiver=self.user_2_address)
-        self.ledger.move(100_000_000, asset_id=TINY_ASSET_ID, sender=self.ledger.assets[TINY_ASSET_ID]["creator"], receiver=self.user_3_address)
-    
+class IncreaseLockAmountTestCase(VaultBaseTestCase):    
     def test_increase_lock_amount(self):
         # 1. Create lock
         # 2. Increase lock amount
@@ -673,6 +843,7 @@ class IncreaseLockAmountTestCase(VaultAppMixin, BaseTestCase):
 
         # 2. Increase lock amount 50x
         increase_count = 50
+        self.ledger.move(amount * increase_count, asset_id=TINY_ASSET_ID, sender=self.ledger.assets[TINY_ASSET_ID]["creator"], receiver=self.user_address)
         for i in range(increase_count):
             block_timestamp = block_timestamp + DAY // 2
             with unittest.mock.patch("time.time", return_value=block_timestamp):
@@ -831,30 +1002,7 @@ class IncreaseLockAmountTestCase(VaultAppMixin, BaseTestCase):
         self.assertEqual(e.exception.source['line'], 'assert(amount >= MIN_LOCK_AMOUNT_INCREMENT)')
 
 
-class ExtendLockEndTimeTestCase(VaultAppMixin, BaseTestCase):
-
-    @classmethod
-    def setUpClass(cls) -> None:
-        super().setUpClass()
-        cls.app_creator_sk, cls.app_creator_address = generate_account()
-        cls.user_sk, cls.user_address = generate_account()
-        cls.user_1_sk, cls.user_1_address = generate_account()
-        cls.user_2_sk, cls.user_2_address = generate_account()
-        cls.user_3_sk, cls.user_3_address = generate_account()
-
-    def setUp(self):
-        super().setUp()
-        self.ledger.set_account_balance(self.app_creator_address, 1_000_000)
-        self.ledger.set_account_balance(self.user_address, 100_000_000)
-        self.ledger.set_account_balance(self.user_1_address, 100_000_000)
-        self.ledger.set_account_balance(self.user_2_address, 100_000_000)
-        self.ledger.set_account_balance(self.user_3_address, 100_000_000)
-
-        self.ledger.move(100_000_000, asset_id=TINY_ASSET_ID, sender=self.ledger.assets[TINY_ASSET_ID]["creator"], receiver=self.user_address)
-        self.ledger.move(100_000_000, asset_id=TINY_ASSET_ID, sender=self.ledger.assets[TINY_ASSET_ID]["creator"], receiver=self.user_1_address)
-        self.ledger.move(100_000_000, asset_id=TINY_ASSET_ID, sender=self.ledger.assets[TINY_ASSET_ID]["creator"], receiver=self.user_2_address)
-        self.ledger.move(100_000_000, asset_id=TINY_ASSET_ID, sender=self.ledger.assets[TINY_ASSET_ID]["creator"], receiver=self.user_3_address)
-    
+class ExtendLockEndTimeTestCase(VaultBaseTestCase):
     def test_extend_lock_end_time(self):
         # 1. Create lock
         # 2. Extend 4 weeks
@@ -1151,30 +1299,7 @@ class ExtendLockEndTimeTestCase(VaultAppMixin, BaseTestCase):
         self.assertEqual(e.exception.source['line'], 'assert(!(new_lock_end_time % WEEK))')
 
 
-class WithdrawTestCase(VaultAppMixin, BaseTestCase):
-
-    @classmethod
-    def setUpClass(cls) -> None:
-        super().setUpClass()
-        cls.app_creator_sk, cls.app_creator_address = generate_account()
-        cls.user_sk, cls.user_address = generate_account()
-        cls.user_1_sk, cls.user_1_address = generate_account()
-        cls.user_2_sk, cls.user_2_address = generate_account()
-        cls.user_3_sk, cls.user_3_address = generate_account()
-
-    def setUp(self):
-        super().setUp()
-        self.ledger.set_account_balance(self.app_creator_address, 1_000_000)
-        self.ledger.set_account_balance(self.user_address, 100_000_000)
-        self.ledger.set_account_balance(self.user_1_address, 100_000_000)
-        self.ledger.set_account_balance(self.user_2_address, 100_000_000)
-        self.ledger.set_account_balance(self.user_3_address, 100_000_000)
-
-        self.ledger.move(100_000_000, asset_id=TINY_ASSET_ID, sender=self.ledger.assets[TINY_ASSET_ID]["creator"], receiver=self.user_address)
-        self.ledger.move(100_000_000, asset_id=TINY_ASSET_ID, sender=self.ledger.assets[TINY_ASSET_ID]["creator"], receiver=self.user_1_address)
-        self.ledger.move(100_000_000, asset_id=TINY_ASSET_ID, sender=self.ledger.assets[TINY_ASSET_ID]["creator"], receiver=self.user_2_address)
-        self.ledger.move(100_000_000, asset_id=TINY_ASSET_ID, sender=self.ledger.assets[TINY_ASSET_ID]["creator"], receiver=self.user_3_address)
-    
+class WithdrawTestCase(VaultBaseTestCase):
     def test_withdraw(self):
         # 1. Try to withdraw at lock end time
         # 2. Withdraw after the lock end time
@@ -1372,82 +1497,7 @@ class WithdrawTestCase(VaultAppMixin, BaseTestCase):
         self.assertEqual(e.exception.source['line'], 'assert(account_state.lock_end_time < Global.LatestTimestamp)')
 
 
-class PowerMethodsTestCase(VaultAppMixin, BaseTestCase):
-
-    @classmethod
-    def setUpClass(cls) -> None:
-        super().setUpClass()
-        cls.app_creator_sk, cls.app_creator_address = generate_account()
-        cls.user_sk, cls.user_address = generate_account()
-        cls.user_1_sk, cls.user_1_address = generate_account()
-        cls.user_2_sk, cls.user_2_address = generate_account()
-        cls.user_3_sk, cls.user_3_address = generate_account()
-
-    def setUp(self):
-        super().setUp()
-        self.ledger.set_account_balance(self.app_creator_address, 1_000_000)
-        self.ledger.set_account_balance(self.user_address, 100_000_000)
-        self.ledger.set_account_balance(self.user_1_address, 100_000_000)
-        self.ledger.set_account_balance(self.user_2_address, 100_000_000)
-        self.ledger.set_account_balance(self.user_3_address, 100_000_000)
-
-        self.ledger.move(100_000_000, asset_id=TINY_ASSET_ID, sender=self.ledger.assets[TINY_ASSET_ID]["creator"], receiver=self.user_address)
-        self.ledger.move(100_000_000, asset_id=TINY_ASSET_ID, sender=self.ledger.assets[TINY_ASSET_ID]["creator"], receiver=self.user_1_address)
-        self.ledger.move(100_000_000, asset_id=TINY_ASSET_ID, sender=self.ledger.assets[TINY_ASSET_ID]["creator"], receiver=self.user_2_address)
-        self.ledger.move(100_000_000, asset_id=TINY_ASSET_ID, sender=self.ledger.assets[TINY_ASSET_ID]["creator"], receiver=self.user_3_address)
-    
-    def setScene(self):
-        block_datetime = datetime(year=2022, month=3, day=1, hour=1, tzinfo=ZoneInfo("UTC"))
-        block_timestamp = int(block_datetime.timestamp())
-        last_checkpoint_timestamp = block_timestamp - 10
-
-        self.create_vault_app(self.app_creator_address)
-        self.init_vault_app(timestamp=last_checkpoint_timestamp)
-
-        # User events in chronological order
-        current_timestamp = last_checkpoint_timestamp
-        self.user_lock_start_timestamp = current_timestamp + WEEK
-        self.user_lock_end_timestamp = get_start_timestamp_of_week(self.user_lock_start_timestamp) + WEEK + 4 * WEEK
-        self.user_locked_amount = 20_000_000
-        self.create_lock(self.user_address, self.user_sk, self.user_locked_amount, self.user_lock_start_timestamp, self.user_lock_end_timestamp)
-
-        self.user_1_lock_start_timestamp = self.user_lock_start_timestamp + DAY // 2
-        self.user_1_lock_end_timestamp = get_start_timestamp_of_week(self.user_1_lock_start_timestamp) + WEEK + 6 * WEEK
-        self.user_1_locked_amount = 30_000_000
-        self.create_lock(self.user_1_address, self.user_1_sk, self.user_1_locked_amount, self.user_1_lock_start_timestamp, self.user_1_lock_end_timestamp)
-
-        self.user_2_lock_start_timestamp = self.user_1_lock_start_timestamp
-        self.user_2_lock_end_timestamp = self.user_1_lock_end_timestamp + 2 * WEEK
-        self.user_2_locked_amount = 40_000_000
-        self.create_lock(self.user_2_address, self.user_2_sk, self.user_2_locked_amount, self.user_2_lock_start_timestamp, self.user_2_lock_end_timestamp)
-
-        self.user_3_lock_start_timestamp = get_start_timestamp_of_week(self.user_2_lock_start_timestamp) + WEEK
-        self.user_3_lock_end_timestamp = self.user_3_lock_start_timestamp + WEEK + 8 * WEEK
-        self.user_3_locked_amount = 30_000_137
-        self.create_lock(self.user_3_address, self.user_3_sk, self.user_3_locked_amount, self.user_3_lock_start_timestamp, self.user_3_lock_end_timestamp)
-
-        self.user_extend_txn_1_timestamp = self.user_lock_start_timestamp + WEEK + DAY // 3
-        self.user_extend_1_new_lock_end_timestamp = self.user_lock_end_timestamp + 4 * WEEK
-        self.extend_lock_end_time(self.user_address, self.user_sk, self.user_extend_txn_1_timestamp, self.user_extend_1_new_lock_end_timestamp)
-
-        self.user_1_increase_txn_1_timestamp = self.user_1_lock_start_timestamp + WEEK + DAY // 2  # user + week + day
-        self.user_1_increase_1_amount = 10_000_000
-        self.increase_lock_amount(self.user_1_address, self.user_1_sk, self.user_1_increase_1_amount, self.user_1_increase_txn_1_timestamp)
-
-        self.user_2_extend_txn_1_timestamp = self.user_2_lock_start_timestamp + WEEK + DAY
-        self.user_2_extend_1_new_lock_end_timestamp = self.user_2_lock_end_timestamp + 5 * WEEK
-        self.extend_lock_end_time(self.user_2_address, self.user_2_sk, self.user_2_extend_txn_1_timestamp, self.user_2_extend_1_new_lock_end_timestamp)
-
-        self.user_2_increase_txn_1_timestamp = self.user_2_extend_txn_1_timestamp
-        self.user_2_increase_1_amount = 10_000_123
-        self.increase_lock_amount(self.user_2_address, self.user_2_sk, self.user_2_increase_1_amount, self.user_2_increase_txn_1_timestamp)
-
-        self.user_2_increase_txn_2_timestamp = self.user_2_extend_txn_1_timestamp + DAY
-        self.user_2_increase_2_amount = 10_000_001
-        self.increase_lock_amount(self.user_2_address, self.user_2_sk, self.user_2_increase_2_amount, self.user_2_increase_txn_2_timestamp)
-
-        self.latest_timestamp = self.user_2_increase_txn_2_timestamp
-
+class PowerMethodsTestCase(VaultBaseTestCase):
     def test_get_tiny_power_of_before_lock(self):
         block_datetime = datetime(year=2022, month=3, day=1, hour=1, tzinfo=ZoneInfo("UTC"))
         block_timestamp = int(block_datetime.timestamp())
@@ -3655,30 +3705,7 @@ class PowerMethodsTestCase(VaultAppMixin, BaseTestCase):
         block = self.ledger.eval_transactions(txn_group.signed_transactions, block_timestamp=block_timestamp)
         self.assertEqual(bytes_to_int(block[b'txns'][0][b'dt'][b'lg'][-1][4:]), __total_cumulative_power)
 
-class UtilityMethodsTestCase(VaultAppMixin, BaseTestCase):
-
-    @classmethod
-    def setUpClass(cls) -> None:
-        super().setUpClass()
-        cls.app_creator_sk, cls.app_creator_address = generate_account()
-        cls.user_sk, cls.user_address = generate_account()
-        cls.user_1_sk, cls.user_1_address = generate_account()
-        cls.user_2_sk, cls.user_2_address = generate_account()
-        cls.user_3_sk, cls.user_3_address = generate_account()
-
-    def setUp(self):
-        super().setUp()
-        self.ledger.set_account_balance(self.app_creator_address, 1_000_000)
-        self.ledger.set_account_balance(self.user_address, 100_000_000)
-        self.ledger.set_account_balance(self.user_1_address, 100_000_000)
-        self.ledger.set_account_balance(self.user_2_address, 100_000_000)
-        self.ledger.set_account_balance(self.user_3_address, 100_000_000)
-
-        self.ledger.move(100_000_000, asset_id=TINY_ASSET_ID, sender=self.ledger.assets[TINY_ASSET_ID]["creator"], receiver=self.user_address)
-        self.ledger.move(100_000_000, asset_id=TINY_ASSET_ID, sender=self.ledger.assets[TINY_ASSET_ID]["creator"], receiver=self.user_1_address)
-        self.ledger.move(100_000_000, asset_id=TINY_ASSET_ID, sender=self.ledger.assets[TINY_ASSET_ID]["creator"], receiver=self.user_2_address)
-        self.ledger.move(100_000_000, asset_id=TINY_ASSET_ID, sender=self.ledger.assets[TINY_ASSET_ID]["creator"], receiver=self.user_3_address)
-
+class UtilityMethodsTestCase(VaultBaseTestCase):
     def test_create_checkpoints(self):
         block_datetime = datetime(year=2022, month=3, day=1, hour=1, tzinfo=ZoneInfo("UTC"))
         block_timestamp = int(block_datetime.timestamp())
@@ -3830,10 +3857,9 @@ class UtilityMethodsTestCase(VaultAppMixin, BaseTestCase):
         self.ledger.move(amount=amount * 100, asset_id=TINY_ASSET_ID, sender=self.ledger.assets[TINY_ASSET_ID]["creator"], receiver=self.user_address)
         for _ in range(100):
             block_timestamp += DAY
-            if block_timestamp > lock_end_timestamp:
-                break
             self.increase_lock_amount(self.user_address, self.user_sk, amount, block_timestamp)
 
+        # Withdraw
         block_timestamp = lock_end_timestamp + 1
         txn_group = prepare_withdraw_transactions(
             vault_app_id=VAULT_APP_ID,
@@ -3847,6 +3873,7 @@ class UtilityMethodsTestCase(VaultAppMixin, BaseTestCase):
         self.ledger.eval_transactions(txn_group.signed_transactions, block_timestamp=block_timestamp)
         self.assertEqual(self.ledger.global_states[VAULT_APP_ID][TOTAL_LOCKED_AMOUNT_KEY], 0)
 
+        # Delete Single Account Power Box
         txn_group = prepare_delete_account_power_boxes_transactions(
             vault_app_id=VAULT_APP_ID,
             sender=self.user_address,
@@ -3854,6 +3881,7 @@ class UtilityMethodsTestCase(VaultAppMixin, BaseTestCase):
             box_count=1,
             suggested_params=self.sp,
         )
+
         txn_group.sign_with_private_key(self.user_address, self.user_sk)
         block = self.ledger.eval_transactions(txn_group.signed_transactions, block_timestamp=block_timestamp)
 
@@ -3875,6 +3903,7 @@ class UtilityMethodsTestCase(VaultAppMixin, BaseTestCase):
         self.assertEqual(len(inner_txns), 1)
         self.assertEqual(inner_txns[0][b'txn'][b'amt'], ACCOUNT_POWER_BOX_COST)  # Assert that the account power box cost is sent back to user.
 
+        # Delete Multiple Account Power Boxes at once
         txn_group = prepare_delete_account_power_boxes_transactions(
             vault_app_id=VAULT_APP_ID,
             sender=self.user_address,
@@ -3903,11 +3932,11 @@ class UtilityMethodsTestCase(VaultAppMixin, BaseTestCase):
             events[2],
             {'event_name': 'delete_account_power_boxes', 'user_address': self.user_address, 'box_index_start': 1, 'box_count': 2}
         )
-        
+
         self.assertEqual(len(inner_txns), 1)
         self.assertEqual(inner_txns[0][b'txn'][b'amt'], 2 * ACCOUNT_POWER_BOX_COST)
 
-        # Delete all
+        # Delete all remaining account power boxes (except the last one)
         txn_group = prepare_delete_account_state_transactions(
             vault_app_id=VAULT_APP_ID,
             sender=self.user_address,
@@ -3922,7 +3951,7 @@ class UtilityMethodsTestCase(VaultAppMixin, BaseTestCase):
 
         logs = app_call_txn[b'dt'][b'lg']
         events = decode_logs(logs, events=vault_events)
-        self.assertEqual(len(events), 6)
+        self.assertEqual(len(events), 4)  # 1 for lock, 100 for increase, 1 for withdraw. 2 boxes to delete
         self.assertEqual(
             events[0],
             {'event_name': 'box_del', 'box_name': list(get_account_power_box_name(address=self.user_address, box_index=3))}
@@ -3933,23 +3962,14 @@ class UtilityMethodsTestCase(VaultAppMixin, BaseTestCase):
         )
         self.assertEqual(
             events[2],
-            {'event_name': 'box_del', 'box_name': list(get_account_power_box_name(address=self.user_address, box_index=5))}
-        )
-        self.assertEqual(
-            events[3],
-            {'event_name': 'box_del', 'box_name': list(get_account_power_box_name(address=self.user_address, box_index=6))}
-        )
-        self.assertEqual(
-            events[4],
             {'event_name': 'box_del', 'box_name': list(get_account_state_box_name(address=self.user_address))}
         )
         self.assertEqual(
-            events[5],
-            {'event_name': 'delete_account_state', 'user_address': self.user_address, 'box_index_start': 4, 'box_count': 4}
+            events[3],
+            {'event_name': 'delete_account_state', 'user_address': self.user_address, 'box_index_start': 4, 'box_count': 2}
         )
         self.assertEqual(len(inner_txns), 1)
-        self.assertEqual(inner_txns[0][b'txn'][b'amt'], 4 * ACCOUNT_POWER_BOX_COST + ACCOUNT_STATE_BOX_COST)
-
+        self.assertEqual(inner_txns[0][b'txn'][b'amt'], 2 * ACCOUNT_POWER_BOX_COST + ACCOUNT_STATE_BOX_COST)
 
     def test_get_box(self):
         block_datetime = datetime(year=2022, month=3, day=1, hour=1, tzinfo=ZoneInfo("UTC"))
@@ -4003,308 +4023,3 @@ class UtilityMethodsTestCase(VaultAppMixin, BaseTestCase):
         expected = get_account_state(self.ledger, self.user_address)
         retrieved = parse_box_account_state(box_data)
         self.assertEqual(expected, retrieved)
-
-    def test_get_cumulative_power_of_at(self):
-        block_datetime = datetime(year=2022, month=3, day=1, hour=1, tzinfo=ZoneInfo("UTC"))
-        block_timestamp = int(block_datetime.timestamp())
-        last_checkpoint_timestamp = block_timestamp - 10
-
-        self.create_vault_app(self.app_creator_address)
-        self.init_vault_app(timestamp=last_checkpoint_timestamp)
-
-        # Create lock
-        lock_start_timestamp = block_timestamp
-        lock_end_timestamp = get_start_timestamp_of_week(block_timestamp + 6 * WEEK)
-        lock_duration = int(lock_end_timestamp - lock_start_timestamp)
-        amount = 10_000_000
-        self.ledger.move(
-            amount * 200,
-            asset_id=TINY_ASSET_ID,
-            sender=self.ledger.assets[TINY_ASSET_ID]["creator"],
-            receiver=self.user_address
-        )
-
-        with unittest.mock.patch("time.time", return_value=lock_start_timestamp):
-            txn_group = prepare_create_lock_transactions(
-                vault_app_id=VAULT_APP_ID,
-                tiny_asset_id=TINY_ASSET_ID,
-                sender=self.user_address,
-                locked_amount=amount,
-                lock_end_time=lock_end_timestamp,
-                vault_app_global_state=get_vault_app_global_state(self.ledger),
-                account_state=get_account_state(self.ledger, self.user_address),
-                slope_change_at_lock_end_time=get_slope_change_at(self.ledger, lock_end_timestamp),
-                suggested_params=self.sp,
-            )
-        txn_group.sign_with_private_key(self.user_address, self.user_sk)
-        block = self.ledger.eval_transactions(txn_group.signed_transactions, block_timestamp=lock_start_timestamp)
-
-        # Get the cumulative power before the lock
-        txn_group = prepare_get_cumulative_power_of_at_transactions(
-            vault_app_id=VAULT_APP_ID,
-            sender=self.user_address,
-            user_address=self.user_address,
-            user_account_powers=get_account_powers(self.ledger, self.user_address),
-            timestamp=lock_start_timestamp - WEEK,
-            suggested_params=self.sp,
-        )
-        txn_group.sign_with_private_key(self.user_address, self.user_sk)
-        block = self.ledger.eval_transactions(txn_group.signed_transactions, block_timestamp=lock_start_timestamp + WEEK)
-
-        user_cumulative_power = bytes_to_int(block[b'txns'][0][b'dt'][b'lg'][-1][4:])
-
-        self.assertEqual(user_cumulative_power, 0)
-
-        # Get cumulative power at the end of the lock
-        txn_group = prepare_get_cumulative_power_of_at_transactions(
-            vault_app_id=VAULT_APP_ID,
-            sender=self.user_address,
-            user_address=self.user_address,
-            user_account_powers=get_account_powers(self.ledger, self.user_address),
-            timestamp=lock_end_timestamp + 1,
-            suggested_params=self.sp,
-        )
-        txn_group.sign_with_private_key(self.user_address, self.user_sk)
-        block = self.ledger.eval_transactions(txn_group.signed_transactions, block_timestamp=lock_end_timestamp + WEEK)
-
-        user_cumulative_power = bytes_to_int(block[b'txns'][0][b'dt'][b'lg'][-1][4:])
-
-        bias = get_bias(get_slope(amount), lock_duration)
-        slope = get_slope(amount)
-        self.assertEqual(user_cumulative_power, get_cumulative_power_2(bias, slope))  # Cumulative power from start of lock to end of lock.
-
-    def test_get_total_cumulative_power_at(self):
-        block_datetime = datetime(year=2022, month=3, day=1, hour=1, tzinfo=ZoneInfo("UTC"))
-        block_timestamp = int(block_datetime.timestamp())
-        last_checkpoint_timestamp = block_timestamp - 10
-
-        self.create_vault_app(self.app_creator_address)
-        self.init_vault_app(timestamp=last_checkpoint_timestamp)
-
-        # Create lock
-        lock_start_timestamp = block_timestamp
-        lock_end_timestamp = get_start_timestamp_of_week(block_timestamp + 6 * WEEK)
-        lock_duration = int(lock_end_timestamp - lock_start_timestamp)
-        amount = 10_000_000
-        self.ledger.move(
-            amount * 200,
-            asset_id=TINY_ASSET_ID,
-            sender=self.ledger.assets[TINY_ASSET_ID]["creator"],
-            receiver=self.user_address
-        )
-
-        with unittest.mock.patch("time.time", return_value=lock_start_timestamp):
-            txn_group = prepare_create_lock_transactions(
-                vault_app_id=VAULT_APP_ID,
-                tiny_asset_id=TINY_ASSET_ID,
-                sender=self.user_address,
-                locked_amount=amount,
-                lock_end_time=lock_end_timestamp,
-                vault_app_global_state=get_vault_app_global_state(self.ledger),
-                account_state=get_account_state(self.ledger, self.user_address),
-                slope_change_at_lock_end_time=get_slope_change_at(self.ledger, lock_end_timestamp),
-                suggested_params=self.sp,
-            )
-        txn_group.sign_with_private_key(self.user_address, self.user_sk)
-        block = self.ledger.eval_transactions(txn_group.signed_transactions, block_timestamp=lock_start_timestamp)
-
-        # Get the cumulative power before the lock
-        txn_group = prepare_get_total_cumulative_power_at_transactions(
-            vault_app_id=VAULT_APP_ID,
-            sender=self.user_address,
-            total_powers=get_all_total_powers(self.ledger, get_vault_app_global_state(self.ledger).total_power_count),
-            timestamp=lock_start_timestamp - WEEK,
-            suggested_params=self.sp,
-        )
-        txn_group.sign_with_private_key(self.user_address, self.user_sk)
-        block = self.ledger.eval_transactions(txn_group.signed_transactions, block_timestamp=lock_start_timestamp + WEEK)
-
-        total_cumulative_power = bytes_to_int(block[b'txns'][0][b'dt'][b'lg'][-1][4:])
-
-        self.assertEqual(total_cumulative_power, 0)
-
-        # Get total cumulative power at the end of the lock
-        self.create_checkpoints(self.user_address, self.user_sk, lock_end_timestamp + WEEK)
-
-        txn_group = prepare_get_total_cumulative_power_at_transactions(
-            vault_app_id=VAULT_APP_ID,
-            sender=self.user_address,
-            total_powers=get_all_total_powers(self.ledger, get_vault_app_global_state(self.ledger).total_power_count),
-            timestamp=lock_end_timestamp + WEEK,
-            suggested_params=self.sp,
-        )
-        txn_group.sign_with_private_key(self.user_address, self.user_sk)
-        block = self.ledger.eval_transactions(txn_group.signed_transactions, block_timestamp=lock_end_timestamp + WEEK)
-
-        total_cumulative_power = bytes_to_int(block[b'txns'][0][b'dt'][b'lg'][-1][4:])
-
-        total_power_index = get_power_index_at(get_all_total_powers(self.ledger, get_vault_app_global_state(self.ledger).total_power_count), lock_end_timestamp)
-        total_power_at_end = get_all_total_powers(self.ledger, get_vault_app_global_state(self.ledger).total_power_count)[total_power_index]
-
-        _total_cumulative_power = total_power_at_end.cumulative_power + get_cumulative_power_delta(bias=total_power_at_end.bias, slope=total_power_at_end.slope, time_delta=lock_end_timestamp - total_power_at_end.timestamp)
-        self.assertEqual(total_cumulative_power, _total_cumulative_power)
-        self.assertEqual(total_power_at_end.cumulative_power, _total_cumulative_power)
-
-        # Assert the total cumulative power from start of lock to end of lock
-        total_powers = get_all_total_powers(self.ledger, get_vault_app_global_state(self.ledger).total_power_count)
-        for i in range(1, total_power_index):
-            delta = get_cumulative_power_delta(bias=total_powers[i].bias, slope=total_powers[i].slope, time_delta=total_powers[i + 1].timestamp - total_powers[i].timestamp) 
-            _total_cumulative_power = total_powers[i].cumulative_power + delta
-            self.assertEqual(total_powers[i + 1].cumulative_power, _total_cumulative_power)
-
-
-class CreateInitVaultTestCase(VaultAppMixin, BaseTestCase):
-
-    @classmethod
-    def setUpClass(cls) -> None:
-        super().setUpClass()
-        cls.app_creator_sk, cls.app_creator_address = generate_account()
-        cls.user_sk, cls.user_address = generate_account()
-        cls.user_2_sk, cls.user_2_address = generate_account()
-        cls.user_3_sk, cls.user_3_address = generate_account()
-
-    def setUp(self):
-        super().setUp()
-        self.ledger.set_account_balance(self.app_creator_address, 1_000_000)
-        self.ledger.set_account_balance(self.user_address, 100_000_000)
-        self.ledger.set_account_balance(self.user_2_address, 100_000_000)
-        self.ledger.set_account_balance(self.user_3_address, 100_000_000)
-
-    def test_create_app(self):
-        block_datetime = datetime(year=2022, month=3, day=1, tzinfo=ZoneInfo("UTC"))
-        block_timestamp = int(block_datetime.timestamp())
-        
-        txn_group = TransactionGroup([
-            transaction.ApplicationCreateTxn(
-                sender=self.app_creator_address,
-                sp=self.sp,
-                on_complete=transaction.OnComplete.NoOpOC,
-                approval_program=vault_approval_program.bytecode,
-                clear_program=vault_clear_state_program.bytecode,
-                global_schema=transaction.StateSchema(num_uints=4, num_byte_slices=0),
-                local_schema=transaction.StateSchema(num_uints=0, num_byte_slices=0),
-                extra_pages=3,
-                app_args=["create_application", TINY_ASSET_ID],
-            )
-        ])
-        txn_group.sign_with_private_key(self.app_creator_address, self.app_creator_sk)
-        block = self.ledger.eval_transactions(txn_group.signed_transactions, block_timestamp=block_timestamp)
-        app_id = block[b"txns"][0][b"apid"]
-
-        # Global state
-        vault_app_global_state = get_vault_app_global_state(self.ledger, app_id)
-        self.assertEqual(
-            vault_app_global_state,
-            VaultAppGlobalState(
-                tiny_asset_id=TINY_ASSET_ID,
-                total_locked_amount=0,
-                total_power_count=0,
-                last_total_power_timestamp=0
-            )
-        )
-
-    def test_init_app(self):
-        self.create_vault_app(self.app_creator_address)
-
-        block_datetime = datetime(year=2022, month=3, day=1, hour=1, tzinfo=ZoneInfo("UTC"))
-        block_timestamp = int(block_datetime.timestamp())
-        
-        # Init app
-        txn_group = prepare_init_transactions(
-            vault_app_id=VAULT_APP_ID,
-            tiny_asset_id=TINY_ASSET_ID,
-            sender=self.user_address,
-            suggested_params=self.sp
-        )
-        txn_group.sign_with_private_key(self.user_address, self.user_sk)
-        block = self.ledger.eval_transactions(txn_group.signed_transactions, block_timestamp=int(block_datetime.timestamp()))
-        
-        # Global state
-        vault_app_global_state = get_vault_app_global_state(self.ledger, VAULT_APP_ID)
-        self.assertEqual(vault_app_global_state.total_power_count, 1)
-        self.assertEqual(vault_app_global_state.last_total_power_timestamp, block_timestamp)
-        
-        # Opt-in TINY
-        app_call_txn = get_first_app_call_txn(block[b'txns'])
-        opt_in_inner_txn = app_call_txn[b'dt'][b'itx'][0][b'txn']
-        self.assertDictEqual(
-            opt_in_inner_txn,
-            {
-                b'arcv': decode_address(get_application_address(VAULT_APP_ID)),
-                b'fv': ANY,
-                b'lv': ANY,
-                b'snd': decode_address(get_application_address(VAULT_APP_ID)),
-                b'type': b'axfer',
-                b'xaid': TINY_ASSET_ID
-            }
-        )
-        
-        # Assert Logs
-        logs = app_call_txn[b'dt'][b'lg']
-        events = decode_logs(logs, events=vault_events)
-
-        self.assertEqual(len(events), 2)
-        self.assertDictEqual(
-            events[0],
-            {
-                'event_name': 'total_power',
-                'index': 0,
-                'bias': 0,
-                'timestamp': block_timestamp,
-                'slope': 0,
-                'cumulative_power': 0
-            }
-        )
-        self.assertDictEqual(
-            events[1],
-            {
-                'event_name': 'init',
-            }
-        )
-
-        # Assert Boxes
-        total_powers = parse_box_total_power(self.ledger.boxes[VAULT_APP_ID][get_total_power_box_name(box_index=0)])
-        self.assertEqual(len(total_powers), 1)
-
-        total_power = total_powers[0]
-        self.assertEqual(
-            total_power,
-            TotalPower(
-                bias=0,
-                slope=0,
-                cumulative_power=0,
-                timestamp=block_timestamp
-            )
-        )
-
-        # Calling init again more than one time should fail.
-        txn_group = prepare_init_transactions(
-            vault_app_id=VAULT_APP_ID,
-            tiny_asset_id=TINY_ASSET_ID,
-            sender=self.user_address,
-            suggested_params=self.sp
-        )
-        txn_group.sign_with_private_key(self.user_address, self.user_sk)
-        with self.assertRaises(Exception):
-            self.ledger.eval_transactions(txn_group.signed_transactions, block_timestamp=int(block_datetime.timestamp()))
-
-    def test_budget_increase(self):
-        self.create_vault_app(self.app_creator_address)
-
-        block_datetime = datetime(year=2022, month=3, day=1, hour=1, tzinfo=ZoneInfo("UTC"))
-        block_timestamp = int(block_datetime.timestamp())
-
-        self.init_vault_app(timestamp=block_timestamp)
-        block_timestamp =+ 10
-
-        txn_group = TransactionGroup(
-            [
-                _prepare_budget_increase_transaction(
-                    sender=self.user_address,
-                    sp=self.sp,
-                    index=VAULT_APP_ID,
-                )
-            ]
-        )
-        txn_group.sign_with_private_key(self.user_address, self.user_sk)
-        self.ledger.eval_transactions(txn_group.signed_transactions, block_timestamp=block_timestamp)
