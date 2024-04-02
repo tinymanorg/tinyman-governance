@@ -15,8 +15,8 @@
 
 // 7 * DAY
 #define WEEK 604800
-// 4 * 365 * DAY
-#define MAX_LOCK_TIME 126144000
+// 4 * 52 * WEEK
+#define MAX_LOCK_TIME 125798400
 #define MIN_LOCK_AMOUNT 10000000
 #define MIN_LOCK_AMOUNT_INCREMENT 10000000
 #define TWO_TO_THE_64 "\x01\x00\x00\x00\x00\x00\x00\x00\x00"
@@ -95,7 +95,7 @@ route_create_checkpoints:
     pushint 1; return
 route_get_tiny_power_of:
     txn OnCompletion; pushint 0; ==; assert                 // assert OnCompletion == NoOp
-    txna ApplicationArgs 1
+    txna ApplicationArgs 1; dup; len; pushint 32; ==; assert// Bytes Size Assertion: 32 bytes
     callsub __func__get_tiny_power_of
     // return int
     // uncover 0 int
@@ -104,7 +104,7 @@ route_get_tiny_power_of:
     pushint 1; return
 route_get_tiny_power_of_at:
     txn OnCompletion; pushint 0; ==; assert                 // assert OnCompletion == NoOp
-    txna ApplicationArgs 1
+    txna ApplicationArgs 1; dup; len; pushint 32; ==; assert// Bytes Size Assertion: 32 bytes
     txna ApplicationArgs 2; btoi 
     txna ApplicationArgs 3; btoi 
     callsub __func__get_tiny_power_of_at
@@ -133,7 +133,7 @@ route_get_total_tiny_power_at:
     pushint 1; return
 route_get_cumulative_power_of_at:
     txn OnCompletion; pushint 0; ==; assert                 // assert OnCompletion == NoOp
-    txna ApplicationArgs 1
+    txna ApplicationArgs 1; dup; len; pushint 32; ==; assert// Bytes Size Assertion: 32 bytes
     txna ApplicationArgs 2; btoi 
     txna ApplicationArgs 3; btoi 
     callsub __func__get_cumulative_power_of_at
@@ -152,7 +152,7 @@ route_get_total_cumulative_power_at:
     pushint 1; return
 route_get_account_cumulative_power_delta:
     txn OnCompletion; pushint 0; ==; assert                 // assert OnCompletion == NoOp
-    txna ApplicationArgs 1
+    txna ApplicationArgs 1; dup; len; pushint 32; ==; assert// Bytes Size Assertion: 32 bytes
     txna ApplicationArgs 2; btoi 
     txna ApplicationArgs 3; btoi 
     txna ApplicationArgs 4; btoi 
@@ -241,7 +241,7 @@ __func__init:
     app_global_get
     !
     assert
-    // tl:109: bytes total_power = construct_total_power(0, Global.LatestTimestamp, bzero(16), bzero(16)) [slot 2]
+    // tl:109: TotalPower total_power = construct_total_power(0, Global.LatestTimestamp, bzero(16), bzero(16)) [slot 2]
     pushint 0
     global LatestTimestamp
     pushint 16
@@ -255,13 +255,11 @@ __func__init:
     callsub __func__save_total_power
     
     // opt-in to TINY
-    // tl:113: transfer(app_global_get(TINY_ASSET_ID_KEY), 0, Global.CurrentApplicationAddress, Global.CurrentApplicationAddress)
-    pushbytes TINY_ASSET_ID_KEY                             // "tiny_asset_id"
-    app_global_get
+    // tl:113: tiny_transfer(0, Global.CurrentApplicationAddress, Global.CurrentApplicationAddress)
     pushint 0
     global CurrentApplicationAddress
     global CurrentApplicationAddress
-    callsub __func__transfer
+    callsub __func__tiny_transfer
     // tl:114: log(method("init()"))
     method "init()"
     log
@@ -270,12 +268,12 @@ __func__init:
 
 // tl:119: func create_checkpoints():
 __func__create_checkpoints:
-    // tl:120: create_checkpoints_(0, bzero(16), 0)
+    // tl:120: create_checkpoints_internal(0, bzero(16), 0)
     pushint 0
     pushint 16
     bzero
     pushint 0
-    callsub __func__create_checkpoints_
+    callsub __func__create_checkpoints_internal
     // tl:121: log(method("create_checkpoints()"))
     method "create_checkpoints()"
     log
@@ -289,7 +287,7 @@ __func__create_lock:
     // 1) Accounts which have never had a token lock before.
     // 2) Accounts that have previously withdrawn their locked token amount.
     
-    // tl:131: bytes user_address = Txn.Sender [slot 4]
+    // tl:131: bytes[32] user_address = Txn.Sender [slot 4]
     txn Sender
     store 4                                                 // user_address
     // tl:132: int amount = get_received_tiny_amount() [slot 5]
@@ -319,7 +317,7 @@ __func__create_lock:
     // tl:137: assert(lock_end_time <= (Global.LatestTimestamp + MAX_LOCK_TIME))
     load 3                                                  // lock_end_time
     global LatestTimestamp
-    pushint MAX_LOCK_TIME                                   // 126144000
+    pushint MAX_LOCK_TIME                                   // 125798400
     +
     <=
     assert
@@ -397,7 +395,7 @@ __func__create_lock:
     l0_end:
     
     // Crate a new account power
-    // tl:168: bytes account_power = construct_account_power(bias, Global.LatestTimestamp, slope, cumulative_power) [slot 12]
+    // tl:168: AccountPower account_power = construct_account_power(bias, Global.LatestTimestamp, slope, cumulative_power) [slot 12]
     load 9                                                  // bias
     global LatestTimestamp
     load 8                                                  // slope
@@ -410,11 +408,11 @@ __func__create_lock:
     load 12                                                 // account_power
     callsub __func__save_account_power
     
-    // tl:171: create_checkpoints_(bias, slope, 1)
+    // tl:171: create_checkpoints_internal(bias, slope, 1)
     load 9                                                  // bias
     load 8                                                  // slope
     pushint 1
-    callsub __func__create_checkpoints_
+    callsub __func__create_checkpoints_internal
     // tl:172: update_or_create_slope_change(lock_end_time, slope)
     load 3                                                  // lock_end_time
     load 8                                                  // slope
@@ -441,7 +439,7 @@ __func__create_lock:
 __func__increase_lock_amount:
     // This method enables users to increase their currently locked token amount before the lock expiration time.
     
-    // tl:184: bytes user_address = Txn.Sender [slot 13]
+    // tl:184: bytes[32] user_address = Txn.Sender [slot 13]
     txn Sender
     store 13                                                // user_address
     // tl:185: int amount = get_received_tiny_amount() [slot 14]
@@ -550,7 +548,7 @@ __func__increase_lock_amount:
     store 28                                                // cumulative_power
     
     // Crate a new account power
-    // tl:219: bytes account_power = construct_account_power(new_bias, Global.LatestTimestamp, new_locked_amount_slope, cumulative_power) [slot 29]
+    // tl:219: AccountPower account_power = construct_account_power(new_bias, Global.LatestTimestamp, new_locked_amount_slope, cumulative_power) [slot 29]
     load 24                                                 // new_bias
     global LatestTimestamp
     load 21                                                 // new_locked_amount_slope
@@ -563,11 +561,11 @@ __func__increase_lock_amount:
     load 29                                                 // account_power
     callsub __func__save_account_power
     
-    // tl:222: create_checkpoints_(bias_delta, slope_delta, 1)
+    // tl:222: create_checkpoints_internal(bias_delta, slope_delta, 1)
     load 25                                                 // bias_delta
     load 22                                                 // slope_delta
     pushint 1
-    callsub __func__create_checkpoints_
+    callsub __func__create_checkpoints_internal
     // tl:223: update_or_create_slope_change(lock_end_time, slope_delta)
     load 16                                                 // lock_end_time
     load 22                                                 // slope_delta
@@ -598,7 +596,7 @@ __func__extend_lock_end_time:
     store 30                                                // new_lock_end_time [int]
     // This method enables users to extend remaining lock duration.
     
-    // tl:235: bytes user_address = Txn.Sender [slot 31]
+    // tl:235: bytes[32] user_address = Txn.Sender [slot 31]
     txn Sender
     store 31                                                // user_address
     
@@ -624,7 +622,7 @@ __func__extend_lock_end_time:
     // tl:242: assert(new_lock_end_time <= (Global.LatestTimestamp + MAX_LOCK_TIME))
     load 30                                                 // new_lock_end_time
     global LatestTimestamp
-    pushint MAX_LOCK_TIME                                   // 126144000
+    pushint MAX_LOCK_TIME                                   // 125798400
     +
     <=
     assert
@@ -699,7 +697,7 @@ __func__extend_lock_end_time:
     store 41                                                // cumulative_power
     
     // Create AccountPower
-    // tl:262: bytes account_power = construct_account_power(new_bias, Global.LatestTimestamp, slope, cumulative_power) [slot 42]
+    // tl:262: AccountPower account_power = construct_account_power(new_bias, Global.LatestTimestamp, slope, cumulative_power) [slot 42]
     load 37                                                 // new_bias
     global LatestTimestamp
     load 35                                                 // slope
@@ -712,12 +710,12 @@ __func__extend_lock_end_time:
     load 42                                                 // account_power
     callsub __func__save_account_power
     
-    // tl:265: create_checkpoints_(bias_delta, bzero(16), 1)
+    // tl:265: create_checkpoints_internal(bias_delta, bzero(16), 1)
     load 38                                                 // bias_delta
     pushint 16
     bzero
     pushint 1
-    callsub __func__create_checkpoints_
+    callsub __func__create_checkpoints_internal
     // tl:266: revert_slope_change(current_lock_end_time, slope)
     load 33                                                 // current_lock_end_time
     load 35                                                 // slope
@@ -748,7 +746,7 @@ __func__extend_lock_end_time:
 
 // tl:275: func withdraw():
 __func__withdraw:
-    // tl:276: bytes user_address = Txn.Sender [slot 43]
+    // tl:276: bytes[32] user_address = Txn.Sender [slot 43]
     txn Sender
     store 43                                                // user_address
     
@@ -797,7 +795,7 @@ __func__withdraw:
     store 48                                                // cumulative_power
     
     // Create AccountPower
-    // tl:291: bytes account_power = construct_account_power(0, account_state.lock_end_time, bzero(16), cumulative_power) [slot 49]
+    // tl:291: AccountPower account_power = construct_account_power(0, account_state.lock_end_time, bzero(16), cumulative_power) [slot 49]
     pushint 0
     load 44; pushint 8; pushint 8; box_extract; btoi// account_state.lock_end_time
     pushint 16
@@ -811,13 +809,11 @@ __func__withdraw:
     load 49                                                 // account_power
     callsub __func__save_account_power
     
-    // tl:294: transfer(app_global_get(TINY_ASSET_ID_KEY), locked_amount, Global.CurrentApplicationAddress, user_address)
-    pushbytes TINY_ASSET_ID_KEY                             // "tiny_asset_id"
-    app_global_get
+    // tl:294: tiny_transfer(locked_amount, Global.CurrentApplicationAddress, user_address)
     load 45                                                 // locked_amount
     global CurrentApplicationAddress
     load 43                                                 // user_address
-    callsub __func__transfer
+    callsub __func__tiny_transfer
     // tl:295: decrease_total_locked_amount(locked_amount)
     load 45                                                 // locked_amount
     callsub __func__decrease_total_locked_amount
@@ -841,9 +837,9 @@ __func__withdraw:
     // tl:302: return
     retsub
 
-// tl:306: func get_tiny_power_of(user_address: bytes) int:
+// tl:306: func get_tiny_power_of(user_address: bytes[32]) int:
 __func__get_tiny_power_of:
-    store 50                                                // user_address [bytes]
+    store 50                                                // user_address [bytes[32]]
     // Current power can be calculated by using account state and account power.
     // The calculation is made using the account state to reduce required box references.
     // tl:309: int timestamp = Global.LatestTimestamp [slot 51]
@@ -893,11 +889,11 @@ __func__get_tiny_power_of:
     load 52                                                 // tiny_power
     retsub
 
-// tl:327: func get_tiny_power_of_at(user_address: bytes, timestamp: int, index: int) int:
+// tl:327: func get_tiny_power_of_at(user_address: bytes[32], timestamp: int, index: int) int:
 __func__get_tiny_power_of_at:
     store 57                                                // index [int]
     store 58                                                // timestamp [int]
-    store 59                                                // user_address [bytes]
+    store 59                                                // user_address [bytes[32]]
     // tl:328: int tiny_power = 0 [slot 60]
     pushint 0
     store 60                                                // tiny_power
@@ -1096,13 +1092,13 @@ __func__get_total_tiny_power_at:
     load 71                                                 // tiny_power
     retsub
 
-// tl:390: func get_account_cumulative_power_delta(user_address: bytes, timestamp_1: int, timestamp_2: int, account_power_index_1: int, account_power_index_2: int) bytes:
+// tl:390: func get_account_cumulative_power_delta(user_address: bytes[32], timestamp_1: int, timestamp_2: int, account_power_index_1: int, account_power_index_2: int) bytes:
 __func__get_account_cumulative_power_delta:
     store 74                                                // account_power_index_2 [int]
     store 75                                                // account_power_index_1 [int]
     store 76                                                // timestamp_2 [int]
     store 77                                                // timestamp_1 [int]
-    store 78                                                // user_address [bytes]
+    store 78                                                // user_address [bytes[32]]
     // tl:391: bytes account_cumulative_power_1 = get_cumulative_power_of_at(user_address, timestamp_1, account_power_index_1) [slot 79]
     load 78                                                 // user_address
     load 77                                                 // timestamp_1
@@ -1180,7 +1176,7 @@ __func__get_box:
 // tl:417: func delete_account_power_boxes(box_count: int):
 __func__delete_account_power_boxes:
     store 92                                                // box_count [int]
-    // tl:418: bytes user_address = Txn.Sender [slot 93]
+    // tl:418: bytes[32] user_address = Txn.Sender [slot 93]
     txn Sender
     store 93                                                // user_address
     
@@ -1250,12 +1246,11 @@ __func__delete_account_power_boxes:
         store 101                                           // i
         b l7_for
         l7_end:
-    // tl:436: transfer(0, min_balance_delta, Global.CurrentApplicationAddress, user_address)
-    pushint 0
+    // tl:436: algo_transfer(min_balance_delta, Global.CurrentApplicationAddress, user_address)
     load 100                                                // min_balance_delta
     global CurrentApplicationAddress
     load 93                                                 // user_address
-    callsub __func__transfer
+    callsub __func__algo_transfer
     
     // address, box_index_start, box_count
     // tl:439: log(Concat(method("delete_account_power_boxes(address,uint64,uint64)"), user_address, itob(box_index_start), itob(box_count)))
@@ -1274,7 +1269,7 @@ __func__delete_account_power_boxes:
 
 // tl:444: func delete_account_state():
 __func__delete_account_state:
-    // tl:445: bytes user_address = Txn.Sender [slot 102]
+    // tl:445: bytes[32] user_address = Txn.Sender [slot 102]
     txn Sender
     store 102                                               // user_address
     
@@ -1351,12 +1346,11 @@ __func__delete_account_state:
     callsub __func__delete_box
     +
     store 108                                               // min_balance_delta
-    // tl:469: transfer(0, min_balance_delta, Global.CurrentApplicationAddress, user_address)
-    pushint 0
+    // tl:469: algo_transfer(min_balance_delta, Global.CurrentApplicationAddress, user_address)
     load 108                                                // min_balance_delta
     global CurrentApplicationAddress
     load 102                                                // user_address
-    callsub __func__transfer
+    callsub __func__algo_transfer
     
     // address, box_index_start, box_count
     // tl:472: log(Concat(method("delete_account_state(address,uint64,uint64)"), user_address, itob((box_index + 1) - box_count), itob(box_count)))
@@ -1377,13 +1371,13 @@ __func__delete_account_state:
     // tl:473: return
     retsub
 
-// tl:476: func construct_account_power(bias: int, timestamp: int, slope: bytes, cumulative_power: bytes) bytes:
+// tl:476: func construct_account_power(bias: int, timestamp: int, slope: bytes, cumulative_power: bytes) AccountPower:
 __func__construct_account_power:
     store 109                                               // cumulative_power [bytes]
     store 110                                               // slope [bytes]
     store 111                                               // timestamp [int]
     store 112                                               // bias [int]
-    // tl:477: return Concat(itob(bias), itob(timestamp), (bzero(16) b| slope), (bzero(16) b| cumulative_power))
+    // tl:477: return Cast(Concat(itob(bias), itob(timestamp), (bzero(16) b| slope), (bzero(16) b| cumulative_power)), AccountPower)
     load 112                                                // bias
     itob
     load 111                                                // timestamp
@@ -1399,41 +1393,36 @@ __func__construct_account_power:
     concat
     concat
     concat
+    dup; len; pushint 48; ==; assert// Bytes Size Assertion: 48 bytes
     retsub
 
-// tl:480: func save_account_power(address: bytes, index: int, data: bytes):
+// tl:480: func save_account_power(address: bytes[32], index: int, data: AccountPower):
 __func__save_account_power:
-    store 113                                               // data [bytes]
+    store 113                                               // data [AccountPower[48]]
     store 114                                               // index [int]
-    store 115                                               // address [bytes]
-    // tl:481: assert(len(data) == ACCOUNT_POWER_SIZE)
-    load 113                                                // data
-    len
-    pushint ACCOUNT_POWER_SIZE                              // 48
-    ==
-    assert
-    // tl:482: int box_index = index / ACCOUNT_POWER_BOX_ARRAY_LEN [slot 116]
+    store 115                                               // address [bytes[32]]
+    // tl:481: int box_index = index / ACCOUNT_POWER_BOX_ARRAY_LEN [slot 116]
     load 114                                                // index
     pushint ACCOUNT_POWER_BOX_ARRAY_LEN                     // 21
     /
     store 116                                               // box_index
-    // tl:483: int array_index = index % ACCOUNT_POWER_BOX_ARRAY_LEN [slot 117]
+    // tl:482: int array_index = index % ACCOUNT_POWER_BOX_ARRAY_LEN [slot 117]
     load 114                                                // index
     pushint ACCOUNT_POWER_BOX_ARRAY_LEN                     // 21
     %
     store 117                                               // array_index
-    // tl:484: bytes box_name = Concat(address, itob(box_index)) [slot 118]
+    // tl:483: bytes box_name = Concat(address, itob(box_index)) [slot 118]
     load 115                                                // address
     load 116                                                // box_index
     itob
     concat
     store 118                                               // box_name
-    // tl:485: _ = box_create(box_name, ACCOUNT_POWER_BOX_SIZE)
+    // tl:484: _ = box_create(box_name, ACCOUNT_POWER_BOX_SIZE)
     load 118                                                // box_name
     pushint ACCOUNT_POWER_BOX_SIZE                          // 1008
     box_create
     pop                                                     // discarding value for _
-    // tl:486: box_replace(box_name, (array_index * ACCOUNT_POWER_SIZE), data)
+    // tl:485: box_replace(box_name, (array_index * ACCOUNT_POWER_SIZE), data)
     load 118                                                // box_name
     load 117                                                // array_index
     pushint ACCOUNT_POWER_SIZE                              // 48
@@ -1441,7 +1430,7 @@ __func__save_account_power:
     load 113                                                // data
     box_replace
     
-    // tl:488: log(Concat(method("account_power(address,uint64,uint64,uint64,uint128,uint128)"), address, itob(index), data))
+    // tl:487: log(Concat(method("account_power(address,uint64,uint64,uint64,uint128,uint128)"), address, itob(index), data))
     method "account_power(address,uint64,uint64,uint64,uint128,uint128)"
     load 115                                                // address
     load 114                                                // index
@@ -1451,30 +1440,30 @@ __func__save_account_power:
     concat
     concat
     log
-    // tl:489: return
+    // tl:488: return
     retsub
 
-// tl:492: func get_account_power(address: bytes, index: int) AccountPower:
+// tl:491: func get_account_power(address: bytes[32], index: int) AccountPower:
 __func__get_account_power:
     store 119                                               // index [int]
-    store 120                                               // address [bytes]
-    // tl:493: int box_index = index / ACCOUNT_POWER_BOX_ARRAY_LEN [slot 121]
+    store 120                                               // address [bytes[32]]
+    // tl:492: int box_index = index / ACCOUNT_POWER_BOX_ARRAY_LEN [slot 121]
     load 119                                                // index
     pushint ACCOUNT_POWER_BOX_ARRAY_LEN                     // 21
     /
     store 121                                               // box_index
-    // tl:494: int array_index = index % ACCOUNT_POWER_BOX_ARRAY_LEN [slot 122]
+    // tl:493: int array_index = index % ACCOUNT_POWER_BOX_ARRAY_LEN [slot 122]
     load 119                                                // index
     pushint ACCOUNT_POWER_BOX_ARRAY_LEN                     // 21
     %
     store 122                                               // array_index
-    // tl:495: bytes box_name = Concat(address, itob(box_index)) [slot 123]
+    // tl:494: bytes box_name = Concat(address, itob(box_index)) [slot 123]
     load 120                                                // address
     load 121                                                // box_index
     itob
     concat
     store 123                                               // box_name
-    // tl:496: return Cast(box_extract(box_name, (array_index * ACCOUNT_POWER_SIZE), ACCOUNT_POWER_SIZE), AccountPower)
+    // tl:495: return Cast(box_extract(box_name, (array_index * ACCOUNT_POWER_SIZE), ACCOUNT_POWER_SIZE), AccountPower)
     load 123                                                // box_name
     load 122                                                // array_index
     pushint ACCOUNT_POWER_SIZE                              // 48
@@ -1484,13 +1473,13 @@ __func__get_account_power:
     dup; len; pushint 48; ==; assert// Bytes Size Assertion: 48 bytes
     retsub
 
-// tl:499: func construct_total_power(bias: int, timestamp: int, slope: bytes, cumulative_power: bytes) bytes:
+// tl:498: func construct_total_power(bias: int, timestamp: int, slope: bytes, cumulative_power: bytes) TotalPower:
 __func__construct_total_power:
     store 124                                               // cumulative_power [bytes]
     store 125                                               // slope [bytes]
     store 126                                               // timestamp [int]
     store 127                                               // bias [int]
-    // tl:500: return Concat(itob(bias), itob(timestamp), (bzero(16) b| slope), (bzero(16) b| cumulative_power))
+    // tl:499: return Cast(Concat(itob(bias), itob(timestamp), (bzero(16) b| slope), (bzero(16) b| cumulative_power)), TotalPower)
     load 127                                                // bias
     itob
     load 126                                                // timestamp
@@ -1506,44 +1495,38 @@ __func__construct_total_power:
     concat
     concat
     concat
+    dup; len; pushint 48; ==; assert// Bytes Size Assertion: 48 bytes
     retsub
 
-// tl:503: func save_total_power(data: bytes):
+// tl:502: func save_total_power(data: TotalPower):
 __func__save_total_power:
-    store 128                                               // data [bytes]
-    // tl:504: int index = app_global_get(TOTAL_POWER_COUNT_KEY) [slot 129]
+    store 128                                               // data [TotalPower[48]]
+    // tl:503: int index = app_global_get(TOTAL_POWER_COUNT_KEY) [slot 129]
     pushbytes TOTAL_POWER_COUNT_KEY                         // "total_power_count"
     app_global_get
     store 129                                               // index
-    
-    // tl:506: assert(len(data) == TOTAL_POWER_SIZE)
-    load 128                                                // data
-    len
-    pushint TOTAL_POWER_SIZE                                // 48
-    ==
-    assert
-    // tl:507: int box_index = index / TOTAL_POWER_BOX_ARRAY_LEN [slot 130]
+    // tl:504: int box_index = index / TOTAL_POWER_BOX_ARRAY_LEN [slot 130]
     load 129                                                // index
     pushint TOTAL_POWER_BOX_ARRAY_LEN                       // 21
     /
     store 130                                               // box_index
-    // tl:508: int array_index = index % TOTAL_POWER_BOX_ARRAY_LEN [slot 131]
+    // tl:505: int array_index = index % TOTAL_POWER_BOX_ARRAY_LEN [slot 131]
     load 129                                                // index
     pushint TOTAL_POWER_BOX_ARRAY_LEN                       // 21
     %
     store 131                                               // array_index
-    // tl:509: bytes box_name = Concat(TOTAL_POWER_BOX_PREFIX, itob(box_index)) [slot 132]
+    // tl:506: bytes box_name = Concat(TOTAL_POWER_BOX_PREFIX, itob(box_index)) [slot 132]
     pushbytes TOTAL_POWER_BOX_PREFIX                        // "tp"
     load 130                                                // box_index
     itob
     concat
     store 132                                               // box_name
-    // tl:510: _ = box_create(box_name, TOTAL_POWER_BOX_SIZE)
+    // tl:507: _ = box_create(box_name, TOTAL_POWER_BOX_SIZE)
     load 132                                                // box_name
     pushint TOTAL_POWER_BOX_SIZE                            // 1008
     box_create
     pop                                                     // discarding value for _
-    // tl:511: box_replace(box_name, (array_index * TOTAL_POWER_SIZE), data)
+    // tl:508: box_replace(box_name, (array_index * TOTAL_POWER_SIZE), data)
     load 132                                                // box_name
     load 131                                                // array_index
     pushint TOTAL_POWER_SIZE                                // 48
@@ -1551,7 +1534,7 @@ __func__save_total_power:
     load 128                                                // data
     box_replace
     
-    // tl:513: log(Concat(method("total_power(uint64,uint64,uint64,uint128,uint128)"), itob(index), data))
+    // tl:510: log(Concat(method("total_power(uint64,uint64,uint64,uint128,uint128)"), itob(index), data))
     method "total_power(uint64,uint64,uint64,uint128,uint128)"
     load 129                                                // index
     itob
@@ -1559,41 +1542,41 @@ __func__save_total_power:
     concat
     concat
     log
-    // tl:514: app_global_put(TOTAL_POWER_COUNT_KEY, index + 1)
+    // tl:511: app_global_put(TOTAL_POWER_COUNT_KEY, index + 1)
     pushbytes TOTAL_POWER_COUNT_KEY                         // "total_power_count"
     load 129                                                // index
     pushint 1
     +
     app_global_put
-    // tl:515: app_global_put(LAST_TOTAL_POWER_TIMESTAMP, extract_uint64(data, 8))
+    // tl:512: app_global_put(LAST_TOTAL_POWER_TIMESTAMP, extract_uint64(data, 8))
     pushbytes LAST_TOTAL_POWER_TIMESTAMP                    // "last_total_power_timestamp"
     load 128                                                // data
     pushint 8
     extract_uint64
     app_global_put
-    // tl:516: return
+    // tl:513: return
     retsub
 
-// tl:519: func get_total_power(index: int) TotalPower:
+// tl:516: func get_total_power(index: int) TotalPower:
 __func__get_total_power:
     store 133                                               // index [int]
-    // tl:520: int box_index = index / TOTAL_POWER_BOX_ARRAY_LEN [slot 134]
+    // tl:517: int box_index = index / TOTAL_POWER_BOX_ARRAY_LEN [slot 134]
     load 133                                                // index
     pushint TOTAL_POWER_BOX_ARRAY_LEN                       // 21
     /
     store 134                                               // box_index
-    // tl:521: int array_index = index % TOTAL_POWER_BOX_ARRAY_LEN [slot 135]
+    // tl:518: int array_index = index % TOTAL_POWER_BOX_ARRAY_LEN [slot 135]
     load 133                                                // index
     pushint TOTAL_POWER_BOX_ARRAY_LEN                       // 21
     %
     store 135                                               // array_index
-    // tl:522: bytes box_name = Concat(TOTAL_POWER_BOX_PREFIX, itob(box_index)) [slot 136]
+    // tl:519: bytes box_name = Concat(TOTAL_POWER_BOX_PREFIX, itob(box_index)) [slot 136]
     pushbytes TOTAL_POWER_BOX_PREFIX                        // "tp"
     load 134                                                // box_index
     itob
     concat
     store 136                                               // box_name
-    // tl:523: return Cast(box_extract(box_name, (array_index * TOTAL_POWER_SIZE), TOTAL_POWER_SIZE), TotalPower)
+    // tl:520: return Cast(box_extract(box_name, (array_index * TOTAL_POWER_SIZE), TOTAL_POWER_SIZE), TotalPower)
     load 136                                                // box_name
     load 135                                                // array_index
     pushint TOTAL_POWER_SIZE                                // 48
@@ -1603,52 +1586,52 @@ __func__get_total_power:
     dup; len; pushint 48; ==; assert// Bytes Size Assertion: 48 bytes
     retsub
 
-// tl:527: func get_cumulative_power_of_at(user_address: bytes, timestamp: int, account_power_index: int) bytes:
+// tl:524: func get_cumulative_power_of_at(user_address: bytes[32], timestamp: int, account_power_index: int) bytes:
 __func__get_cumulative_power_of_at:
     store 137                                               // account_power_index [int]
     store 138                                               // timestamp [int]
-    store 139                                               // user_address [bytes]
-    // tl:528: bytes cumulative_power [slot 140]
-    // tl:529: assert(timestamp <= Global.LatestTimestamp)
+    store 139                                               // user_address [bytes[32]]
+    // tl:525: bytes cumulative_power [slot 140]
+    // tl:526: assert(timestamp <= Global.LatestTimestamp)
     load 138                                                // timestamp
     global LatestTimestamp
     <=
     assert
     
-    // tl:531: bytes cumulative_power_delta [slot 141]
-    // tl:532: int exists [slot 142]
-    // tl:533: exists, _ = box_len(user_address)
+    // tl:528: bytes cumulative_power_delta [slot 141]
+    // tl:529: int exists [slot 142]
+    // tl:530: exists, _ = box_len(user_address)
     load 139                                                // user_address
     box_len
     store 142                                               // exists
     pop                                                     // discarding value for _
-    // tl:534: if exists:
+    // tl:531: if exists:
     load 142                                                // exists
     bz l9_end
     // then:
-        // tl:535: box<AccountState> account_state = Box(user_address) [slot 143]
+        // tl:532: box<AccountState> account_state = Box(user_address) [slot 143]
         load 139                                            // user_address
         store 143                                           // box:account_state
-        // tl:536: assert(account_power_index < account_state.power_count)
+        // tl:533: assert(account_power_index < account_state.power_count)
         load 137                                            // account_power_index
         load 143; pushint 16; pushint 8; box_extract; btoi// account_state.power_count
         <
         assert
         
         // account_power.timestamp <= timestamp < next_account_power.timestamp
-        // tl:539: AccountPower account_power = get_account_power(user_address, account_power_index) [slot 144]
+        // tl:536: AccountPower account_power = get_account_power(user_address, account_power_index) [slot 144]
         load 139                                            // user_address
         load 137                                            // account_power_index
         callsub __func__get_account_power
         store 144                                           // account_power
-        // tl:540: if account_power.timestamp <= timestamp:
+        // tl:537: if account_power.timestamp <= timestamp:
         load 144; extract 8 8; btoi// account_power.timestamp
         load 138                                            // timestamp
         <=
         bz l10_else
         // then:
             // assert(timestamp > account_power.timestamp)
-            // tl:542: if (account_power_index + 1) < account_state.power_count:
+            // tl:539: if (account_power_index + 1) < account_state.power_count:
             load 137                                        // account_power_index
             pushint 1
             +
@@ -1656,37 +1639,37 @@ __func__get_cumulative_power_of_at:
             <
             bz l11_end
             // then:
-                // tl:543: AccountPower next_account_power = get_account_power(user_address, account_power_index + 1) [slot 145]
+                // tl:540: AccountPower next_account_power = get_account_power(user_address, account_power_index + 1) [slot 145]
                 load 139                                    // user_address
                 load 137                                    // account_power_index
                 pushint 1
                 +
                 callsub __func__get_account_power
                 store 145                                   // next_account_power
-                // tl:544: assert(timestamp < next_account_power.timestamp)
+                // tl:541: assert(timestamp < next_account_power.timestamp)
                 load 138                                    // timestamp
                 load 145; extract 8 8; btoi// next_account_power.timestamp
                 <
                 assert
             l11_end:
             
-            // tl:547: int time_delta = timestamp - account_power.timestamp [slot 146]
+            // tl:544: int time_delta = timestamp - account_power.timestamp [slot 146]
             load 138                                        // timestamp
             load 144; extract 8 8; btoi// account_power.timestamp
             -
             store 146                                       // time_delta
-            // tl:548: int bias_delta = get_bias(account_power.slope, time_delta) [slot 147]
+            // tl:545: int bias_delta = get_bias(account_power.slope, time_delta) [slot 147]
             load 144; extract 16 16// account_power.slope
             load 146                                        // time_delta
             callsub __func__get_bias
             store 147                                       // bias_delta
-            // tl:549: if bias_delta < account_power.bias:
+            // tl:546: if bias_delta < account_power.bias:
             load 147                                        // bias_delta
             load 144; extract 0 8; btoi// account_power.bias
             <
             bz l12_else
             // then:
-                // tl:550: cumulative_power_delta = get_cumulative_power_1(account_power.bias, (account_power.bias - bias_delta), time_delta)
+                // tl:547: cumulative_power_delta = get_cumulative_power_1(account_power.bias, (account_power.bias - bias_delta), time_delta)
                 load 144; extract 0 8; btoi// account_power.bias
                 load 144; extract 0 8; btoi// account_power.bias
                 load 147                                    // bias_delta
@@ -1696,15 +1679,15 @@ __func__get_cumulative_power_of_at:
                 store 141                                   // cumulative_power_delta
                 b l12_end
             l12_else:
-            // tl:551: else:
-                // tl:552: cumulative_power_delta = get_cumulative_power_2(account_power.bias, account_power.slope)
+            // tl:548: else:
+                // tl:549: cumulative_power_delta = get_cumulative_power_2(account_power.bias, account_power.slope)
                 load 144; extract 0 8; btoi// account_power.bias
                 load 144; extract 16 16// account_power.slope
                 callsub __func__get_cumulative_power_2
                 store 141                                   // cumulative_power_delta
             l12_end:
             
-            // tl:555: cumulative_power = bzero(16) b| (account_power.cumulative_power b+ cumulative_power_delta)
+            // tl:552: cumulative_power = bzero(16) b| (account_power.cumulative_power b+ cumulative_power_delta)
             pushint 16
             bzero
             load 144; extract 32 16// account_power.cumulative_power
@@ -1714,53 +1697,53 @@ __func__get_cumulative_power_of_at:
             store 140                                       // cumulative_power
             b l10_end
         l10_else:
-        // tl:556: else:
+        // tl:553: else:
             // Index must be 0, it indicates that the given timestamp predates the first checkpoint.
-            // tl:558: assert(!account_power_index)
+            // tl:555: assert(!account_power_index)
             load 137                                        // account_power_index
             !
             assert
-            // tl:559: cumulative_power = bzero(16)
+            // tl:556: cumulative_power = bzero(16)
             pushint 16
             bzero
             store 140                                       // cumulative_power
         l10_end:
     l9_end:
     
-    // tl:563: return cumulative_power
+    // tl:560: return cumulative_power
     load 140                                                // cumulative_power
     retsub
 
-// tl:567: func get_total_cumulative_power_at(timestamp: int, total_power_index: int) bytes:
+// tl:564: func get_total_cumulative_power_at(timestamp: int, total_power_index: int) bytes:
 __func__get_total_cumulative_power_at:
     store 148                                               // total_power_index [int]
     store 149                                               // timestamp [int]
-    // tl:568: bytes total_cumulative_power [slot 150]
-    // tl:569: assert(total_power_index < app_global_get(TOTAL_POWER_COUNT_KEY))
+    // tl:565: bytes total_cumulative_power [slot 150]
+    // tl:566: assert(total_power_index < app_global_get(TOTAL_POWER_COUNT_KEY))
     load 148                                                // total_power_index
     pushbytes TOTAL_POWER_COUNT_KEY                         // "total_power_count"
     app_global_get
     <
     assert
-    // tl:570: assert(timestamp <= Global.LatestTimestamp)
+    // tl:567: assert(timestamp <= Global.LatestTimestamp)
     load 149                                                // timestamp
     global LatestTimestamp
     <=
     assert
     
-    // tl:572: bytes cumulative_power_delta [slot 151]
-    // tl:573: TotalPower total_power = get_total_power(total_power_index) [slot 152]
+    // tl:569: bytes cumulative_power_delta [slot 151]
+    // tl:570: TotalPower total_power = get_total_power(total_power_index) [slot 152]
     load 148                                                // total_power_index
     callsub __func__get_total_power
     store 152                                               // total_power
     
-    // tl:575: if total_power.timestamp <= timestamp:
+    // tl:572: if total_power.timestamp <= timestamp:
     load 152; extract 8 8; btoi// total_power.timestamp
     load 149                                                // timestamp
     <=
     bz l13_else
     // then:
-        // tl:576: if (total_power_index + 1) < app_global_get(TOTAL_POWER_COUNT_KEY):
+        // tl:573: if (total_power_index + 1) < app_global_get(TOTAL_POWER_COUNT_KEY):
         load 148                                            // total_power_index
         pushint 1
         +
@@ -1769,13 +1752,13 @@ __func__get_total_cumulative_power_at:
         <
         bz l14_end
         // then:
-            // tl:577: TotalPower next_total_power = get_total_power(total_power_index + 1) [slot 153]
+            // tl:574: TotalPower next_total_power = get_total_power(total_power_index + 1) [slot 153]
             load 148                                        // total_power_index
             pushint 1
             +
             callsub __func__get_total_power
             store 153                                       // next_total_power
-            // tl:578: assert(timestamp < next_total_power.timestamp)
+            // tl:575: assert(timestamp < next_total_power.timestamp)
             load 149                                        // timestamp
             load 153; extract 8 8; btoi// next_total_power.timestamp
             <
@@ -1783,7 +1766,7 @@ __func__get_total_cumulative_power_at:
         l14_end:
         
         // Ensure that the latest checkpoint belongs to the same week so the slope is not changed.
-        // tl:582: assert((total_power.timestamp / WEEK) == (timestamp / WEEK))
+        // tl:579: assert((total_power.timestamp / WEEK) == (timestamp / WEEK))
         load 152; extract 8 8; btoi// total_power.timestamp
         pushint WEEK                                        // 604800
         /
@@ -1793,23 +1776,23 @@ __func__get_total_cumulative_power_at:
         ==
         assert
         
-        // tl:584: int time_delta = timestamp - total_power.timestamp [slot 154]
+        // tl:581: int time_delta = timestamp - total_power.timestamp [slot 154]
         load 149                                            // timestamp
         load 152; extract 8 8; btoi// total_power.timestamp
         -
         store 154                                           // time_delta
-        // tl:585: int bias_delta = get_bias(total_power.slope, time_delta) [slot 155]
+        // tl:582: int bias_delta = get_bias(total_power.slope, time_delta) [slot 155]
         load 152; extract 16 16// total_power.slope
         load 154                                            // time_delta
         callsub __func__get_bias
         store 155                                           // bias_delta
-        // tl:586: if bias_delta < total_power.bias:
+        // tl:583: if bias_delta < total_power.bias:
         load 155                                            // bias_delta
         load 152; extract 0 8; btoi// total_power.bias
         <
         bz l15_else
         // then:
-            // tl:587: cumulative_power_delta = get_cumulative_power_1(total_power.bias, (total_power.bias - bias_delta), time_delta)
+            // tl:584: cumulative_power_delta = get_cumulative_power_1(total_power.bias, (total_power.bias - bias_delta), time_delta)
             load 152; extract 0 8; btoi// total_power.bias
             load 152; extract 0 8; btoi// total_power.bias
             load 155                                        // bias_delta
@@ -1819,15 +1802,15 @@ __func__get_total_cumulative_power_at:
             store 151                                       // cumulative_power_delta
             b l15_end
         l15_else:
-        // tl:588: else:
-            // tl:589: cumulative_power_delta = get_cumulative_power_2(total_power.bias, total_power.slope)
+        // tl:585: else:
+            // tl:586: cumulative_power_delta = get_cumulative_power_2(total_power.bias, total_power.slope)
             load 152; extract 0 8; btoi// total_power.bias
             load 152; extract 16 16// total_power.slope
             callsub __func__get_cumulative_power_2
             store 151                                       // cumulative_power_delta
         l15_end:
         
-        // tl:592: total_cumulative_power = bzero(16) b| (total_power.cumulative_power b+ cumulative_power_delta)
+        // tl:589: total_cumulative_power = bzero(16) b| (total_power.cumulative_power b+ cumulative_power_delta)
         pushint 16
         bzero
         load 152; extract 32 16// total_power.cumulative_power
@@ -1837,30 +1820,30 @@ __func__get_total_cumulative_power_at:
         store 150                                           // total_cumulative_power
         b l13_end
     l13_else:
-    // tl:593: else:
+    // tl:590: else:
         // Index must be 0, it indicates that the given timestamp predates the first checkpoint.
-        // tl:595: assert(!total_power_index)
+        // tl:592: assert(!total_power_index)
         load 148                                            // total_power_index
         !
         assert
-        // tl:596: total_cumulative_power = bzero(16)
+        // tl:593: total_cumulative_power = bzero(16)
         pushint 16
         bzero
         store 150                                           // total_cumulative_power
     l13_end:
     
-    // tl:599: return total_cumulative_power
+    // tl:596: return total_cumulative_power
     load 150                                                // total_cumulative_power
     retsub
 
-// tl:602: func create_checkpoints_(account_bias_delta: int, account_slope_delta: bytes, has_account_event: int):
-__func__create_checkpoints_:
+// tl:599: func create_checkpoints_internal(account_bias_delta: int, account_slope_delta: bytes, has_account_event: int):
+__func__create_checkpoints_internal:
     store 156                                               // has_account_event [int]
     store 157                                               // account_slope_delta [bytes]
     store 158                                               // account_bias_delta [int]
     // https://github.com/curvefi/curve-dao-contracts/blob/master/contracts/VotingEscrow.vy#L234
     
-    // tl:605: TotalPower last_total_power = get_total_power(app_global_get(TOTAL_POWER_COUNT_KEY) - 1) [slot 159]
+    // tl:602: TotalPower last_total_power = get_total_power(app_global_get(TOTAL_POWER_COUNT_KEY) - 1) [slot 159]
     pushbytes TOTAL_POWER_COUNT_KEY                         // "total_power_count"
     app_global_get
     pushint 1
@@ -1868,70 +1851,70 @@ __func__create_checkpoints_:
     callsub __func__get_total_power
     store 159                                               // last_total_power
     
-    // tl:607: int bias = last_total_power.bias [slot 160]
+    // tl:604: int bias = last_total_power.bias [slot 160]
     load 159; extract 0 8; btoi// last_total_power.bias
     store 160                                               // bias
-    // tl:608: int last_checkpoint_timestamp = last_total_power.timestamp [slot 161]
+    // tl:605: int last_checkpoint_timestamp = last_total_power.timestamp [slot 161]
     load 159; extract 8 8; btoi// last_total_power.timestamp
     store 161                                               // last_checkpoint_timestamp
-    // tl:609: bytes slope = last_total_power.slope [slot 162]
+    // tl:606: bytes slope = last_total_power.slope [slot 162]
     load 159; extract 16 16// last_total_power.slope
     store 162                                               // slope
-    // tl:610: bytes cumulative_power = last_total_power.cumulative_power [slot 163]
+    // tl:607: bytes cumulative_power = last_total_power.cumulative_power [slot 163]
     load 159; extract 32 16// last_total_power.cumulative_power
     store 163                                               // cumulative_power
     
-    // tl:612: int temp_checkpoint_timestamp = (last_checkpoint_timestamp / WEEK) * WEEK [slot 164]
+    // tl:609: int temp_checkpoint_timestamp = (last_checkpoint_timestamp / WEEK) * WEEK [slot 164]
     load 161                                                // last_checkpoint_timestamp
     pushint WEEK                                            // 604800
     /
     pushint WEEK                                            // 604800
     *
     store 164                                               // temp_checkpoint_timestamp
-    // tl:613: bytes slope_delta [slot 165]
-    // tl:614: int bias_delta [slot 166]
-    // tl:615: int time_delta [slot 167]
+    // tl:610: bytes slope_delta [slot 165]
+    // tl:611: int bias_delta [slot 166]
+    // tl:612: int time_delta [slot 167]
     
-    // tl:617: int i = 0 [slot 168]
+    // tl:614: int i = 0 [slot 168]
     pushint 0
     store 168                                               // i
-    // tl:618: int stop = 9 [slot 169]
+    // tl:615: int stop = 9 [slot 169]
     pushint 9
     store 169                                               // stop
-    // tl:619: while i < stop:
+    // tl:616: while i < stop:
     l16_while:
         load 168                                            // i
         load 169                                            // stop
         <
         bz l16_end
-        // tl:620: temp_checkpoint_timestamp = temp_checkpoint_timestamp + WEEK
+        // tl:617: temp_checkpoint_timestamp = temp_checkpoint_timestamp + WEEK
         load 164                                            // temp_checkpoint_timestamp
         pushint WEEK                                        // 604800
         +
         store 164                                           // temp_checkpoint_timestamp
-        // tl:621: slope_delta = itob(0)
+        // tl:618: slope_delta = itob(0)
         pushint 0
         itob
         store 165                                           // slope_delta
         
-        // tl:623: if temp_checkpoint_timestamp > Global.LatestTimestamp:
+        // tl:620: if temp_checkpoint_timestamp > Global.LatestTimestamp:
         load 164                                            // temp_checkpoint_timestamp
         global LatestTimestamp
         >
         bz l17_end
         // then:
-            // tl:624: temp_checkpoint_timestamp = Global.LatestTimestamp
+            // tl:621: temp_checkpoint_timestamp = Global.LatestTimestamp
             global LatestTimestamp
             store 164                                       // temp_checkpoint_timestamp
         l17_end:
-        // tl:626: if !(temp_checkpoint_timestamp % WEEK):
+        // tl:623: if !(temp_checkpoint_timestamp % WEEK):
         load 164                                            // temp_checkpoint_timestamp
         pushint WEEK                                        // 604800
         %
         !
         bz l18_end
         // then:
-            // tl:627: _, slope_delta = box_get(Concat(SLOPE_CHANGE_BOX_PREFIX, itob(temp_checkpoint_timestamp)))
+            // tl:624: _, slope_delta = box_get(Concat(SLOPE_CHANGE_BOX_PREFIX, itob(temp_checkpoint_timestamp)))
             pushbytes SLOPE_CHANGE_BOX_PREFIX               // "sc"
             load 164                                        // temp_checkpoint_timestamp
             itob
@@ -1941,40 +1924,40 @@ __func__create_checkpoints_:
             store 165                                       // slope_delta
         l18_end:
         
-        // tl:630: time_delta = temp_checkpoint_timestamp - last_checkpoint_timestamp
+        // tl:627: time_delta = temp_checkpoint_timestamp - last_checkpoint_timestamp
         load 164                                            // temp_checkpoint_timestamp
         load 161                                            // last_checkpoint_timestamp
         -
         store 167                                           // time_delta
-        // tl:631: bias_delta = get_bias(slope, time_delta)
+        // tl:628: bias_delta = get_bias(slope, time_delta)
         load 162                                            // slope
         load 167                                            // time_delta
         callsub __func__get_bias
         store 166                                           // bias_delta
-        // tl:632: if bias_delta > bias:
+        // tl:629: if bias_delta > bias:
         load 166                                            // bias_delta
         load 160                                            // bias
         >
         bz l19_else
         // then:
-            // tl:633: cumulative_power = cumulative_power b+ get_cumulative_power_2(bias, slope)
+            // tl:630: cumulative_power = cumulative_power b+ get_cumulative_power_2(bias, slope)
             load 163                                        // cumulative_power
             load 160                                        // bias
             load 162                                        // slope
             callsub __func__get_cumulative_power_2
             b+
             store 163                                       // cumulative_power
-            // tl:634: slope = bzero(16)
+            // tl:631: slope = bzero(16)
             pushint 16
             bzero
             store 162                                       // slope
-            // tl:635: bias = 0
+            // tl:632: bias = 0
             pushint 0
             store 160                                       // bias
             b l19_end
         l19_else:
-        // tl:636: else:
-            // tl:637: cumulative_power = cumulative_power b+ get_cumulative_power_1(bias, (bias - bias_delta), time_delta)
+        // tl:633: else:
+            // tl:634: cumulative_power = cumulative_power b+ get_cumulative_power_1(bias, (bias - bias_delta), time_delta)
             load 163                                        // cumulative_power
             load 160                                        // bias
             load 160                                        // bias
@@ -1984,53 +1967,53 @@ __func__create_checkpoints_:
             callsub __func__get_cumulative_power_1
             b+
             store 163                                       // cumulative_power
-            // tl:638: bias = bias - bias_delta
+            // tl:635: bias = bias - bias_delta
             load 160                                        // bias
             load 166                                        // bias_delta
             -
             store 160                                       // bias
         l19_end:
         
-        // tl:641: if slope_delta b>= slope:
+        // tl:638: if slope_delta b>= slope:
         load 165                                            // slope_delta
         load 162                                            // slope
         b>=
         bz l20_else
         // then:
-            // tl:642: slope = bzero(16)
+            // tl:639: slope = bzero(16)
             pushint 16
             bzero
             store 162                                       // slope
-            // tl:643: bias = 0
+            // tl:640: bias = 0
             pushint 0
             store 160                                       // bias
             b l20_end
         l20_else:
-        // tl:644: else:
-            // tl:645: slope = slope b- slope_delta
+        // tl:641: else:
+            // tl:642: slope = slope b- slope_delta
             load 162                                        // slope
             load 165                                        // slope_delta
             b-
             store 162                                       // slope
         l20_end:
         
-        // tl:648: last_checkpoint_timestamp = temp_checkpoint_timestamp
+        // tl:645: last_checkpoint_timestamp = temp_checkpoint_timestamp
         load 164                                            // temp_checkpoint_timestamp
         store 161                                           // last_checkpoint_timestamp
-        // tl:649: if temp_checkpoint_timestamp == Global.LatestTimestamp:
+        // tl:646: if temp_checkpoint_timestamp == Global.LatestTimestamp:
         load 164                                            // temp_checkpoint_timestamp
         global LatestTimestamp
         ==
         bz l21_else
         // then:
-            // tl:650: i = stop
+            // tl:647: i = stop
             load 169                                        // stop
             store 168                                       // i
-            // tl:651: if has_account_event:
+            // tl:648: if has_account_event:
             load 156                                        // has_account_event
             bz l22_else
             // then:
-                // tl:652: save_total_power(construct_total_power(bias + account_bias_delta, last_checkpoint_timestamp, slope b+ account_slope_delta, cumulative_power))
+                // tl:649: save_total_power(construct_total_power(bias + account_bias_delta, last_checkpoint_timestamp, slope b+ account_slope_delta, cumulative_power))
                 load 160                                    // bias
                 load 158                                    // account_bias_delta
                 +
@@ -2043,8 +2026,8 @@ __func__create_checkpoints_:
                 callsub __func__save_total_power
                 b l22_end
             l22_else:
-            // tl:653: else:
-                // tl:654: save_total_power(construct_total_power(bias, last_checkpoint_timestamp, slope, cumulative_power))
+            // tl:650: else:
+                // tl:651: save_total_power(construct_total_power(bias, last_checkpoint_timestamp, slope, cumulative_power))
                 load 160                                    // bias
                 load 161                                    // last_checkpoint_timestamp
                 load 162                                    // slope
@@ -2054,13 +2037,13 @@ __func__create_checkpoints_:
             l22_end:
             b l21_end
         l21_else:
-        // tl:656: else:
-            // tl:657: i = i + 1
+        // tl:653: else:
+            // tl:654: i = i + 1
             load 168                                        // i
             pushint 1
             +
             store 168                                       // i
-            // tl:658: save_total_power(construct_total_power(bias, last_checkpoint_timestamp, slope, cumulative_power))
+            // tl:655: save_total_power(construct_total_power(bias, last_checkpoint_timestamp, slope, cumulative_power))
             load 160                                        // bias
             load 161                                        // last_checkpoint_timestamp
             load 162                                        // slope
@@ -2070,7 +2053,7 @@ __func__create_checkpoints_:
         l21_end:
         b l16_while
         l16_end:
-    // tl:661: assert(!(has_account_event && (temp_checkpoint_timestamp != Global.LatestTimestamp)))
+    // tl:658: assert(!(has_account_event && (temp_checkpoint_timestamp != Global.LatestTimestamp)))
     load 156                                                // has_account_event
     load 164                                                // temp_checkpoint_timestamp
     global LatestTimestamp
@@ -2078,16 +2061,16 @@ __func__create_checkpoints_:
     &&
     !
     assert
-    // tl:662: return
+    // tl:659: return
     retsub
 
-// tl:665: func get_cumulative_power_1(old_bias: int, new_bias: int, time_delta: int) bytes:
+// tl:662: func get_cumulative_power_1(old_bias: int, new_bias: int, time_delta: int) bytes:
 __func__get_cumulative_power_1:
     store 170                                               // time_delta [int]
     store 171                                               // new_bias [int]
     store 172                                               // old_bias [int]
     // (old_bias + new_bias) * time_delta / 2
-    // tl:667: return ((itob(old_bias) b+ itob(new_bias)) b* itob(time_delta)) b/ itob(2)
+    // tl:664: return ((itob(old_bias) b+ itob(new_bias)) b* itob(time_delta)) b/ itob(2)
     load 172                                                // old_bias
     itob
     load 171                                                // new_bias
@@ -2101,21 +2084,21 @@ __func__get_cumulative_power_1:
     b/
     retsub
 
-// tl:670: func get_cumulative_power_2(old_bias: int, slope: bytes) bytes:
+// tl:667: func get_cumulative_power_2(old_bias: int, slope: bytes) bytes:
 __func__get_cumulative_power_2:
     store 173                                               // slope [bytes]
     store 174                                               // old_bias [int]
     // time_delta = old_bias / slope
     // (old_bias + new_bias) * (old_bias / slope) / 2, new_bias = 0
     // (old_bias * old_bias) / (slope * 2)
-    // tl:674: if slope != bzero(16):
+    // tl:671: if slope != bzero(16):
     load 173                                                // slope
     pushint 16
     bzero
     !=
     bz l23_end
     // then:
-        // tl:675: return ((itob(old_bias) b* itob(old_bias)) b* TWO_TO_THE_64) b/ (slope b* itob(2))
+        // tl:672: return ((itob(old_bias) b* itob(old_bias)) b* TWO_TO_THE_64) b/ (slope b* itob(2))
         load 174                                            // old_bias
         itob
         load 174                                            // old_bias
@@ -2130,16 +2113,16 @@ __func__get_cumulative_power_2:
         b/
         retsub
     l23_end:
-    // tl:677: return bzero(16)
+    // tl:674: return bzero(16)
     pushint 16
     bzero
     retsub
 
-// tl:680: func get_bias(slope: bytes, time: int) int:
+// tl:677: func get_bias(slope: bytes, time: int) int:
 __func__get_bias:
     store 175                                               // time [int]
     store 176                                               // slope [bytes]
-    // tl:681: return btoi((slope b* itob(time)) b/ TWO_TO_THE_64)
+    // tl:678: return btoi((slope b* itob(time)) b/ TWO_TO_THE_64)
     load 176                                                // slope
     load 175                                                // time
     itob
@@ -2149,30 +2132,30 @@ __func__get_bias:
     btoi
     retsub
 
-// tl:684: func get_slope(locked_amount: int) bytes:
+// tl:681: func get_slope(locked_amount: int) bytes:
 __func__get_slope:
     store 177                                               // locked_amount [int]
-    // tl:685: return (itob(locked_amount) b* TWO_TO_THE_64) b/ itob(MAX_LOCK_TIME)
+    // tl:682: return (itob(locked_amount) b* TWO_TO_THE_64) b/ itob(MAX_LOCK_TIME)
     load 177                                                // locked_amount
     itob
     pushbytes TWO_TO_THE_64                                 // "\x01\x00\x00\x00\x00\x00\x00\x00\x00"
     b*
-    pushint MAX_LOCK_TIME                                   // 126144000
+    pushint MAX_LOCK_TIME                                   // 125798400
     itob
     b/
     retsub
 
-// tl:688: func revert_slope_change(timestamp: int, slope: bytes):
+// tl:685: func revert_slope_change(timestamp: int, slope: bytes):
 __func__revert_slope_change:
     store 178                                               // slope [bytes]
     store 179                                               // timestamp [int]
-    // tl:689: bytes box_name = Concat(SLOPE_CHANGE_BOX_PREFIX, itob(timestamp)) [slot 180]
+    // tl:686: bytes box_name = Concat(SLOPE_CHANGE_BOX_PREFIX, itob(timestamp)) [slot 180]
     pushbytes SLOPE_CHANGE_BOX_PREFIX                       // "sc"
     load 179                                                // timestamp
     itob
     concat
     store 180                                               // box_name
-    // tl:690: bytes new_slope = bzero(16) b| (box_extract(box_name, 0, 16) b- slope) [slot 181]
+    // tl:687: bytes new_slope = bzero(16) b| (box_extract(box_name, 0, 16) b- slope) [slot 181]
     pushint 16
     bzero
     load 180                                                // box_name
@@ -2183,12 +2166,12 @@ __func__revert_slope_change:
     b-
     b|
     store 181                                               // new_slope
-    // tl:691: box_put(box_name, new_slope)
+    // tl:688: box_put(box_name, new_slope)
     load 180                                                // box_name
     load 181                                                // new_slope
     box_put
     
-    // tl:693: log(Concat(method("slope_change(uint64,uint128)"), itob(timestamp), new_slope))
+    // tl:690: log(Concat(method("slope_change(uint64,uint128)"), itob(timestamp), new_slope))
     method "slope_change(uint64,uint128)"
     load 179                                                // timestamp
     itob
@@ -2196,26 +2179,26 @@ __func__revert_slope_change:
     concat
     concat
     log
-    // tl:694: return
+    // tl:691: return
     retsub
 
-// tl:697: func update_or_create_slope_change(timestamp: int, slope: bytes):
+// tl:694: func update_or_create_slope_change(timestamp: int, slope: bytes):
 __func__update_or_create_slope_change:
     store 182                                               // slope [bytes]
     store 183                                               // timestamp [int]
-    // tl:698: bytes box_name = Concat(SLOPE_CHANGE_BOX_PREFIX, itob(timestamp)) [slot 184]
+    // tl:695: bytes box_name = Concat(SLOPE_CHANGE_BOX_PREFIX, itob(timestamp)) [slot 184]
     pushbytes SLOPE_CHANGE_BOX_PREFIX                       // "sc"
     load 183                                                // timestamp
     itob
     concat
     store 184                                               // box_name
-    // tl:699: bytes slope_delta [slot 185]
-    // tl:700: _, slope_delta = box_get(box_name)
+    // tl:696: bytes slope_delta [slot 185]
+    // tl:697: _, slope_delta = box_get(box_name)
     load 184                                                // box_name
     box_get
     pop                                                     // discarding value for _
     store 185                                               // slope_delta
-    // tl:701: bytes new_slope = bzero(16) b| (slope_delta b+ slope) [slot 186]
+    // tl:698: bytes new_slope = bzero(16) b| (slope_delta b+ slope) [slot 186]
     pushint 16
     bzero
     load 185                                                // slope_delta
@@ -2223,12 +2206,12 @@ __func__update_or_create_slope_change:
     b+
     b|
     store 186                                               // new_slope
-    // tl:702: box_put(box_name, new_slope)
+    // tl:699: box_put(box_name, new_slope)
     load 184                                                // box_name
     load 186                                                // new_slope
     box_put
     
-    // tl:704: log(Concat(method("slope_change(uint64,uint128)"), itob(timestamp), new_slope))
+    // tl:701: log(Concat(method("slope_change(uint64,uint128)"), itob(timestamp), new_slope))
     method "slope_change(uint64,uint128)"
     load 183                                                // timestamp
     itob
@@ -2236,126 +2219,126 @@ __func__update_or_create_slope_change:
     concat
     concat
     log
-    // tl:705: return
+    // tl:702: return
     retsub
 
-// tl:708: func get_power(bias: int, slope: bytes, time_delta: int) int:
+// tl:705: func get_power(bias: int, slope: bytes, time_delta: int) int:
 __func__get_power:
     store 187                                               // time_delta [int]
     store 188                                               // slope [bytes]
     store 189                                               // bias [int]
-    // tl:709: int bias_delta = get_bias(slope, time_delta) [slot 190]
+    // tl:706: int bias_delta = get_bias(slope, time_delta) [slot 190]
     load 188                                                // slope
     load 187                                                // time_delta
     callsub __func__get_bias
     store 190                                               // bias_delta
-    // tl:710: if bias_delta < bias:
+    // tl:707: if bias_delta < bias:
     load 190                                                // bias_delta
     load 189                                                // bias
     <
     bz l24_end
     // then:
-        // tl:711: return bias - bias_delta
+        // tl:708: return bias - bias_delta
         load 189                                            // bias
         load 190                                            // bias_delta
         -
         retsub
     l24_end:
-    // tl:713: return 0
+    // tl:710: return 0
     pushint 0
     retsub
 
-// tl:716: func increase_total_locked_amount(amount: int):
+// tl:713: func increase_total_locked_amount(amount: int):
 __func__increase_total_locked_amount:
     store 191                                               // amount [int]
-    // tl:717: app_global_put(TOTAL_LOCKED_AMOUNT_KEY, app_global_get(TOTAL_LOCKED_AMOUNT_KEY) + amount)
+    // tl:714: app_global_put(TOTAL_LOCKED_AMOUNT_KEY, app_global_get(TOTAL_LOCKED_AMOUNT_KEY) + amount)
     pushbytes TOTAL_LOCKED_AMOUNT_KEY                       // "total_locked_amount"
     pushbytes TOTAL_LOCKED_AMOUNT_KEY                       // "total_locked_amount"
     app_global_get
     load 191                                                // amount
     +
     app_global_put
-    // tl:718: return
+    // tl:715: return
     retsub
 
-// tl:721: func decrease_total_locked_amount(amount: int):
+// tl:718: func decrease_total_locked_amount(amount: int):
 __func__decrease_total_locked_amount:
     store 192                                               // amount [int]
-    // tl:722: app_global_put(TOTAL_LOCKED_AMOUNT_KEY, app_global_get(TOTAL_LOCKED_AMOUNT_KEY) - amount)
+    // tl:719: app_global_put(TOTAL_LOCKED_AMOUNT_KEY, app_global_get(TOTAL_LOCKED_AMOUNT_KEY) - amount)
     pushbytes TOTAL_LOCKED_AMOUNT_KEY                       // "total_locked_amount"
     pushbytes TOTAL_LOCKED_AMOUNT_KEY                       // "total_locked_amount"
     app_global_get
     load 192                                                // amount
     -
     app_global_put
-    // tl:723: return
+    // tl:720: return
     retsub
 
-// tl:726: func get_received_tiny_amount() int:
+// tl:723: func get_received_tiny_amount() int:
 __func__get_received_tiny_amount:
     // this function is designed to retrieve the amount of 'TINY' tokens that have been transferred from a user's account to the contract's account.
     // the asset transfer transaction must be positioned at the -1 index in the transaction group.
     
-    // tl:730: assert(Txn.GroupIndex)
+    // tl:727: assert(Txn.GroupIndex)
     txn GroupIndex
     assert
-    // tl:731: int input_txn_index = Txn.GroupIndex - 1 [slot 193]
+    // tl:728: int input_txn_index = Txn.GroupIndex - 1 [slot 193]
     txn GroupIndex
     pushint 1
     -
     store 193                                               // input_txn_index
-    // tl:732: assert(Gtxn[input_txn_index].Sender == Txn.Sender)
+    // tl:729: assert(Gtxn[input_txn_index].Sender == Txn.Sender)
     load 193                                                // input_txn_index
     gtxns Sender
     txn Sender
     ==
     assert
-    // tl:733: assert(Gtxn[input_txn_index].TypeEnum == Axfer)
+    // tl:730: assert(Gtxn[input_txn_index].TypeEnum == Axfer)
     load 193                                                // input_txn_index
     gtxns TypeEnum
     pushint 4                                               // Axfer
     ==
     assert
-    // tl:734: assert(Gtxn[input_txn_index].AssetReceiver == Global.CurrentApplicationAddress)
+    // tl:731: assert(Gtxn[input_txn_index].AssetReceiver == Global.CurrentApplicationAddress)
     load 193                                                // input_txn_index
     gtxns AssetReceiver
     global CurrentApplicationAddress
     ==
     assert
-    // tl:735: assert(Gtxn[input_txn_index].XferAsset == app_global_get(TINY_ASSET_ID_KEY))
+    // tl:732: assert(Gtxn[input_txn_index].XferAsset == app_global_get(TINY_ASSET_ID_KEY))
     load 193                                                // input_txn_index
     gtxns XferAsset
     pushbytes TINY_ASSET_ID_KEY                             // "tiny_asset_id"
     app_global_get
     ==
     assert
-    // tl:736: return Gtxn[input_txn_index].AssetAmount
+    // tl:733: return Gtxn[input_txn_index].AssetAmount
     load 193                                                // input_txn_index
     gtxns AssetAmount
     retsub
 
-// tl:739: func delete_box(box_name: bytes) int:
+// tl:736: func delete_box(box_name: bytes) int:
 __func__delete_box:
     store 194                                               // box_name [bytes]
-    // tl:740: int initial_min_balance = min_balance(Global.CurrentApplicationAddress) [slot 195]
+    // tl:737: int initial_min_balance = min_balance(Global.CurrentApplicationAddress) [slot 195]
     global CurrentApplicationAddress
     min_balance
     store 195                                               // initial_min_balance
-    // tl:741: assert(box_del(box_name))
+    // tl:738: assert(box_del(box_name))
     load 194                                                // box_name
     box_del
     assert
-    // tl:742: int final_min_balance = min_balance(Global.CurrentApplicationAddress) [slot 196]
+    // tl:739: int final_min_balance = min_balance(Global.CurrentApplicationAddress) [slot 196]
     global CurrentApplicationAddress
     min_balance
     store 196                                               // final_min_balance
-    // tl:743: int min_balance_delta = initial_min_balance - final_min_balance [slot 197]
+    // tl:740: int min_balance_delta = initial_min_balance - final_min_balance [slot 197]
     load 195                                                // initial_min_balance
     load 196                                                // final_min_balance
     -
     store 197                                               // min_balance_delta
     
-    // tl:745: log(Concat(method("box_del(byte[])"), extract(6, 2, itob(len(box_name))), box_name))
+    // tl:742: log(Concat(method("box_del(byte[])"), extract(6, 2, itob(len(box_name))), box_name))
     method "box_del(byte[])"
     load 194                                                // box_name
     len
@@ -2365,93 +2348,88 @@ __func__delete_box:
     concat
     concat
     log
-    // tl:746: return min_balance_delta
+    // tl:743: return min_balance_delta
     load 197                                                // min_balance_delta
     retsub
 
-// tl:749: func transfer(asset_id: int, amount: int, sender: bytes, receiver: bytes):
-__func__transfer:
+// tl:746: func algo_transfer(amount: int, sender: bytes, receiver: bytes):
+__func__algo_transfer:
     store 198                                               // receiver [bytes]
     store 199                                               // sender [bytes]
     store 200                                               // amount [int]
-    store 201                                               // asset_id [int]
-    // This function is copied from Tinyman AMM Contracts V2.
-    // "asset_id == 0" is updated as "!asset_id" for budget optimization.
-    // https://github.com/tinymanorg/tinyman-amm-contracts-v2/blob/main/contracts/amm_approval.tl#L1146
-    
-    // tl:754: if !asset_id:
-    load 201                                                // asset_id
-    !
-    bz l25_else
-    // then:
-        // tl:755: inner_txn:
-        callsub _itxn_begin
-            // tl:756: TypeEnum: Pay
-            pushint 1                                       // Pay
-            itxn_field TypeEnum
-            // tl:757: Sender: sender
-            load 199                                        // sender
-            itxn_field Sender
-            // tl:758: Receiver: receiver
-            load 198                                        // receiver
-            itxn_field Receiver
-            // tl:759: Amount: amount
-            load 200                                        // amount
-            itxn_field Amount
-            // tl:760: Fee: 0
-            pushint 0
-            itxn_field Fee
-        callsub _itxn_submit
-        // end inner_txn
-        b l25_end
-    l25_else:
-    // tl:762: else:
-        // tl:763: inner_txn:
-        callsub _itxn_begin
-            // tl:764: TypeEnum: Axfer
-            pushint 4                                       // Axfer
-            itxn_field TypeEnum
-            // tl:765: Sender: sender
-            load 199                                        // sender
-            itxn_field Sender
-            // tl:766: AssetReceiver: receiver
-            load 198                                        // receiver
-            itxn_field AssetReceiver
-            // tl:767: AssetAmount: amount
-            load 200                                        // amount
-            itxn_field AssetAmount
-            // tl:768: XferAsset: asset_id
-            load 201                                        // asset_id
-            itxn_field XferAsset
-            // tl:769: Fee: 0
-            pushint 0
-            itxn_field Fee
-        callsub _itxn_submit
-        // end inner_txn
-    l25_end:
-    // tl:772: return
+    // tl:747: inner_txn:
+    callsub _itxn_begin
+        // tl:748: TypeEnum: Pay
+        pushint 1                                           // Pay
+        itxn_field TypeEnum
+        // tl:749: Sender: sender
+        load 199                                            // sender
+        itxn_field Sender
+        // tl:750: Receiver: receiver
+        load 198                                            // receiver
+        itxn_field Receiver
+        // tl:751: Amount: amount
+        load 200                                            // amount
+        itxn_field Amount
+        // tl:752: Fee: 0
+        pushint 0
+        itxn_field Fee
+    callsub _itxn_submit
+    // end inner_txn
+    // tl:754: return
+    retsub
+
+// tl:757: func tiny_transfer(amount: int, sender: bytes, receiver: bytes):
+__func__tiny_transfer:
+    store 201                                               // receiver [bytes]
+    store 202                                               // sender [bytes]
+    store 203                                               // amount [int]
+    // tl:758: inner_txn:
+    callsub _itxn_begin
+        // tl:759: TypeEnum: Axfer
+        pushint 4                                           // Axfer
+        itxn_field TypeEnum
+        // tl:760: Sender: sender
+        load 202                                            // sender
+        itxn_field Sender
+        // tl:761: AssetReceiver: receiver
+        load 201                                            // receiver
+        itxn_field AssetReceiver
+        // tl:762: AssetAmount: amount
+        load 203                                            // amount
+        itxn_field AssetAmount
+        // tl:763: XferAsset: app_global_get(TINY_ASSET_ID_KEY)
+        pushbytes TINY_ASSET_ID_KEY                         // "tiny_asset_id"
+        app_global_get
+        itxn_field XferAsset
+        // tl:764: Fee: 0
+        pushint 0
+        itxn_field Fee
+    callsub _itxn_submit
+    // end inner_txn
+    // tl:766: return
     retsub
 
 
 _itxn_group_begin:
-  load 202; !; assert                                       // ensure no group active
-  int 1; store 202; retsub                                  // set group flag
+  load 204; !; assert                                       // ensure no group active
+  int 1; store 204; retsub                                  // set group flag
 
 _itxn_begin:
-  load 202
+  load 204
   switch _itxn_begin__0 _itxn_begin__1 _itxn_begin__2
   err
   _itxn_begin__0: itxn_begin; retsub                        // no group
-  _itxn_begin__1: itxn_begin; int 2; store 202; retsub      // start first txn of group
+  _itxn_begin__1: itxn_begin; int 2; store 204; retsub      // start first txn of group
   _itxn_begin__2: itxn_next; retsub                         // start next txn of group
 
 _itxn_submit:
-  load 202
+  load 204
   bz _itxn_submit__0
   retsub                                                    // in a group, don't submit
   _itxn_submit__0: itxn_submit; retsub                      // no group, submit
 
 _itxn_group_submit:
   itxn_submit
-  int 0; store 202; retsub                                  // set group flag to 0
+  int 0; store 204; retsub                                  // set group flag to 0
 

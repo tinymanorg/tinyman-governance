@@ -58,7 +58,7 @@ route_increase_budget:
     pushint 1; return
 route_cast_vote:
     txn OnCompletion; pushint 0; ==; assert                 // assert OnCompletion == NoOp
-    txna ApplicationArgs 1
+    txna ApplicationArgs 1; dup; len; pushint 59; ==; assert// Bytes Size Assertion: 59 bytes
     txna ApplicationArgs 2
     txna ApplicationArgs 3
     txna ApplicationArgs 4
@@ -71,7 +71,7 @@ route_create_proposal:
     pushint 1; return
 route_cancel_proposal:
     txn OnCompletion; pushint 0; ==; assert                 // assert OnCompletion == NoOp
-    txna ApplicationArgs 1
+    txna ApplicationArgs 1; dup; len; pushint 59; ==; assert// Bytes Size Assertion: 59 bytes
     callsub __func__cancel_proposal
     pushint 1; return
 route_get_box:
@@ -144,7 +144,7 @@ __func__create_application:
 
 // tl:68: func update_application():
 __func__update_application:
-    // tl:69: bytes user_address = Txn.Sender [slot 2]
+    // tl:69: bytes[32] user_address = Txn.Sender [slot 2]
     txn Sender
     store 2                                                 // user_address
     // tl:70: assert(user_address == app_global_get(MANAGER_KEY))
@@ -159,7 +159,7 @@ __func__update_application:
 // tl:75: func create_proposal(proposal_id: bytes[59]):
 __func__create_proposal:
     store 3                                                 // proposal_id [bytes[59]]
-    // tl:76: bytes user_address = Txn.Sender [slot 4]
+    // tl:76: bytes[32] user_address = Txn.Sender [slot 4]
     txn Sender
     store 4                                                 // user_address
     // tl:77: assert(user_address == app_global_get(PROPOSAL_MANAGER_KEY))
@@ -236,10 +236,10 @@ __func__create_proposal:
     // tl:96: return
     retsub
 
-// tl:100: func cancel_proposal(proposal_id: bytes):
+// tl:100: func cancel_proposal(proposal_id: bytes[59]):
 __func__cancel_proposal:
-    store 10                                                // proposal_id [bytes]
-    // tl:101: bytes user_address = Txn.Sender [slot 11]
+    store 10                                                // proposal_id [bytes[59]]
+    // tl:101: bytes[32] user_address = Txn.Sender [slot 11]
     txn Sender
     store 11                                                // user_address
     // tl:102: assert(user_address == app_global_get(PROPOSAL_MANAGER_KEY))
@@ -296,13 +296,13 @@ __func__cancel_proposal:
     // tl:115: return
     retsub
 
-// tl:119: func cast_vote(proposal_id: bytes, votes_as_percentage: bytes, asset_ids: bytes, account_power_index: bytes):
+// tl:119: func cast_vote(proposal_id: bytes[59], votes_as_percentage: bytes, asset_ids: bytes, account_power_index: bytes):
 __func__cast_vote:
     store 15                                                // account_power_index [bytes]
     store 16                                                // asset_ids [bytes]
     store 17                                                // votes_as_percentage [bytes]
-    store 18                                                // proposal_id [bytes]
-    // tl:120: bytes user_address = Txn.Sender [slot 19]
+    store 18                                                // proposal_id [bytes[59]]
+    // tl:120: bytes[32] user_address = Txn.Sender [slot 19]
     txn Sender
     store 19                                                // user_address
     // tl:121: bytes proposal_box_name = Concat(PROPOSAL_BOX_PREFIX, proposal_id) [slot 20]
@@ -544,7 +544,7 @@ __func__increase_budget:
 // tl:192: func set_voting_delay(new_voting_delay: int):
 __func__set_voting_delay:
     store 33                                                // new_voting_delay [int]
-    // tl:193: bytes user_address = Txn.Sender [slot 34]
+    // tl:193: bytes[32] user_address = Txn.Sender [slot 34]
     txn Sender
     store 34                                                // user_address
     // tl:194: assert(user_address == app_global_get(PROPOSAL_MANAGER_KEY))
@@ -570,7 +570,7 @@ __func__set_voting_delay:
 // tl:202: func set_voting_duration(new_voting_duration: int):
 __func__set_voting_duration:
     store 35                                                // new_voting_duration [int]
-    // tl:203: bytes user_address = Txn.Sender [slot 36]
+    // tl:203: bytes[32] user_address = Txn.Sender [slot 36]
     txn Sender
     store 36                                                // user_address
     // tl:204: assert(user_address == app_global_get(PROPOSAL_MANAGER_KEY))
@@ -599,7 +599,7 @@ __func__set_voting_duration:
 // tl:213: func set_manager(new_manager: bytes[32]):
 __func__set_manager:
     store 37                                                // new_manager [bytes[32]]
-    // tl:214: bytes user_address = Txn.Sender [slot 38]
+    // tl:214: bytes[32] user_address = Txn.Sender [slot 38]
     txn Sender
     store 38                                                // user_address
     // tl:215: assert(user_address == app_global_get(MANAGER_KEY))
@@ -624,7 +624,7 @@ __func__set_manager:
 // tl:223: func set_proposal_manager(new_proposal_manager: bytes[32]):
 __func__set_proposal_manager:
     store 39                                                // new_proposal_manager [bytes[32]]
-    // tl:224: bytes user_address = Txn.Sender [slot 40]
+    // tl:224: bytes[32] user_address = Txn.Sender [slot 40]
     txn Sender
     store 40                                                // user_address
     // tl:225: assert(user_address == app_global_get(MANAGER_KEY))
@@ -666,10 +666,10 @@ __func__get_box:
     retsub
 
 
-// tl:241: func check_and_set_user_as_voted(address: bytes, proposal_index: int):
+// tl:241: func check_and_set_user_as_voted(address: bytes[32], proposal_index: int):
 __func__check_and_set_user_as_voted:
     store 44                                                // proposal_index [int]
-    store 45                                                // address [bytes]
+    store 45                                                // address [bytes[32]]
     // tl:242: int box_index = proposal_index / (ACCOUNT_ATTENDANCE_SHEET_BOX_SIZE * 8) [slot 46]
     load 44                                                 // proposal_index
     pushint ACCOUNT_ATTENDANCE_SHEET_BOX_SIZE               // 24
@@ -782,11 +782,11 @@ __func__get_voting_start_timestamp:
 
 // Inner Txns
 
-// tl:272: func get_account_voting_power_at(address: bytes, snapshot_timestamp: int, account_power_index: bytes) int:
+// tl:272: func get_account_voting_power_at(address: bytes[32], snapshot_timestamp: int, account_power_index: bytes) int:
 __func__get_account_voting_power_at:
     store 56                                                // account_power_index [bytes]
     store 57                                                // snapshot_timestamp [int]
-    store 58                                                // address [bytes]
+    store 58                                                // address [bytes[32]]
     // tl:273: inner_txn:
     callsub _itxn_begin
         // tl:274: TypeEnum: Appl
