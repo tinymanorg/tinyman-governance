@@ -56,7 +56,7 @@ class RewardsTestCase(VaultAppMixin, RewardsAppMixin, BaseTestCase):
         self.create_vault_app(self.app_creator_address)
         self.init_vault_app(self.vault_app_creation_timestamp + 30)
 
-        # Set the accounts.
+        # Set account balances.
         self.ledger.set_account_balance(self.user_address, 100_000_000)
         self.user_1_sk, self.user_1_address = generate_account()
         self.ledger.set_account_balance(self.user_1_address, 10_000_000)
@@ -64,6 +64,11 @@ class RewardsTestCase(VaultAppMixin, RewardsAppMixin, BaseTestCase):
         self.ledger.set_account_balance(self.user_2_address, 10_000_000)
         self.user_3_sk, self.user_3_address = generate_account()
         self.ledger.set_account_balance(self.user_3_address, 10_000_000)
+
+        self.ledger.move(100_000_000, asset_id=TINY_ASSET_ID, sender=self.ledger.assets[TINY_ASSET_ID]["creator"], receiver=self.user_address)
+        self.ledger.move(100_000_000, asset_id=TINY_ASSET_ID, sender=self.ledger.assets[TINY_ASSET_ID]["creator"], receiver=self.user_1_address)
+        self.ledger.move(100_000_000, asset_id=TINY_ASSET_ID, sender=self.ledger.assets[TINY_ASSET_ID]["creator"], receiver=self.user_2_address)
+        self.ledger.move(100_000_000, asset_id=TINY_ASSET_ID, sender=self.ledger.assets[TINY_ASSET_ID]["creator"], receiver=self.user_3_address)
 
         self.latest_block_datetime = datetime(year=2022, month=3, day=2, tzinfo=ZoneInfo("UTC"))
         self.latest_block_timestamp = int(self.latest_block_datetime.timestamp())
@@ -74,7 +79,7 @@ class RewardsTestCase(VaultAppMixin, RewardsAppMixin, BaseTestCase):
         self.create_rewards_app(self.app_creator_address)
         self.init_rewards_app(self.first_period_start_timestamp, self.total_reward_amount)
 
-        self.ledger.move(self.total_reward_amount * 10, asset_id=TINY_ASSET_ID, sender=self.ledger.assets[TINY_ASSET_ID]["creator"], receiver=get_application_address(REWARDS_APP_ID))
+        self.ledger.move(self.total_reward_amount * 100, asset_id=TINY_ASSET_ID, sender=self.ledger.assets[TINY_ASSET_ID]["creator"], receiver=get_application_address(REWARDS_APP_ID))
 
     def test_create_app(self):
         block_timestamp = self.latest_block_timestamp

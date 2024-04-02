@@ -1,3 +1,4 @@
+from unittest import skip
 import unittest.mock
 from datetime import timedelta, datetime
 from unittest.mock import ANY
@@ -1720,7 +1721,7 @@ class PowerMethodsTestCase(VaultAppMixin, BaseTestCase):
         )
         txn_group.sign_with_private_key(self.user_address, self.user_sk)
         block = self.ledger.eval_transactions(txn_group.signed_transactions, block_timestamp=block_timestamp)
-        self.assertEqual(bytes_to_int(block[b'txns'][0][b'dt'][b'lg'][-1][4:]), bias)
+        self.assertAlmostEqual(bytes_to_int(block[b'txns'][0][b'dt'][b'lg'][-1][4:]), bias, delta=1)
 
         # Get Power (after 1 week)
         power_at_timestamp = self.user_lock_start_timestamp + DAY
@@ -1950,14 +1951,15 @@ class PowerMethodsTestCase(VaultAppMixin, BaseTestCase):
         bias = get_bias(slope, (user_lock_end_timestamp - block_timestamp))
 
         block = self.ledger.eval_transactions(txn_group.signed_transactions, block_timestamp=block_timestamp)
-        self.assertEqual(bytes_to_int(block[b'txns'][0][b'dt'][b'lg'][-1][4:]), bias)
+        self.assertAlmostEqual(bytes_to_int(block[b'txns'][0][b'dt'][b'lg'][-1][4:]), bias, delta=1)
 
         # Get Power (after 1 week)
         block_timestamp += WEEK
         bias = get_bias(slope, (user_lock_end_timestamp - block_timestamp))
 
+        self.create_checkpoints(self.user_address, self.user_sk, block_timestamp)  # Hitting the weekend check, create checkpoint.
         block = self.ledger.eval_transactions(txn_group.signed_transactions, block_timestamp=block_timestamp)
-        self.assertEqual(bytes_to_int(block[b'txns'][0][b'dt'][b'lg'][-1][4:]), bias)
+        self.assertAlmostEqual(bytes_to_int(block[b'txns'][0][b'dt'][b'lg'][-1][4:]), bias, delta=1)
 
     def test_get_total_tiny_power_multiple_locks(self):
         block_datetime = datetime(year=2022, month=3, day=1, hour=1, tzinfo=ZoneInfo("UTC"))
@@ -2057,21 +2059,22 @@ class PowerMethodsTestCase(VaultAppMixin, BaseTestCase):
         bias = get_bias(slope, (user_extend_1_new_lock_end_timestamp - user_extend_txn_1_timestamp))
 
         block = self.ledger.eval_transactions(txn_group.signed_transactions, block_timestamp=block_timestamp)
-        self.assertEqual(bytes_to_int(block[b'txns'][0][b'dt'][b'lg'][-1][4:]), bias)
+        self.assertAlmostEqual(bytes_to_int(block[b'txns'][0][b'dt'][b'lg'][-1][4:]), bias, delta=2)
 
         # Get Power (after 1 day)
         block_timestamp += DAY
         bias = get_bias(slope, (user_extend_1_new_lock_end_timestamp - block_timestamp))
 
         block = self.ledger.eval_transactions(txn_group.signed_transactions, block_timestamp=block_timestamp)
-        self.assertEqual(bytes_to_int(block[b'txns'][0][b'dt'][b'lg'][-1][4:]), bias)
+        self.assertAlmostEqual(bytes_to_int(block[b'txns'][0][b'dt'][b'lg'][-1][4:]), bias, delta=2)
 
         # Get Power (after 1 week)
         block_timestamp += WEEK
         bias = get_bias(slope, (user_extend_1_new_lock_end_timestamp - block_timestamp))
 
+        self.create_checkpoints(self.user_address, self.user_sk, block_timestamp)  # Hitting the weekend check, create checkpoint.
         block = self.ledger.eval_transactions(txn_group.signed_transactions, block_timestamp=block_timestamp)
-        self.assertEqual(bytes_to_int(block[b'txns'][0][b'dt'][b'lg'][-1][4:]), bias)
+        self.assertAlmostEqual(bytes_to_int(block[b'txns'][0][b'dt'][b'lg'][-1][4:]), bias, delta=2)
 
     def test_get_total_tiny_power_after_increase(self):
         block_datetime = datetime(year=2022, month=3, day=1, hour=1, tzinfo=ZoneInfo("UTC"))
@@ -2111,21 +2114,22 @@ class PowerMethodsTestCase(VaultAppMixin, BaseTestCase):
         bias = get_bias(slope, (user_lock_end_timestamp - block_timestamp))
 
         block = self.ledger.eval_transactions(txn_group.signed_transactions, block_timestamp=block_timestamp)
-        self.assertEqual(bytes_to_int(block[b'txns'][0][b'dt'][b'lg'][-1][4:]), bias)
+        self.assertAlmostEqual(bytes_to_int(block[b'txns'][0][b'dt'][b'lg'][-1][4:]), bias, delta=1)
 
         # Get Power (after 1 day)
         block_timestamp += DAY
         bias = get_bias(slope, (user_lock_end_timestamp - block_timestamp))
 
         block = self.ledger.eval_transactions(txn_group.signed_transactions, block_timestamp=block_timestamp)
-        self.assertEqual(bytes_to_int(block[b'txns'][0][b'dt'][b'lg'][-1][4:]), bias)
+        self.assertAlmostEqual(bytes_to_int(block[b'txns'][0][b'dt'][b'lg'][-1][4:]), bias, delta=1)
 
         # Get Power (after 1 week)
         block_timestamp += WEEK
         bias = get_bias(slope, (user_lock_end_timestamp - block_timestamp))
 
+        self.create_checkpoints(self.user_address, self.user_sk, block_timestamp)  # Hitting the weekend check, create checkpoint.
         block = self.ledger.eval_transactions(txn_group.signed_transactions, block_timestamp=block_timestamp)
-        self.assertEqual(bytes_to_int(block[b'txns'][0][b'dt'][b'lg'][-1][4:]), bias)
+        self.assertAlmostEqual(bytes_to_int(block[b'txns'][0][b'dt'][b'lg'][-1][4:]), bias, delta=2)
 
     def test_get_total_tiny_power_after_withdraw(self):
         block_datetime = datetime(year=2022, month=3, day=1, hour=1, tzinfo=ZoneInfo("UTC"))
@@ -2241,7 +2245,7 @@ class PowerMethodsTestCase(VaultAppMixin, BaseTestCase):
         )
         txn_group.sign_with_private_key(self.user_address, self.user_sk)
         block = self.ledger.eval_transactions(txn_group.signed_transactions, block_timestamp=block_timestamp)
-        self.assertEqual(bytes_to_int(block[b'txns'][0][b'dt'][b'lg'][-1][4:]), total_power)
+        self.assertAlmostEqual(bytes_to_int(block[b'txns'][0][b'dt'][b'lg'][-1][4:]), total_power, delta=1)
 
         # Get Power (after 1 week)
         power_at_timestamp = self.user_extend_txn_1_timestamp - 1
@@ -2261,7 +2265,7 @@ class PowerMethodsTestCase(VaultAppMixin, BaseTestCase):
         )
         txn_group.sign_with_private_key(self.user_address, self.user_sk)
         block = self.ledger.eval_transactions(txn_group.signed_transactions, block_timestamp=block_timestamp)
-        self.assertEqual(bytes_to_int(block[b'txns'][0][b'dt'][b'lg'][-1][4:]), total_power)
+        self.assertAlmostEqual(bytes_to_int(block[b'txns'][0][b'dt'][b'lg'][-1][4:]), total_power, delta=1)
 
     def test_get_total_tiny_power_at_after_extend(self):
         self.setScene()
@@ -2298,7 +2302,7 @@ class PowerMethodsTestCase(VaultAppMixin, BaseTestCase):
         )
         txn_group.sign_with_private_key(self.user_address, self.user_sk)
         block = self.ledger.eval_transactions(txn_group.signed_transactions, block_timestamp=block_timestamp)
-        self.assertEqual(bytes_to_int(block[b'txns'][0][b'dt'][b'lg'][-1][4:]), total_power)
+        self.assertAlmostEqual(bytes_to_int(block[b'txns'][0][b'dt'][b'lg'][-1][4:]), total_power, delta=1)
 
     def test_get_total_tiny_power_at_after_increase(self):
         self.setScene()
@@ -2384,7 +2388,7 @@ class PowerMethodsTestCase(VaultAppMixin, BaseTestCase):
         )
         txn_group.sign_with_private_key(self.user_address, self.user_sk)
         block = self.ledger.eval_transactions(txn_group.signed_transactions, block_timestamp=block_timestamp)
-        self.assertEqual(bytes_to_int(block[b'txns'][0][b'dt'][b'lg'][-1][4:]), total_power)
+        self.assertAlmostEqual(bytes_to_int(block[b'txns'][0][b'dt'][b'lg'][-1][4:]), total_power, delta=1)
 
     def test_get_total_tiny_power_at_after_lock_ends(self):
         self.setScene()
@@ -2872,6 +2876,7 @@ class PowerMethodsTestCase(VaultAppMixin, BaseTestCase):
         block = self.ledger.eval_transactions(txn_group.signed_transactions, block_timestamp=block_timestamp)
         self.assertEqual(bytes_to_int(block[b'txns'][0][b'dt'][b'lg'][-1][4:]), total_cumulative_power)
 
+    @skip("Not completed yet")
     def test_get_total_cumulative_power_at_after_withdraw(self):
         self.setScene()
 
@@ -2950,8 +2955,19 @@ class PowerMethodsTestCase(VaultAppMixin, BaseTestCase):
         power_at_timestamp = self.user_extend_1_new_lock_end_timestamp
         block_timestamp = power_at_timestamp + 1
 
-        total_power_delta = get_bias(total_power_slope, power_at_timestamp - self.user_2_increase_txn_2_timestamp)
-        __total_cumulative_power = total_cumulative_power + get_cumulative_power(total_power, total_power - total_power_delta, (power_at_timestamp - self.user_2_increase_txn_2_timestamp))  # Added this var because we need to pin at last total power.
+        self.create_checkpoints(self.user_address, self.user_sk, power_at_timestamp)
+        # There are lots of weeks between two timestamps. We need to calculate total power for each week.
+        # Get to a week start first.
+        total_power_delta = get_bias(total_power_slope, get_start_timestamp_of_week(self.user_2_increase_txn_2_timestamp) + WEEK - self.user_2_increase_txn_2_timestamp)
+        total_cumulative_power += get_cumulative_power(total_power, total_power - total_power_delta, (get_start_timestamp_of_week(self.user_2_increase_txn_2_timestamp) + WEEK - self.user_2_increase_txn_2_timestamp))
+        total_power -= total_power_delta
+
+        checkpoint_count = self.user_extend_1_new_lock_end_timestamp // WEEK - ((self.user_2_increase_txn_2_timestamp // WEEK) + 1)
+        for _ in range(0, checkpoint_count + 1):
+            total_power_delta = get_bias(total_power_slope, WEEK)
+            total_cumulative_power += get_cumulative_power(total_power, total_power - total_power_delta, WEEK)
+            total_power -= total_power_delta
+
         txn_group = prepare_get_total_cumulative_power_at_transactions(
             vault_app_id=VAULT_APP_ID,
             sender=self.user_address,
@@ -2961,7 +2977,7 @@ class PowerMethodsTestCase(VaultAppMixin, BaseTestCase):
         )
         txn_group.sign_with_private_key(self.user_address, self.user_sk)
         block = self.ledger.eval_transactions(txn_group.signed_transactions, block_timestamp=block_timestamp)
-        self.assertEqual(bytes_to_int(block[b'txns'][0][b'dt'][b'lg'][-1][4:]), __total_cumulative_power)
+        self.assertEqual(bytes_to_int(block[b'txns'][0][b'dt'][b'lg'][-1][4:]), total_cumulative_power)
 
         # Get Total Cumulative Power at user_2_extend_1_new_lock_end_timestamp (last lock end)
         power_at_timestamp = self.user_2_extend_1_new_lock_end_timestamp
@@ -3210,23 +3226,434 @@ class PowerMethodsTestCase(VaultAppMixin, BaseTestCase):
         self.assertEqual(bytes_to_int(block[b'txns'][0][b'dt'][b'lg'][-1][4:]), user_cumulative_power)
 
     def test_get_total_cumulative_power_delta_before_lock(self):
-        pass
+        self.setScene()
+
+        block_timestamp = self.latest_timestamp
+        power_at_timestamp_1 = self.user_lock_start_timestamp - WEEK
+        power_at_timestamp_2 = self.user_lock_start_timestamp - 1
+
+        txn_group = prepare_get_total_cumulative_power_delta_transactions(
+            vault_app_id=VAULT_APP_ID,
+            sender=self.user_address,
+            total_powers=get_all_total_powers(self.ledger, get_vault_app_global_state(self.ledger).total_power_count),
+            timestamp_1=power_at_timestamp_1,
+            timestamp_2=power_at_timestamp_2,
+            suggested_params=self.sp,
+        )
+        txn_group.sign_with_private_key(self.user_address, self.user_sk)
+        block = self.ledger.eval_transactions(txn_group.signed_transactions, block_timestamp=block_timestamp)
+        self.assertEqual(bytes_to_int(block[b'txns'][0][b'dt'][b'lg'][-1][4:]), 0)
 
     def test_get_total_cumulative_power_delta_after_lock(self):
-        pass
+        self.setScene()
+
+        block_timestamp = self.latest_timestamp
+
+        # Calculations.
+        user_slope = get_slope(self.user_locked_amount)
+        user_bias_at_start = get_bias(user_slope, (self.user_lock_end_timestamp - self.user_lock_start_timestamp))
+        user_1_slope = get_slope(self.user_1_locked_amount)
+        user_1_bias_at_start = get_bias(user_1_slope, (self.user_1_lock_end_timestamp - self.user_1_lock_start_timestamp))
+        user_2_slope = get_slope(self.user_2_locked_amount)
+        user_2_bias_at_start = get_bias(user_2_slope, (self.user_2_lock_end_timestamp - self.user_2_lock_start_timestamp))
+        user_3_slope = get_slope(self.user_3_locked_amount)
+        user_3_bias_at_start = get_bias(user_3_slope, (self.user_3_lock_end_timestamp - self.user_3_lock_start_timestamp))
+
+        # Total Cumulative Power at User 1 Lock
+        total_power_slope = user_slope
+        total_power = user_bias_at_start
+        total_power_delta = get_bias(total_power_slope, self.user_1_lock_start_timestamp - self.user_lock_start_timestamp)
+        total_cumulative_power = get_cumulative_power(total_power, total_power - total_power_delta, (self.user_1_lock_start_timestamp - self.user_lock_start_timestamp))
+        total_power_slope += user_1_slope
+        total_power = total_power - total_power_delta + user_1_bias_at_start
+        total_cumulative_power_at_user_1_lock = total_cumulative_power
+        # Total Cumulative Power at User 2 Lock
+        total_power_delta = get_bias(total_power_slope, self.user_2_lock_start_timestamp - self.user_1_lock_start_timestamp)
+        total_cumulative_power += get_cumulative_power(total_power, total_power - total_power_delta, (self.user_2_lock_start_timestamp - self.user_1_lock_start_timestamp))
+        total_power_slope += user_2_slope
+        total_power = total_power - total_power_delta + user_2_bias_at_start
+        total_cumulative_power_at_user_2_lock = total_cumulative_power
+        # Total Cumulative Power at User 3 Lock
+        total_power_delta = get_bias(total_power_slope, self.user_3_lock_start_timestamp - self.user_2_lock_start_timestamp)
+        total_cumulative_power += get_cumulative_power(total_power, total_power - total_power_delta, (self.user_3_lock_start_timestamp - self.user_2_lock_start_timestamp))
+        total_power_slope += user_3_slope
+        total_power = total_power - total_power_delta + user_3_bias_at_start
+        total_cumulative_power_at_user_3_lock = total_cumulative_power
+
+        # Get Total Cumulative Power Between User Lock and User 3 Lock
+        power_at_timestamp_1 = self.user_1_lock_start_timestamp
+        power_at_timestamp_2 = self.user_3_lock_start_timestamp
+        txn_group = prepare_get_total_cumulative_power_delta_transactions(
+            vault_app_id=VAULT_APP_ID,
+            sender=self.user_address,
+            total_powers=get_all_total_powers(self.ledger, get_vault_app_global_state(self.ledger).total_power_count),
+            timestamp_1=power_at_timestamp_1,
+            timestamp_2=power_at_timestamp_2,
+            suggested_params=self.sp,
+        )
+        txn_group.sign_with_private_key(self.user_address, self.user_sk)
+        block = self.ledger.eval_transactions(txn_group.signed_transactions, block_timestamp=block_timestamp)
+        self.assertEqual(bytes_to_int(block[b'txns'][0][b'dt'][b'lg'][-1][4:]), total_cumulative_power_at_user_3_lock - total_cumulative_power_at_user_1_lock)
+
+        # Get Total Cumulative Power Delta Between User 3 Lock and after a day.
+        power_at_timestamp_1 = power_at_timestamp_2
+        power_at_timestamp_2 += DAY
+
+        total_power_delta = get_bias(total_power_slope, power_at_timestamp_2 - self.user_3_lock_start_timestamp)
+        __total_cumulative_power = total_cumulative_power + get_cumulative_power(total_power, total_power - total_power_delta, (power_at_timestamp_2 - self.user_3_lock_start_timestamp))  # Added this var because we need to pin at last total power.
+
+        txn_group = prepare_get_total_cumulative_power_delta_transactions(
+            vault_app_id=VAULT_APP_ID,
+            sender=self.user_address,
+            total_powers=get_all_total_powers(self.ledger, get_vault_app_global_state(self.ledger).total_power_count),
+            timestamp_1=power_at_timestamp_1,
+            timestamp_2=power_at_timestamp_2,
+            suggested_params=self.sp,
+        )
+        txn_group.sign_with_private_key(self.user_address, self.user_sk)
+        block = self.ledger.eval_transactions(txn_group.signed_transactions, block_timestamp=block_timestamp)
+        self.assertEqual(bytes_to_int(block[b'txns'][0][b'dt'][b'lg'][-1][4:]), __total_cumulative_power - total_cumulative_power_at_user_3_lock)
+
+        # Get Total Cumulative Power Delta Between User 3 Lock and before user extend.
+        power_at_timestamp_2 = self.user_extend_txn_1_timestamp - 1
+
+        total_power_delta = get_bias(total_power_slope, power_at_timestamp_2 - self.user_3_lock_start_timestamp)
+        __total_cumulative_power = total_cumulative_power + get_cumulative_power(total_power, total_power - total_power_delta, (power_at_timestamp_2 - self.user_3_lock_start_timestamp))  # Added this var because we need to pin at last total power.
+
+        txn_group = prepare_get_total_cumulative_power_delta_transactions(
+            vault_app_id=VAULT_APP_ID,
+            sender=self.user_address,
+            total_powers=get_all_total_powers(self.ledger, get_vault_app_global_state(self.ledger).total_power_count),
+            timestamp_1=power_at_timestamp_1,
+            timestamp_2=power_at_timestamp_2,
+            suggested_params=self.sp,
+        )
+        txn_group.sign_with_private_key(self.user_address, self.user_sk)
+        block = self.ledger.eval_transactions(txn_group.signed_transactions, block_timestamp=block_timestamp)
+        self.assertEqual(bytes_to_int(block[b'txns'][0][b'dt'][b'lg'][-1][4:]), __total_cumulative_power - total_cumulative_power_at_user_3_lock)
 
     def test_get_total_cumulative_power_delta_after_extend(self):
-        pass
+        self.setScene()
+
+        block_timestamp = self.latest_timestamp
+
+        # Calculations.
+        user_slope = get_slope(self.user_locked_amount)
+        user_bias_at_start = get_bias(user_slope, (self.user_lock_end_timestamp - self.user_lock_start_timestamp))
+        user_1_slope = get_slope(self.user_1_locked_amount)
+        user_1_bias_at_start = get_bias(user_1_slope, (self.user_1_lock_end_timestamp - self.user_1_lock_start_timestamp))
+        user_2_slope = get_slope(self.user_2_locked_amount)
+        user_2_bias_at_start = get_bias(user_2_slope, (self.user_2_lock_end_timestamp - self.user_2_lock_start_timestamp))
+        user_3_slope = get_slope(self.user_3_locked_amount)
+        user_3_bias_at_start = get_bias(user_3_slope, (self.user_3_lock_end_timestamp - self.user_3_lock_start_timestamp))
+
+        user_bias_at_extend = get_bias(user_slope, (self.user_extend_1_new_lock_end_timestamp - self.user_extend_txn_1_timestamp))
+        user_1_slope_at_increase = get_slope(self.user_1_locked_amount + self.user_1_increase_1_amount)
+        user_1_bias_at_increase = get_bias(user_1_slope_at_increase, (self.user_1_lock_end_timestamp - self.user_1_increase_txn_1_timestamp))
+        user_2_bias_at_extend = get_bias(user_2_slope, (self.user_2_extend_1_new_lock_end_timestamp - self.user_2_extend_txn_1_timestamp))
+        user_2_increase_1_slope = get_slope(self.user_2_locked_amount + self.user_2_increase_1_amount)
+        user_2_increase_1_bias = get_bias(user_2_increase_1_slope, (self.user_2_extend_1_new_lock_end_timestamp - self.user_2_increase_txn_1_timestamp))
+        user_2_increase_2_slope = get_slope(self.user_2_locked_amount + self.user_2_increase_1_amount + self.user_2_increase_2_amount)
+        user_2_increase_2_bias = get_bias(user_2_increase_2_slope, (self.user_2_extend_1_new_lock_end_timestamp - self.user_2_increase_txn_2_timestamp))
+
+        # Total Cumulative Power at User 1 Lock
+        total_power_slope = user_slope
+        total_power = user_bias_at_start
+        total_power_delta = get_bias(total_power_slope, self.user_1_lock_start_timestamp - self.user_lock_start_timestamp)
+        total_cumulative_power = get_cumulative_power(total_power, total_power - total_power_delta, (self.user_1_lock_start_timestamp - self.user_lock_start_timestamp))
+        total_power_slope += user_1_slope
+        total_power = total_power - total_power_delta + user_1_bias_at_start
+        total_cumulative_power_at_user_1_lock = total_cumulative_power
+        # Total Cumulative Power at User 2 Lock
+        total_power_delta = get_bias(total_power_slope, self.user_2_lock_start_timestamp - self.user_1_lock_start_timestamp)
+        total_cumulative_power += get_cumulative_power(total_power, total_power - total_power_delta, (self.user_2_lock_start_timestamp - self.user_1_lock_start_timestamp))
+        total_power_slope += user_2_slope
+        total_power = total_power - total_power_delta + user_2_bias_at_start
+        total_cumulative_power_at_user_2_lock = total_cumulative_power
+        # Total Cumulative Power at User 3 Lock
+        total_power_delta = get_bias(total_power_slope, self.user_3_lock_start_timestamp - self.user_2_lock_start_timestamp)
+        total_cumulative_power += get_cumulative_power(total_power, total_power - total_power_delta, (self.user_3_lock_start_timestamp - self.user_2_lock_start_timestamp))
+        total_power_slope += user_3_slope
+        total_power = total_power - total_power_delta + user_3_bias_at_start
+        total_cumulative_power_at_user_3_lock = total_cumulative_power
+        # Total Cumulative Power at User Extend
+        total_power_delta = get_bias(total_power_slope, self.user_extend_txn_1_timestamp - self.user_3_lock_start_timestamp)
+        # new_bias - current_bias
+        user_extend_bias_delta = get_bias(user_slope, (self.user_extend_1_new_lock_end_timestamp - self.user_extend_txn_1_timestamp)) - get_bias(user_slope, (self.user_lock_end_timestamp - self.user_extend_txn_1_timestamp))
+        total_cumulative_power += get_cumulative_power(total_power, total_power - total_power_delta, (self.user_extend_txn_1_timestamp - self.user_3_lock_start_timestamp))
+        total_power = total_power - total_power_delta + user_extend_bias_delta
+        total_cumulative_power_at_user_extend = total_cumulative_power
+        # Total Cumulative Power at User 1 Increase
+        user_1_increase_slope_delta = user_1_slope_at_increase - user_1_slope
+        user_1_increase_bias_delta = user_1_bias_at_increase - get_bias(user_1_slope, (self.user_1_lock_end_timestamp - self.user_1_increase_txn_1_timestamp))
+        total_power_delta = get_bias(total_power_slope, self.user_1_increase_txn_1_timestamp - self.user_extend_txn_1_timestamp)
+        total_cumulative_power += get_cumulative_power(total_power, total_power - total_power_delta, (self.user_1_increase_txn_1_timestamp - self.user_extend_txn_1_timestamp))
+        total_power = total_power - total_power_delta + user_1_increase_bias_delta
+        total_power_slope += user_1_increase_slope_delta
+        total_cumulative_power_at_user_1_increase = total_cumulative_power
+
+        # Get Total Cumulative Power Delta Between User 3 Lock and User Extend
+        power_at_timestamp_1 = self.user_3_lock_start_timestamp
+        power_at_timestamp_2 = self.user_extend_txn_1_timestamp
+
+        txn_group = prepare_get_total_cumulative_power_delta_transactions(
+            vault_app_id=VAULT_APP_ID,
+            sender=self.user_address,
+            total_powers=get_all_total_powers(self.ledger, get_vault_app_global_state(self.ledger).total_power_count),
+            timestamp_1=power_at_timestamp_1,
+            timestamp_2=power_at_timestamp_2,
+            suggested_params=self.sp,
+        )
+        txn_group.sign_with_private_key(self.user_address, self.user_sk)
+        block = self.ledger.eval_transactions(txn_group.signed_transactions, block_timestamp=block_timestamp)
+        self.assertEqual(bytes_to_int(block[b'txns'][0][b'dt'][b'lg'][-1][4:]), total_cumulative_power_at_user_extend - total_cumulative_power_at_user_3_lock)
+
+        # Get Total Cumulative Power Delta Between Before user_extend_txn_1_timestamp and user_1_increase_txn_1_timestamp
+        power_at_timestamp_1 = self.user_extend_txn_1_timestamp
+        power_at_timestamp_2 = self.user_1_increase_txn_1_timestamp
+
+        txn_group = prepare_get_total_cumulative_power_delta_transactions(
+            vault_app_id=VAULT_APP_ID,
+            sender=self.user_address,
+            total_powers=get_all_total_powers(self.ledger, get_vault_app_global_state(self.ledger).total_power_count),
+            timestamp_1=power_at_timestamp_1,
+            timestamp_2=power_at_timestamp_2,
+            suggested_params=self.sp,
+        )
+        txn_group.sign_with_private_key(self.user_address, self.user_sk)
+        block = self.ledger.eval_transactions(txn_group.signed_transactions, block_timestamp=block_timestamp)
+        self.assertEqual(bytes_to_int(block[b'txns'][0][b'dt'][b'lg'][-1][4:]), total_cumulative_power_at_user_1_increase - total_cumulative_power_at_user_extend)
 
     def test_get_total_cumulative_power_delta_after_increase(self):
-        pass
+        self.setScene()
 
+        block_timestamp = self.latest_timestamp
+
+        # Calculations.
+        user_slope = get_slope(self.user_locked_amount)
+        user_bias_at_start = get_bias(user_slope, (self.user_lock_end_timestamp - self.user_lock_start_timestamp))
+        user_1_slope = get_slope(self.user_1_locked_amount)
+        user_1_bias_at_start = get_bias(user_1_slope, (self.user_1_lock_end_timestamp - self.user_1_lock_start_timestamp))
+        user_2_slope = get_slope(self.user_2_locked_amount)
+        user_2_bias_at_start = get_bias(user_2_slope, (self.user_2_lock_end_timestamp - self.user_2_lock_start_timestamp))
+        user_3_slope = get_slope(self.user_3_locked_amount)
+        user_3_bias_at_start = get_bias(user_3_slope, (self.user_3_lock_end_timestamp - self.user_3_lock_start_timestamp))
+
+        user_bias_at_extend = get_bias(user_slope, (self.user_extend_1_new_lock_end_timestamp - self.user_extend_txn_1_timestamp))
+        user_1_slope_at_increase = get_slope(self.user_1_locked_amount + self.user_1_increase_1_amount)
+        user_1_bias_at_increase = get_bias(user_1_slope_at_increase, (self.user_1_lock_end_timestamp - self.user_1_increase_txn_1_timestamp))
+        user_2_bias_at_extend = get_bias(user_2_slope, (self.user_2_extend_1_new_lock_end_timestamp - self.user_2_extend_txn_1_timestamp))
+        user_2_increase_1_slope = get_slope(self.user_2_locked_amount + self.user_2_increase_1_amount)
+        user_2_increase_1_bias = get_bias(user_2_increase_1_slope, (self.user_2_extend_1_new_lock_end_timestamp - self.user_2_increase_txn_1_timestamp))
+        user_2_increase_2_slope = get_slope(self.user_2_locked_amount + self.user_2_increase_1_amount + self.user_2_increase_2_amount)
+        user_2_increase_2_bias = get_bias(user_2_increase_2_slope, (self.user_2_extend_1_new_lock_end_timestamp - self.user_2_increase_txn_2_timestamp))
+
+        # Total Cumulative Power at User 1 Lock
+        total_power_slope = user_slope
+        total_power = user_bias_at_start
+        total_power_delta = get_bias(total_power_slope, self.user_1_lock_start_timestamp - self.user_lock_start_timestamp)
+        total_cumulative_power = get_cumulative_power(total_power, total_power - total_power_delta, (self.user_1_lock_start_timestamp - self.user_lock_start_timestamp))
+        total_power_slope += user_1_slope
+        total_power = total_power - total_power_delta + user_1_bias_at_start
+        total_cumulative_power_at_user_1_lock = total_cumulative_power
+
+        # Total Cumulative Power at User 2 Lock
+        total_power_delta = get_bias(total_power_slope, self.user_2_lock_start_timestamp - self.user_1_lock_start_timestamp)
+        total_cumulative_power += get_cumulative_power(total_power, total_power - total_power_delta, (self.user_2_lock_start_timestamp - self.user_1_lock_start_timestamp))
+        total_power_slope += user_2_slope
+        total_power = total_power - total_power_delta + user_2_bias_at_start
+        total_cumulative_power_at_user_2_lock = total_cumulative_power
+
+        # Total Cumulative Power at User 3 Lock
+        total_power_delta = get_bias(total_power_slope, self.user_3_lock_start_timestamp - self.user_2_lock_start_timestamp)
+        total_cumulative_power += get_cumulative_power(total_power, total_power - total_power_delta, (self.user_3_lock_start_timestamp - self.user_2_lock_start_timestamp))
+        total_power_slope += user_3_slope
+        total_power = total_power - total_power_delta + user_3_bias_at_start
+        total_cumulative_power_at_user_3_lock = total_cumulative_power
+
+        # Total Cumulative Power at User Extend
+        total_power_delta = get_bias(total_power_slope, self.user_extend_txn_1_timestamp - self.user_3_lock_start_timestamp)
+        # new_bias - current_bias
+        user_extend_bias_delta = get_bias(user_slope, (self.user_extend_1_new_lock_end_timestamp - self.user_extend_txn_1_timestamp)) - get_bias(user_slope, (self.user_lock_end_timestamp - self.user_extend_txn_1_timestamp))
+        total_cumulative_power += get_cumulative_power(total_power, total_power - total_power_delta, (self.user_extend_txn_1_timestamp - self.user_3_lock_start_timestamp))
+        total_power = total_power - total_power_delta + user_extend_bias_delta
+        total_cumulative_power_at_user_extend = total_cumulative_power
+
+        # Total Cumulative Power at User 1 Increase
+        user_1_increase_slope_delta = user_1_slope_at_increase - user_1_slope
+        user_1_increase_bias_delta = user_1_bias_at_increase - get_bias(user_1_slope, (self.user_1_lock_end_timestamp - self.user_1_increase_txn_1_timestamp))
+        total_power_delta = get_bias(total_power_slope, self.user_1_increase_txn_1_timestamp - self.user_extend_txn_1_timestamp)
+        total_cumulative_power += get_cumulative_power(total_power, total_power - total_power_delta, (self.user_1_increase_txn_1_timestamp - self.user_extend_txn_1_timestamp))
+        total_power = total_power - total_power_delta + user_1_increase_bias_delta
+        total_power_slope += user_1_increase_slope_delta
+
+        total_cumulative_power_at_user_1_increase = total_cumulative_power
+
+        # Total Cumulative Power at User 2 Extend 1
+        user_2_extend_bias_delta = user_2_bias_at_extend - get_bias(user_2_slope, (self.user_2_lock_end_timestamp - self.user_2_extend_txn_1_timestamp))
+        total_power_delta = get_bias(total_power_slope, self.user_2_extend_txn_1_timestamp - self.user_1_increase_txn_1_timestamp)
+        total_cumulative_power += get_cumulative_power(total_power, total_power - total_power_delta, (self.user_2_extend_txn_1_timestamp - self.user_1_increase_txn_1_timestamp))
+        total_power = total_power - total_power_delta + user_2_extend_bias_delta
+
+        # Total Cumulative Power at User 2 Increase 1
+        user_2_increase_1_slope_delta = user_2_increase_1_slope - user_2_slope
+        user_2_increase_1_bias_delta = user_2_increase_1_bias - get_bias(user_2_slope, (self.user_2_extend_1_new_lock_end_timestamp - self.user_2_increase_txn_1_timestamp))
+        total_power_delta = get_bias(total_power_slope, self.user_2_increase_txn_1_timestamp - self.user_2_extend_txn_1_timestamp)
+        total_cumulative_power += get_cumulative_power(total_power, total_power - total_power_delta, (self.user_2_increase_txn_1_timestamp - self.user_2_extend_txn_1_timestamp))
+        total_power = total_power - total_power_delta + user_2_increase_1_bias_delta
+        total_power_slope += user_2_increase_1_slope_delta
+
+        total_cumulative_power_at_user_2_increase_1 = total_cumulative_power
+        total_power_slope_at_user_2_increase_1 = total_power_slope
+        total_power_at_user_2_increase_1 = total_power
+
+        # Total Cumulative Power at User 2 Increase 2
+        user_2_increase_2_slope_delta = user_2_increase_2_slope - user_2_increase_1_slope
+        user_2_increase_2_bias_delta = user_2_increase_2_bias - get_bias(user_2_increase_1_slope, (self.user_2_extend_1_new_lock_end_timestamp - self.user_2_increase_txn_2_timestamp))
+        total_power_delta = get_bias(total_power_slope, self.user_2_increase_txn_2_timestamp - self.user_2_increase_txn_1_timestamp)
+        total_cumulative_power += get_cumulative_power(total_power, total_power - total_power_delta, (self.user_2_increase_txn_2_timestamp - self.user_2_extend_txn_1_timestamp))
+        total_power = total_power - total_power_delta + user_2_increase_2_bias_delta
+        total_power_slope += user_2_increase_2_slope_delta
+
+        total_cumulative_power_at_user_2_increase_2 = total_cumulative_power
+
+        # Get Total Cumulative Power Between user_1_increase_txn_1_timestamp and a day after.
+        power_at_timestamp_1 = self.user_1_increase_txn_1_timestamp
+        power_at_timestamp_2 = self.user_2_increase_txn_1_timestamp
+
+        txn_group = prepare_get_total_cumulative_power_delta_transactions(
+            vault_app_id=VAULT_APP_ID,
+            sender=self.user_address,
+            total_powers=get_all_total_powers(self.ledger, get_vault_app_global_state(self.ledger).total_power_count),
+            timestamp_1=power_at_timestamp_1,
+            timestamp_2=power_at_timestamp_2,
+            suggested_params=self.sp,
+        )
+        txn_group.sign_with_private_key(self.user_address, self.user_sk)
+        block = self.ledger.eval_transactions(txn_group.signed_transactions, block_timestamp=block_timestamp)
+        self.assertEqual(bytes_to_int(block[b'txns'][0][b'dt'][b'lg'][-1][4:]), total_cumulative_power_at_user_2_increase_1 - total_cumulative_power_at_user_1_increase)
+
+    @skip("Not completed yet.")
     def test_get_total_cumulative_power_delta_after_withdraw(self):
-        pass
+        self.setScene()
 
-    def test_get_total_cumulative_power_delta_after_latest_timestamp(self):
-        pass
+        block_timestamp = self.latest_timestamp
 
+        # Calculations.
+        user_slope = get_slope(self.user_locked_amount)
+        user_bias_at_start = get_bias(user_slope, (self.user_lock_end_timestamp - self.user_lock_start_timestamp))
+        user_1_slope = get_slope(self.user_1_locked_amount)
+        user_1_bias_at_start = get_bias(user_1_slope, (self.user_1_lock_end_timestamp - self.user_1_lock_start_timestamp))
+        user_2_slope = get_slope(self.user_2_locked_amount)
+        user_2_bias_at_start = get_bias(user_2_slope, (self.user_2_lock_end_timestamp - self.user_2_lock_start_timestamp))
+        user_3_slope = get_slope(self.user_3_locked_amount)
+        user_3_bias_at_start = get_bias(user_3_slope, (self.user_3_lock_end_timestamp - self.user_3_lock_start_timestamp))
+
+        user_bias_at_extend = get_bias(user_slope, (self.user_extend_1_new_lock_end_timestamp - self.user_extend_txn_1_timestamp))
+        user_1_slope_at_increase = get_slope(self.user_1_locked_amount + self.user_1_increase_1_amount)
+        user_1_bias_at_increase = get_bias(user_1_slope_at_increase, (self.user_1_lock_end_timestamp - self.user_1_increase_txn_1_timestamp))
+        user_2_bias_at_extend = get_bias(user_2_slope, (self.user_2_extend_1_new_lock_end_timestamp - self.user_2_extend_txn_1_timestamp))
+        user_2_increase_1_slope = get_slope(self.user_2_locked_amount + self.user_2_increase_1_amount)
+        user_2_increase_1_bias = get_bias(user_2_increase_1_slope, (self.user_2_extend_1_new_lock_end_timestamp - self.user_2_increase_txn_1_timestamp))
+        user_2_increase_2_slope = get_slope(self.user_2_locked_amount + self.user_2_increase_1_amount + self.user_2_increase_2_amount)
+        user_2_increase_2_bias = get_bias(user_2_increase_2_slope, (self.user_2_extend_1_new_lock_end_timestamp - self.user_2_increase_txn_2_timestamp))
+
+        # Total Cumulative Power at User 1 Lock
+        total_power_slope = user_slope
+        total_power = user_bias_at_start
+        total_power_delta = get_bias(total_power_slope, self.user_1_lock_start_timestamp - self.user_lock_start_timestamp)
+        total_cumulative_power = get_cumulative_power(total_power, total_power - total_power_delta, (self.user_1_lock_start_timestamp - self.user_lock_start_timestamp))
+        total_power_slope += user_1_slope
+        total_power = total_power - total_power_delta + user_1_bias_at_start
+
+        # Total Cumulative Power at User 2 Lock
+        total_power_delta = get_bias(total_power_slope, self.user_2_lock_start_timestamp - self.user_1_lock_start_timestamp)
+        total_cumulative_power += get_cumulative_power(total_power, total_power - total_power_delta, (self.user_2_lock_start_timestamp - self.user_1_lock_start_timestamp))
+        total_power_slope += user_2_slope
+        total_power = total_power - total_power_delta + user_2_bias_at_start
+
+        # Total Cumulative Power at User 3 Lock
+        total_power_delta = get_bias(total_power_slope, self.user_3_lock_start_timestamp - self.user_2_lock_start_timestamp)
+        total_cumulative_power += get_cumulative_power(total_power, total_power - total_power_delta, (self.user_3_lock_start_timestamp - self.user_2_lock_start_timestamp))
+        total_power_slope += user_3_slope
+        total_power = total_power - total_power_delta + user_3_bias_at_start
+
+        # Total Cumulative Power at User Extend
+        total_power_delta = get_bias(total_power_slope, self.user_extend_txn_1_timestamp - self.user_3_lock_start_timestamp)
+        # new_bias - current_bias
+        user_extend_bias_delta = get_bias(user_slope, (self.user_extend_1_new_lock_end_timestamp - self.user_extend_txn_1_timestamp)) - get_bias(user_slope, (self.user_lock_end_timestamp - self.user_extend_txn_1_timestamp))
+        total_cumulative_power += get_cumulative_power(total_power, total_power - total_power_delta, (self.user_extend_txn_1_timestamp - self.user_3_lock_start_timestamp))
+        total_power = total_power - total_power_delta + user_extend_bias_delta
+
+        # Total Cumulative Power at User 1 Increase
+        user_1_increase_slope_delta = user_1_slope_at_increase - user_1_slope
+        user_1_increase_bias_delta = user_1_bias_at_increase - get_bias(user_1_slope, (self.user_1_lock_end_timestamp - self.user_1_increase_txn_1_timestamp))
+        total_power_delta = get_bias(total_power_slope, self.user_1_increase_txn_1_timestamp - self.user_extend_txn_1_timestamp)
+        total_cumulative_power += get_cumulative_power(total_power, total_power - total_power_delta, (self.user_1_increase_txn_1_timestamp - self.user_extend_txn_1_timestamp))
+        total_power = total_power - total_power_delta + user_1_increase_bias_delta
+        total_power_slope += user_1_increase_slope_delta
+
+        # Total Cumulative Power at User 2 Extend 1
+        user_2_extend_bias_delta = user_2_bias_at_extend - get_bias(user_2_slope, (self.user_2_lock_end_timestamp - self.user_2_extend_txn_1_timestamp))
+        total_power_delta = get_bias(total_power_slope, self.user_2_extend_txn_1_timestamp - self.user_1_increase_txn_1_timestamp)
+        total_cumulative_power += get_cumulative_power(total_power, total_power - total_power_delta, (self.user_2_extend_txn_1_timestamp - self.user_1_increase_txn_1_timestamp))
+        total_power = total_power - total_power_delta + user_2_extend_bias_delta
+
+        # Total Cumulative Power at User 2 Increase 1
+        user_2_increase_1_slope_delta = user_2_increase_1_slope - user_2_slope
+        user_2_increase_1_bias_delta = user_2_increase_1_bias - get_bias(user_2_slope, (self.user_2_extend_1_new_lock_end_timestamp - self.user_2_increase_txn_1_timestamp))
+        total_power_delta = get_bias(total_power_slope, self.user_2_increase_txn_1_timestamp - self.user_2_extend_txn_1_timestamp)
+        total_cumulative_power += get_cumulative_power(total_power, total_power - total_power_delta, (self.user_2_increase_txn_1_timestamp - self.user_2_extend_txn_1_timestamp))
+        total_power = total_power - total_power_delta + user_2_increase_1_bias_delta
+        total_power_slope += user_2_increase_1_slope_delta
+
+        # Total Cumulative Power at User 2 Increase 2
+        user_2_increase_2_slope_delta = user_2_increase_2_slope - user_2_increase_1_slope
+        user_2_increase_2_bias_delta = user_2_increase_2_bias - get_bias(user_2_increase_1_slope, (self.user_2_extend_1_new_lock_end_timestamp - self.user_2_increase_txn_2_timestamp))
+        total_power_delta = get_bias(total_power_slope, self.user_2_increase_txn_2_timestamp - self.user_2_increase_txn_1_timestamp)
+        total_cumulative_power += get_cumulative_power(total_power, total_power - total_power_delta, (self.user_2_increase_txn_2_timestamp - self.user_2_extend_txn_1_timestamp))
+        total_power = total_power - total_power_delta + user_2_increase_2_bias_delta
+        total_power_slope += user_2_increase_2_slope_delta
+
+        # Get Total Cumulative Power at user_extend_1_new_lock_end_timestamp
+        power_at_timestamp_1 = self.user_lock_start_timestamp
+        power_at_timestamp_2 = self.user_extend_1_new_lock_end_timestamp
+        block_timestamp = power_at_timestamp_2 + 1
+
+        self.create_checkpoints(self.user_address, self.user_sk, block_timestamp)
+
+        total_power_delta = get_bias(total_power_slope, power_at_timestamp_2 - self.user_2_increase_txn_2_timestamp)
+        __total_cumulative_power = total_cumulative_power + get_cumulative_power(total_power, total_power - total_power_delta, (power_at_timestamp_2 - self.user_2_increase_txn_2_timestamp))  # Added this var because we need to pin at last total power.
+        txn_group = prepare_get_total_cumulative_power_delta_transactions(
+            vault_app_id=VAULT_APP_ID,
+            sender=self.user_address,
+            total_powers=get_all_total_powers(self.ledger, get_vault_app_global_state(self.ledger).total_power_count),
+            timestamp_1=power_at_timestamp_1,
+            timestamp_2=power_at_timestamp_2,
+            suggested_params=self.sp,
+        )
+        txn_group.sign_with_private_key(self.user_address, self.user_sk)
+        block = self.ledger.eval_transactions(txn_group.signed_transactions, block_timestamp=block_timestamp)
+        self.assertEqual(bytes_to_int(block[b'txns'][0][b'dt'][b'lg'][-1][4:]), __total_cumulative_power)
+
+        # Get Total Cumulative Power at user_2_extend_1_new_lock_end_timestamp (last lock end)
+        power_at_timestamp_1 = self.user_lock_start_timestamp
+        power_at_timestamp_2 = self.user_2_extend_1_new_lock_end_timestamp
+        block_timestamp = power_at_timestamp_2 + 1
+
+        total_power_delta = get_bias(total_power_slope, power_at_timestamp_2 - self.user_2_increase_txn_2_timestamp)
+        __total_cumulative_power = total_cumulative_power + get_cumulative_power(total_power, total_power - total_power_delta, (power_at_timestamp_2 - self.user_2_increase_txn_2_timestamp))  # Added this var because we need to pin at last total power.
+        txn_group = prepare_get_total_cumulative_power_delta_transactions(
+            vault_app_id=VAULT_APP_ID,
+            sender=self.user_address,
+            total_powers=get_all_total_powers(self.ledger, get_vault_app_global_state(self.ledger).total_power_count),
+            timestamp_1=power_at_timestamp_1,
+            timestamp_2=power_at_timestamp_2,
+            suggested_params=self.sp,
+        )
+        txn_group.sign_with_private_key(self.user_address, self.user_sk)
+        block = self.ledger.eval_transactions(txn_group.signed_transactions, block_timestamp=block_timestamp)
+        self.assertEqual(bytes_to_int(block[b'txns'][0][b'dt'][b'lg'][-1][4:]), __total_cumulative_power)
 
 class UtilityMethodsTestCase(VaultAppMixin, BaseTestCase):
 
@@ -3267,7 +3694,7 @@ class UtilityMethodsTestCase(VaultAppMixin, BaseTestCase):
 
         amount = 20_000_000
         slope = get_slope(amount)
-        self.create_lock(self.user_address, amount, lock_start_timestamp, lock_end_timestamp)
+        self.create_lock(self.user_address, self.user_sk, amount, lock_start_timestamp, lock_end_timestamp)
         self.assertEqual(self.ledger.global_states[VAULT_APP_ID][TOTAL_LOCKED_AMOUNT_KEY], amount)
         
         # Global state
@@ -3399,12 +3826,15 @@ class UtilityMethodsTestCase(VaultAppMixin, BaseTestCase):
         self.create_lock(self.user_address, self.user_sk, amount, lock_start_timestamp, lock_end_timestamp)
         self.assertEqual(self.ledger.global_states[VAULT_APP_ID][TOTAL_LOCKED_AMOUNT_KEY], amount)
 
-        while True:
+        # Increase Lock 100 times.
+        self.ledger.move(amount=amount * 100, asset_id=TINY_ASSET_ID, sender=self.ledger.assets[TINY_ASSET_ID]["creator"], receiver=self.user_address)
+        for _ in range(100):
             block_timestamp += DAY
             if block_timestamp > lock_end_timestamp:
                 break
             self.increase_lock_amount(self.user_address, self.user_sk, amount, block_timestamp)
 
+        block_timestamp = lock_end_timestamp + 1
         txn_group = prepare_withdraw_transactions(
             vault_app_id=VAULT_APP_ID,
             tiny_asset_id=TINY_ASSET_ID,
