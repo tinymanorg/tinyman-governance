@@ -3129,6 +3129,22 @@ class PowerMethodsTestCase(VaultBaseTestCase):
         block = self.ledger.eval_transactions(txn_group.signed_transactions, block_timestamp=block_timestamp)
         self.assertEqual(bytes_to_int(block[b'txns'][0][b'dt'][b'lg'][-1][4:]), total_cumulative_power)
 
+        # Assert that total cumulative power doesn't change after the last lock end.
+
+        power_at_timestamp = self.user_2_extend_1_new_lock_end_timestamp + DAY
+        block_timestamp = power_at_timestamp + 1
+
+        txn_group = prepare_get_total_cumulative_power_at_transactions(
+            vault_app_id=VAULT_APP_ID,
+            sender=self.user_address,
+            total_powers=get_all_total_powers(self.ledger, get_vault_app_global_state(self.ledger).total_power_count),
+            timestamp=power_at_timestamp,
+            suggested_params=self.sp,
+        )
+        txn_group.sign_with_private_key(self.user_address, self.user_sk)
+        block = self.ledger.eval_transactions(txn_group.signed_transactions, block_timestamp=block_timestamp)
+        self.assertEqual(bytes_to_int(block[b'txns'][0][b'dt'][b'lg'][-1][4:]), total_cumulative_power)
+
     def test_get_account_cumulative_power_delta_before_lock(self):
         self.setScene()
 
@@ -3670,7 +3686,6 @@ class PowerMethodsTestCase(VaultBaseTestCase):
         block = self.ledger.eval_transactions(txn_group.signed_transactions, block_timestamp=block_timestamp)
         self.assertEqual(bytes_to_int(block[b'txns'][0][b'dt'][b'lg'][-1][4:]), total_cumulative_power_at_user_2_increase_1 - total_cumulative_power_at_user_1_increase)
 
-    @skip("Not completed yet.")
     def test_get_total_cumulative_power_delta_after_withdraw(self):
         self.setScene()
 
@@ -3744,23 +3759,43 @@ class PowerMethodsTestCase(VaultBaseTestCase):
         total_power = total_power - total_power_delta + user_2_bias_at_increase_1_delta
         total_power_slope += user_2_slope_at_increase_1_delta
 
+        # Total Cumulative Power at weekend between user_2_increase_txn_1_timestamp and user_2_increase_txn_2_timestamp
+        power_at_timestamp = get_start_timestamp_of_week(self.user_2_increase_txn_1_timestamp) + WEEK
+        total_power_delta = get_bias(total_power_slope, power_at_timestamp - self.user_2_increase_txn_1_timestamp)
+        total_cumulative_power += get_cumulative_power(total_power, total_power - total_power_delta, (power_at_timestamp - self.user_2_increase_txn_1_timestamp))
+        total_power -= total_power_delta
+
         # Total Cumulative Power at User 2 Increase 2
         user_2_slope_at_increase_2_delta = user_2_slope_at_increase_2 - user_2_slope_at_increase_1
         user_2_bias_at_increase_2_delta = user_2_bias_at_increase_2 - get_bias(user_2_slope_at_increase_1, (self.user_2_extend_1_new_lock_end_timestamp - self.user_2_increase_txn_2_timestamp))
-        total_power_delta = get_bias(total_power_slope, self.user_2_increase_txn_2_timestamp - self.user_2_increase_txn_1_timestamp)
-        total_cumulative_power += get_cumulative_power(total_power, total_power - total_power_delta, (self.user_2_increase_txn_2_timestamp - self.user_2_extend_txn_1_timestamp))
+        total_power_delta = get_bias(total_power_slope, self.user_2_increase_txn_2_timestamp - power_at_timestamp)
+        total_cumulative_power += get_cumulative_power(total_power, total_power - total_power_delta, (self.user_2_increase_txn_2_timestamp - power_at_timestamp))
         total_power = total_power - total_power_delta + user_2_bias_at_increase_2_delta
         total_power_slope += user_2_slope_at_increase_2_delta
 
-        # Get Total Cumulative Power at user_extend_1_new_lock_end_timestamp
+        self.create_checkpoints(self.user_address, self.user_sk, self.user_2_extend_1_new_lock_end_timestamp)  # Create checkpoints till the last lock end.
+
+        # Get Total Cumulative Power Delta between user_2_increase_txn_2_timestamp and user 1 lock end
+        # There are lots of weeks between two timestamps. We need to calculate total power for each week.
+        # Get to a week start first.
+        power_at_timestamp = get_start_timestamp_of_week(self.user_2_increase_txn_2_timestamp) + WEEK
+        total_power_delta = get_bias(total_power_slope, (power_at_timestamp - self.user_2_increase_txn_2_timestamp))
+        total_cumulative_power += get_cumulative_power(total_power, total_power - total_power_delta, (power_at_timestamp - self.user_2_increase_txn_2_timestamp))
+        total_power -= total_power_delta
+
+        checkpoint_count = (self.user_1_lock_end_timestamp // WEEK) - (power_at_timestamp // WEEK)
+        for _ in range(0, checkpoint_count):
+            power_at_timestamp += WEEK
+            total_power_delta = get_bias(total_power_slope, WEEK)
+            total_cumulative_power += get_cumulative_power(total_power, total_power - total_power_delta, WEEK)
+            total_power -= total_power_delta
+
+        # User 1 Lock has ended, apply slope change.
+        total_power_slope -= user_1_slope_at_increase
+
         power_at_timestamp_1 = self.user_lock_start_timestamp
-        power_at_timestamp_2 = self.user_extend_1_new_lock_end_timestamp
+        power_at_timestamp_2 = self.user_1_lock_end_timestamp
         block_timestamp = power_at_timestamp_2 + 1
-
-        self.create_checkpoints(self.user_address, self.user_sk, block_timestamp)
-
-        total_power_delta = get_bias(total_power_slope, power_at_timestamp_2 - self.user_2_increase_txn_2_timestamp)
-        __total_cumulative_power = total_cumulative_power + get_cumulative_power(total_power, total_power - total_power_delta, (power_at_timestamp_2 - self.user_2_increase_txn_2_timestamp))  # Added this var because we need to pin at last total power.
         txn_group = prepare_get_total_cumulative_power_delta_transactions(
             vault_app_id=VAULT_APP_ID,
             sender=self.user_address,
@@ -3771,15 +3806,48 @@ class PowerMethodsTestCase(VaultBaseTestCase):
         )
         txn_group.sign_with_private_key(self.user_address, self.user_sk)
         block = self.ledger.eval_transactions(txn_group.signed_transactions, block_timestamp=block_timestamp)
-        self.assertEqual(bytes_to_int(block[b'txns'][0][b'dt'][b'lg'][-1][4:]), __total_cumulative_power)
+        self.assertEqual(bytes_to_int(block[b'txns'][0][b'dt'][b'lg'][-1][4:]), total_cumulative_power)
 
-        # Get Total Cumulative Power at user_2_extend_1_new_lock_end_timestamp (last lock end)
+        # Calculate till user_extend_1_new_lock_end_timestamp
+        self.create_checkpoints(self.user_address, self.user_sk, self.user_2_extend_1_new_lock_end_timestamp)
+        power_at_timestamp = self.user_1_lock_end_timestamp
+        checkpoint_count = (self.user_extend_1_new_lock_end_timestamp // WEEK) - (power_at_timestamp // WEEK)
+        for _ in range(0, checkpoint_count):
+            power_at_timestamp += WEEK
+            total_power_delta = get_bias(total_power_slope, WEEK)
+            total_cumulative_power += get_cumulative_power(total_power, total_power - total_power_delta, WEEK)
+            total_power -= total_power_delta
+
+        # User Lock has ended, apply slope change.
+        total_power_slope -= user_slope
+
+        # Calculate till user_3_lock_end_timestamp
+        power_at_timestamp = self.user_extend_1_new_lock_end_timestamp
+        checkpoint_count = (self.user_3_lock_end_timestamp // WEEK) - (power_at_timestamp // WEEK)
+        for _ in range(0, checkpoint_count):
+            power_at_timestamp += WEEK
+            total_power_delta = get_bias(total_power_slope, WEEK)
+            total_cumulative_power += get_cumulative_power(total_power, total_power - total_power_delta, WEEK)
+            total_power -= total_power_delta
+
+        # User 3 Lock has ended, apply slope change.
+        total_power_slope -= user_3_slope
+
+        # Get Total Cumulative Power at user_2_extend_1_new_lock_end_timestamp (last lock end)
+        power_at_timestamp = self.user_3_lock_end_timestamp
+        checkpoint_count = (self.user_2_extend_1_new_lock_end_timestamp // WEEK) - (power_at_timestamp // WEEK)
+        for _ in range(0, checkpoint_count):
+            power_at_timestamp += WEEK
+            total_power_delta = get_bias(total_power_slope, WEEK)
+            total_cumulative_power += get_cumulative_power(total_power, total_power - total_power_delta, WEEK)
+            total_power -= total_power_delta
+
+        # User 2 Lock has ended, apply slope change.
+        total_power_slope -= user_2_slope_at_increase_2
+
         power_at_timestamp_1 = self.user_lock_start_timestamp
         power_at_timestamp_2 = self.user_2_extend_1_new_lock_end_timestamp
         block_timestamp = power_at_timestamp_2 + 1
-
-        total_power_delta = get_bias(total_power_slope, power_at_timestamp_2 - self.user_2_increase_txn_2_timestamp)
-        __total_cumulative_power = total_cumulative_power + get_cumulative_power(total_power, total_power - total_power_delta, (power_at_timestamp_2 - self.user_2_increase_txn_2_timestamp))  # Added this var because we need to pin at last total power.
         txn_group = prepare_get_total_cumulative_power_delta_transactions(
             vault_app_id=VAULT_APP_ID,
             sender=self.user_address,
@@ -3790,7 +3858,7 @@ class PowerMethodsTestCase(VaultBaseTestCase):
         )
         txn_group.sign_with_private_key(self.user_address, self.user_sk)
         block = self.ledger.eval_transactions(txn_group.signed_transactions, block_timestamp=block_timestamp)
-        self.assertEqual(bytes_to_int(block[b'txns'][0][b'dt'][b'lg'][-1][4:]), __total_cumulative_power)
+        self.assertEqual(bytes_to_int(block[b'txns'][0][b'dt'][b'lg'][-1][4:]), total_cumulative_power)
 
 class UtilityMethodsTestCase(VaultBaseTestCase):
     def test_create_checkpoints(self):
