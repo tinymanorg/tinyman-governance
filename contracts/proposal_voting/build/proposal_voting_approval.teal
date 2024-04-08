@@ -129,12 +129,9 @@ route_get_box:
     txn OnCompletion; pushint 0; ==; assert                 // assert OnCompletion == NoOp
     txna ApplicationArgs 1
     callsub __func__get_box
-    // return int, bytes, bytes
-    // uncover 0 int
-    itob
+    // return bytes, bytes
+    // uncover 0 bytes
     uncover 1                                               // bytes
-    uncover 2                                               // bytes
-    concat
     concat
     pushbytes 0x151f7c75; swap; concat; log                 // arc4 return log
     pushint 1; return
@@ -1185,24 +1182,25 @@ __func__has_voted:
     load 70                                                 // result
     retsub
 
-// tl:426: func get_box(box_name: bytes) int, bytes, bytes:
+// tl:426: func get_box(box_name: bytes) bytes, bytes:
 __func__get_box:
     store 71                                                // box_name [bytes]
-    // tl:427: int exists [slot 72]
-    // tl:428: bytes data [slot 73]
-    // tl:429: exists, data = box_get(box_name)
+    // tl:427: bytes data [slot 72]
+    // tl:428: _, data = box_get(box_name)
     load 71                                                 // box_name
     box_get
-    store 72                                                // exists
-    store 73                                                // data
-    
-    // tl:431: return exists, extract(6, 2, itob(len(data))), data
-    load 73                                                 // data
-    load 73                                                 // data
+    pop                                                     // discarding value for _
+    store 72                                                // data
+    // Return length as 2 bytes instead of using 8 bytes for uint64
+    // tl:430: bytes length = extract(6, 2, itob(len(data))) [slot 73]
+    load 72                                                 // data
     len
     itob
     extract 6 2
-    load 72                                                 // exists
+    store 73                                                // length
+    // tl:431: return length, data
+    load 72                                                 // data
+    load 73                                                 // length
     retsub
 
 // tl:434: func check_and_set_user_as_voted(address: bytes[32], proposal_index: int):

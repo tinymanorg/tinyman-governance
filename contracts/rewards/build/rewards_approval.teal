@@ -86,12 +86,9 @@ route_get_box:
     txn OnCompletion; pushint 0; ==; assert                 // assert OnCompletion == NoOp
     txna ApplicationArgs 1
     callsub __func__get_box
-    // return int, bytes, bytes
-    // uncover 0 int
-    itob
+    // return bytes, bytes
+    // uncover 0 bytes
     uncover 1                                               // bytes
-    uncover 2                                               // bytes
-    concat
     concat
     pushbytes 0x151f7c75; swap; concat; log                 // arc4 return log
     pushint 1; return
@@ -556,24 +553,25 @@ __func__set_rewards_manager:
     // tl:199: return
     retsub
 
-// tl:203: func get_box(box_name: bytes) int, bytes, bytes:
+// tl:203: func get_box(box_name: bytes) bytes, bytes:
 __func__get_box:
     store 41                                                // box_name [bytes]
-    // tl:204: int exists [slot 42]
-    // tl:205: bytes data [slot 43]
-    // tl:206: exists, data = box_get(box_name)
+    // tl:204: bytes data [slot 42]
+    // tl:205: _, data = box_get(box_name)
     load 41                                                 // box_name
     box_get
-    store 42                                                // exists
-    store 43                                                // data
-    
-    // tl:208: return exists, extract(6, 2, itob(len(data))), data
-    load 43                                                 // data
-    load 43                                                 // data
+    pop                                                     // discarding value for _
+    store 42                                                // data
+    // Return length as 2 bytes instead of using 8 bytes for uint64
+    // tl:207: bytes length = extract(6, 2, itob(len(data))) [slot 43]
+    load 42                                                 // data
     len
     itob
     extract 6 2
-    load 42                                                 // exists
+    store 43                                                // length
+    // tl:208: return length, data
+    load 42                                                 // data
+    load 43                                                 // length
     retsub
 
 // tl:211: func construct_reward_period(amount: int, cumulative_power_delta: bytes) RewardPeriod:
@@ -987,10 +985,10 @@ __func__get_total_cumulative_power_delta:
     load 87                                                 // cumulative_power_delta
     retsub
 
-// tl:327: func tiny_transfer(amount: int, sender: bytes[32], receiver: bytes[32]):
+// tl:327: func tiny_transfer(amount: int, sender: bytes, receiver: bytes):
 __func__tiny_transfer:
-    store 88                                                // receiver [bytes[32]]
-    store 89                                                // sender [bytes[32]]
+    store 88                                                // receiver [bytes]
+    store 89                                                // sender [bytes]
     store 90                                                // amount [int]
     // tl:328: inner_txn:
     callsub _itxn_begin

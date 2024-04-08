@@ -78,12 +78,9 @@ route_get_box:
     txn OnCompletion; pushint 0; ==; assert                 // assert OnCompletion == NoOp
     txna ApplicationArgs 1
     callsub __func__get_box
-    // return int, bytes, bytes
-    // uncover 0 int
-    itob
+    // return bytes, bytes
+    // uncover 0 bytes
     uncover 1                                               // bytes
-    uncover 2                                               // bytes
-    concat
     concat
     pushbytes 0x151f7c75; swap; concat; log                 // arc4 return log
     pushint 1; return
@@ -645,45 +642,47 @@ __func__set_proposal_manager:
     // tl:229: return
     retsub
 
-// tl:233: func get_box(box_name: bytes) int, bytes, bytes:
+// tl:233: func get_box(box_name: bytes) bytes, bytes:
 __func__get_box:
     store 41                                                // box_name [bytes]
-    // tl:234: int exists [slot 42]
-    // tl:235: bytes data [slot 43]
-    // tl:236: exists, data = box_get(box_name)
+    // tl:234: bytes data [slot 42]
+    // tl:235: _, data = box_get(box_name)
     load 41                                                 // box_name
     box_get
-    store 42                                                // exists
-    store 43                                                // data
-    // tl:237: return exists, extract(6, 2, itob(len(data))), data
-    load 43                                                 // data
-    load 43                                                 // data
+    pop                                                     // discarding value for _
+    store 42                                                // data
+    // Return length as 2 bytes instead of using 8 bytes for uint64
+    // tl:237: bytes length = extract(6, 2, itob(len(data))) [slot 43]
+    load 42                                                 // data
     len
     itob
     extract 6 2
-    load 42                                                 // exists
+    store 43                                                // length
+    // tl:238: return length, data
+    load 42                                                 // data
+    load 43                                                 // length
     retsub
 
 
-// tl:241: func check_and_set_user_as_voted(address: bytes[32], proposal_index: int):
+// tl:242: func check_and_set_user_as_voted(address: bytes[32], proposal_index: int):
 __func__check_and_set_user_as_voted:
     store 44                                                // proposal_index [int]
     store 45                                                // address [bytes[32]]
-    // tl:242: int box_index = proposal_index / (ACCOUNT_ATTENDANCE_SHEET_BOX_SIZE * 8) [slot 46]
+    // tl:243: int box_index = proposal_index / (ACCOUNT_ATTENDANCE_SHEET_BOX_SIZE * 8) [slot 46]
     load 44                                                 // proposal_index
     pushint ACCOUNT_ATTENDANCE_SHEET_BOX_SIZE               // 24
     pushint 8
     *
     /
     store 46                                                // box_index
-    // tl:243: int array_index = proposal_index % (ACCOUNT_ATTENDANCE_SHEET_BOX_SIZE * 8) [slot 47]
+    // tl:244: int array_index = proposal_index % (ACCOUNT_ATTENDANCE_SHEET_BOX_SIZE * 8) [slot 47]
     load 44                                                 // proposal_index
     pushint ACCOUNT_ATTENDANCE_SHEET_BOX_SIZE               // 24
     pushint 8
     *
     %
     store 47                                                // array_index
-    // tl:244: bytes box_name = Concat(ATTENDANCE_BOX_PREFIX, Concat(address, itob(box_index))) [slot 48]
+    // tl:245: bytes box_name = Concat(ATTENDANCE_BOX_PREFIX, Concat(address, itob(box_index))) [slot 48]
     pushbytes ATTENDANCE_BOX_PREFIX                         // "a"
     load 45                                                 // address
     load 46                                                 // box_index
@@ -692,42 +691,42 @@ __func__check_and_set_user_as_voted:
     concat
     store 48                                                // box_name
     
-    // tl:246: bytes sheet [slot 49]
-    // tl:247: _ = box_create(box_name, ACCOUNT_ATTENDANCE_SHEET_BOX_SIZE)
+    // tl:247: bytes sheet [slot 49]
+    // tl:248: _ = box_create(box_name, ACCOUNT_ATTENDANCE_SHEET_BOX_SIZE)
     load 48                                                 // box_name
     pushint ACCOUNT_ATTENDANCE_SHEET_BOX_SIZE               // 24
     box_create
     pop                                                     // discarding value for _
-    // tl:248: _, sheet = box_get(box_name)
+    // tl:249: _, sheet = box_get(box_name)
     load 48                                                 // box_name
     box_get
     pop                                                     // discarding value for _
     store 49                                                // sheet
-    // tl:249: assert(!getbit(sheet, array_index))
+    // tl:250: assert(!getbit(sheet, array_index))
     load 49                                                 // sheet
     load 47                                                 // array_index
     getbit
     !
     assert
-    // tl:250: sheet = setbit(sheet, array_index, 1)
+    // tl:251: sheet = setbit(sheet, array_index, 1)
     load 49                                                 // sheet
     load 47                                                 // array_index
     pushint 1
     setbit
     store 49                                                // sheet
-    // tl:251: box_put(box_name, sheet)
+    // tl:252: box_put(box_name, sheet)
     load 48                                                 // box_name
     load 49                                                 // sheet
     box_put
-    // tl:252: return
+    // tl:253: return
     retsub
 
-// tl:255: func add_vote_amount(proposal_index: int, asset_id: int, vote_amount: int):
+// tl:256: func add_vote_amount(proposal_index: int, asset_id: int, vote_amount: int):
 __func__add_vote_amount:
     store 50                                                // vote_amount [int]
     store 51                                                // asset_id [int]
     store 52                                                // proposal_index [int]
-    // tl:256: bytes box_name = Concat(VOTE_BOX_PREFIX, Concat(itob(proposal_index), itob(asset_id))) [slot 53]
+    // tl:257: bytes box_name = Concat(VOTE_BOX_PREFIX, Concat(itob(proposal_index), itob(asset_id))) [slot 53]
     pushbytes VOTE_BOX_PREFIX                               // "v"
     load 52                                                 // proposal_index
     itob
@@ -736,19 +735,19 @@ __func__add_vote_amount:
     concat
     concat
     store 53                                                // box_name
-    // tl:257: _ = box_create(box_name, PROPOSAL_ASSET_BOX_SIZE)
+    // tl:258: _ = box_create(box_name, PROPOSAL_ASSET_BOX_SIZE)
     load 53                                                 // box_name
     pushint PROPOSAL_ASSET_BOX_SIZE                         // 8
     box_create
     pop                                                     // discarding value for _
-    // tl:258: bytes proposal_asset_vote_amount [slot 54]
-    // tl:259: _, proposal_asset_vote_amount = box_get(box_name)
+    // tl:259: bytes proposal_asset_vote_amount [slot 54]
+    // tl:260: _, proposal_asset_vote_amount = box_get(box_name)
     load 53                                                 // box_name
     box_get
     pop                                                     // discarding value for _
     store 54                                                // proposal_asset_vote_amount
     
-    // tl:261: box_put(box_name, itob(btoi(proposal_asset_vote_amount) + vote_amount))
+    // tl:262: box_put(box_name, itob(btoi(proposal_asset_vote_amount) + vote_amount))
     load 53                                                 // box_name
     load 54                                                 // proposal_asset_vote_amount
     btoi
@@ -756,12 +755,12 @@ __func__add_vote_amount:
     +
     itob
     box_put
-    // tl:262: return
+    // tl:263: return
     retsub
 
-// tl:265: func get_voting_start_timestamp() int:
+// tl:266: func get_voting_start_timestamp() int:
 __func__get_voting_start_timestamp:
-    // tl:266: int end_timestamp_of_day = ((Global.LatestTimestamp / DAY) * DAY) + DAY [slot 55]
+    // tl:267: int end_timestamp_of_day = ((Global.LatestTimestamp / DAY) * DAY) + DAY [slot 55]
     global LatestTimestamp
     pushint DAY                                             // 86400
     /
@@ -770,7 +769,7 @@ __func__get_voting_start_timestamp:
     pushint DAY                                             // 86400
     +
     store 55                                                // end_timestamp_of_day
-    // tl:267: return end_timestamp_of_day + (app_global_get(VOTING_DELAY_KEY) * DAY)
+    // tl:268: return end_timestamp_of_day + (app_global_get(VOTING_DELAY_KEY) * DAY)
     load 55                                                 // end_timestamp_of_day
     pushbytes VOTING_DELAY_KEY                              // "voting_delay"
     app_global_get
@@ -781,44 +780,44 @@ __func__get_voting_start_timestamp:
 
 // Inner Txns
 
-// tl:272: func get_account_voting_power_at(address: bytes[32], snapshot_timestamp: int, account_power_index: bytes) int:
+// tl:273: func get_account_voting_power_at(address: bytes[32], snapshot_timestamp: int, account_power_index: bytes) int:
 __func__get_account_voting_power_at:
     store 56                                                // account_power_index [bytes]
     store 57                                                // snapshot_timestamp [int]
     store 58                                                // address [bytes[32]]
-    // tl:273: inner_txn:
+    // tl:274: inner_txn:
     callsub _itxn_begin
-        // tl:274: TypeEnum: Appl
+        // tl:275: TypeEnum: Appl
         pushint 6                                           // Appl
         itxn_field TypeEnum
-        // tl:275: ApplicationID: app_global_get(VAULT_APP_ID_KEY)
+        // tl:276: ApplicationID: app_global_get(VAULT_APP_ID_KEY)
         pushbytes VAULT_APP_ID_KEY                          // "vault_app_id"
         app_global_get
         itxn_field ApplicationID
-        // tl:276: ApplicationArgs[0]: "get_tiny_power_of_at"
+        // tl:277: ApplicationArgs[0]: "get_tiny_power_of_at"
         pushbytes "get_tiny_power_of_at"
         itxn_field ApplicationArgs
-        // tl:277: ApplicationArgs[1]: address
+        // tl:278: ApplicationArgs[1]: address
         load 58                                             // address
         itxn_field ApplicationArgs
-        // tl:278: ApplicationArgs[2]: itob(snapshot_timestamp)
+        // tl:279: ApplicationArgs[2]: itob(snapshot_timestamp)
         load 57                                             // snapshot_timestamp
         itob
         itxn_field ApplicationArgs
-        // tl:279: ApplicationArgs[3]: account_power_index
+        // tl:280: ApplicationArgs[3]: account_power_index
         load 56                                             // account_power_index
         itxn_field ApplicationArgs
-        // tl:280: Fee: 0
+        // tl:281: Fee: 0
         pushint 0
         itxn_field Fee
     callsub _itxn_submit
     // end inner_txn
-    // tl:282: int voting_power = extract_uint64(Itxn.LastLog, 4) [slot 59]
+    // tl:283: int voting_power = extract_uint64(Itxn.LastLog, 4) [slot 59]
     itxn LastLog
     pushint 4
     extract_uint64
     store 59                                                // voting_power
-    // tl:283: return voting_power
+    // tl:284: return voting_power
     load 59                                                 // voting_power
     retsub
 
