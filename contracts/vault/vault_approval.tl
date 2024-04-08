@@ -131,11 +131,16 @@ func create_lock(lock_end_time: int):
     bytes[32] user_address = Txn.Sender
     int amount = get_received_tiny_amount()
 
+    # amount must be at least the minimum
     assert(amount >= MIN_LOCK_AMOUNT)
+    # lock end time must be a the start of a week
     assert(!(lock_end_time % WEEK))
+    # lock duration must be at least 4 weeks
     assert(lock_end_time >= (Global.LatestTimestamp + (4 * WEEK)))
+    # lock duration must be no more than the max lock time
     assert(lock_end_time <= (Global.LatestTimestamp + MAX_LOCK_TIME))
 
+    # Get or create the account state box
     # An account may have state box if it is not locking first time.
     _ = box_create(user_address, ACCOUNT_STATE_SIZE)
     box<AccountState> account_state = Box(user_address)
@@ -151,6 +156,7 @@ func create_lock(lock_end_time: int):
     int account_power_index = account_state.power_count
     account_state.power_count = account_power_index + 1
 
+    # Calculate the current slope and bias
     bytes slope = get_slope(amount)
     int bias = get_bias(slope, (lock_end_time - Global.LatestTimestamp))
 
@@ -168,7 +174,9 @@ func create_lock(lock_end_time: int):
     AccountPower account_power = construct_account_power(bias, Global.LatestTimestamp, slope, cumulative_power)
     save_account_power(user_address, account_power_index, account_power)
 
+    # Create checkpoint for Total Power
     create_checkpoints_internal(bias, slope, 1)
+    # Schedule a future slope change for when the lock expires
     update_or_create_slope_change(lock_end_time, slope)
     increase_total_locked_amount(amount)
 
@@ -184,8 +192,10 @@ func increase_lock_amount():
     bytes[32] user_address = Txn.Sender
     int amount = get_received_tiny_amount()
 
+    # Amount must be at least the minimum increment
     assert(amount >= MIN_LOCK_AMOUNT_INCREMENT)
 
+    # Get the current AccountState box (must already exist)
     box<AccountState> account_state = OpenBox(user_address)
 
     # Ensure that current lock is not expired.
@@ -201,6 +211,7 @@ func increase_lock_amount():
     int account_power_index = account_state.power_count
     account_state.power_count = account_power_index + 1
 
+    # Calculate the new slope & bias and the slope_delta & bias_delta 
     bytes old_locked_amount_slope = get_slope(old_locked_amount)
     bytes new_locked_amount_slope = get_slope(new_locked_amount)
     bytes slope_delta = new_locked_amount_slope b- old_locked_amount_slope
@@ -209,6 +220,7 @@ func increase_lock_amount():
     int new_bias = get_bias(new_locked_amount_slope, (lock_end_time - Global.LatestTimestamp))
     int bias_delta = new_bias - current_bias
 
+    # Create a new AccountPower based on the previous AccountPower
     AccountPower last_account_power = get_account_power(user_address, account_power_index - 1)
     int time_delta = Global.LatestTimestamp - last_account_power.timestamp
 
@@ -219,7 +231,10 @@ func increase_lock_amount():
     AccountPower account_power = construct_account_power(new_bias, Global.LatestTimestamp, new_locked_amount_slope, cumulative_power)
     save_account_power(user_address, account_power_index, account_power)
 
+    # Create checkpoint for Total Power
     create_checkpoints_internal(bias_delta, slope_delta, 1)
+
+    # Modify the future scheduled slope change
     update_or_create_slope_change(lock_end_time, slope_delta)
     increase_total_locked_amount(amount)
 
@@ -234,12 +249,17 @@ func extend_lock_end_time(new_lock_end_time: int):
 
     bytes[32] user_address = Txn.Sender
 
+    # Get the current AccountState
     box<AccountState> account_state = OpenBox(user_address)
     int current_lock_end_time = account_state.lock_end_time
+    # The lock must still be active
     assert(current_lock_end_time > Global.LatestTimestamp)
 
+    # The new lock end time must be the start of a week
     assert(!(new_lock_end_time % WEEK))
+    # The new duration must be no more than the max lock time
     assert(new_lock_end_time <= (Global.LatestTimestamp + MAX_LOCK_TIME))
+    # The new duration must be at least the minimum
     assert(new_lock_end_time >= (current_lock_end_time + (4 * WEEK)))
     # ensured indirectly
     # assert(new_lock_end_time > Global.LatestTimestamp)
@@ -249,11 +269,13 @@ func extend_lock_end_time(new_lock_end_time: int):
     account_state.power_count = account_power_index + 1
     account_state.lock_end_time = new_lock_end_time
 
+    # Calculate the slope, new bias and bias_delta
     bytes slope = get_slope(account_state.locked_amount)
     int current_bias = get_bias(slope, (current_lock_end_time - Global.LatestTimestamp))
     int new_bias = get_bias(slope, (new_lock_end_time - Global.LatestTimestamp))
     int bias_delta = new_bias - current_bias
 
+    # Create a new AccountPower based on the previous AccountPower
     AccountPower last_account_power = get_account_power(user_address, account_power_index - 1)
     int time_delta = Global.LatestTimestamp - last_account_power.timestamp
     bytes cumulative_power = last_account_power.cumulative_power b+ get_cumulative_power_1(last_account_power.bias, current_bias, time_delta)
@@ -262,8 +284,11 @@ func extend_lock_end_time(new_lock_end_time: int):
     AccountPower account_power = construct_account_power(new_bias, Global.LatestTimestamp, slope, cumulative_power)
     save_account_power(user_address, account_power_index, account_power)
 
+    # Create checkpoint for Total Power
     create_checkpoints_internal(bias_delta, bzero(16), 1)
+    # Revert the future scheduled slope change for the current lock end time
     revert_slope_change(current_lock_end_time, slope)
+    # Schedule a new slope change for the new lock end time
     update_or_create_slope_change(new_lock_end_time, slope)
 
     # extend_lock_end_time(address, locked_amount, lock_end_time, lock_end_time_delta)
@@ -279,8 +304,10 @@ func withdraw():
     int locked_amount = account_state.locked_amount
 
     assert(locked_amount)
+    # The lock must have expired
     assert(account_state.lock_end_time < Global.LatestTimestamp)
 
+    # Create the final AccountPower recording the final state
     int account_power_index = account_state.power_count
     account_state.power_count = account_power_index + 1
 
@@ -291,9 +318,11 @@ func withdraw():
     AccountPower account_power = construct_account_power(0, account_state.lock_end_time, bzero(16), cumulative_power)
     save_account_power(user_address, account_power_index, account_power)
 
+    # Transfer the locked amount back to the user
     tiny_transfer(locked_amount, Global.CurrentApplicationAddress, user_address)
     decrease_total_locked_amount(locked_amount)
 
+    # Reset the AccountState
     account_state.locked_amount = 0
     account_state.lock_end_time = 0
 
@@ -313,6 +342,7 @@ func get_tiny_power_of(user_address: bytes[32]) int:
     exists, _ = box_len(user_address)
     if exists:
         box<AccountState> account_state = Box(user_address)
+        # There is only power if the lock has not expired
         if account_state.lock_end_time > timestamp:
             int remaining_time = account_state.lock_end_time - timestamp
             bytes slope = get_slope(account_state.locked_amount)
@@ -332,16 +362,19 @@ func get_tiny_power_of_at(user_address: bytes[32], timestamp: int, index: int) i
     exists, _ = box_len(user_address)
     if exists:
         box<AccountState> account_state = Box(user_address)
+        # The index must be valid
         assert(index < account_state.power_count)
 
         # account_power.timestamp <= timestamp < next_account_power.timestamp
         AccountPower account_power = get_account_power(user_address, index)
+        # Ensure that this AccountPower is before the timestamp
         assert(account_power.timestamp <= timestamp)
+        # Ensure that this is the last AccountPower before the timestamp
         if (index + 1) < account_state.power_count:
             AccountPower next_account_power = get_account_power(user_address, index + 1)
             assert(timestamp < next_account_power.timestamp)
         end
-
+        # Calculate the power using the AccountPower checkpoint and the calculated power between the checkpoint and the timestamp
         tiny_power = get_power(account_power.bias, account_power.slope, (timestamp - account_power.timestamp))
     end
 
@@ -351,12 +384,13 @@ end
 @public()
 func get_total_tiny_power() int:
     int timestamp = Global.LatestTimestamp
+    # Get the latest TotalPower
     int index = app_global_get(TOTAL_POWER_COUNT_KEY) - 1
-
     TotalPower total_power = get_total_power(index)
     # Ensure that the latest checkpoint belongs to the same week so the slope is not changed.
     assert((total_power.timestamp / WEEK) == (timestamp / WEEK))
 
+    # Calculate the power since the stored power
     int tiny_power = get_power(total_power.bias, total_power.slope, (timestamp - total_power.timestamp))
     return tiny_power
 end
@@ -364,6 +398,7 @@ end
 @public()
 func get_total_tiny_power_at(timestamp: int, total_power_index: int) int:
     int tiny_power = 0
+    # index must be valid
     assert(total_power_index < app_global_get(TOTAL_POWER_COUNT_KEY))
     assert(timestamp <= Global.LatestTimestamp)
 
@@ -371,12 +406,14 @@ func get_total_tiny_power_at(timestamp: int, total_power_index: int) int:
     # Ensure that the latest checkpoint belongs to the same week so the slope is not changed.
     assert((total_power.timestamp / WEEK) == (timestamp / WEEK))
 
+    # Ensure that the TotalPower is before the timestamp
     if total_power.timestamp <= timestamp:
+        # Ensure that the TotalPower is the last one before the timestamp
         if (total_power_index + 1) < app_global_get(TOTAL_POWER_COUNT_KEY):
             TotalPower next_total_power = get_total_power(total_power_index + 1)
             assert(timestamp < next_total_power.timestamp)
         end
-
+        # Calculate the power since the stored power
         tiny_power = get_power(total_power.bias, total_power.slope, (timestamp - total_power.timestamp))
     else:
         # Index must be 0, it indicates that the given timestamp predates the first checkpoint.
@@ -391,7 +428,7 @@ func get_account_cumulative_power_delta(user_address: bytes[32], timestamp_1: in
     bytes account_cumulative_power_1 = get_cumulative_power_of_at(user_address, timestamp_1, account_power_index_1)
     bytes account_cumulative_power_2 = get_cumulative_power_of_at(user_address, timestamp_2, account_power_index_2)
     bytes cumulative_power_delta = account_cumulative_power_2 b- account_cumulative_power_1
-
+    # Pad the result to 16 bytes
     return bzero(16) b| cumulative_power_delta
 end
 
@@ -400,7 +437,7 @@ func get_total_cumulative_power_delta(timestamp_1: int, timestamp_2: int, total_
     bytes total_cumulative_power_1 = get_total_cumulative_power_at(timestamp_1, total_power_index_1)
     bytes total_cumulative_power_2 = get_total_cumulative_power_at(timestamp_2, total_power_index_2)
     bytes cumulative_power_delta = total_cumulative_power_2 b- total_cumulative_power_1
-
+    # Pad the result to 16 bytes
     return bzero(16) b| cumulative_power_delta
 end
 
@@ -442,11 +479,12 @@ end
 
 @public()
 func delete_account_state():
+    # Deletes remaining AccountPower and the AccountState boxes and returns the min balance Algo
     bytes[32] user_address = Txn.Sender
 
     box<AccountState> account_state = Box(user_address)
     int account_power_count = account_state.power_count
-    # check the lock
+    # Ensure the lock is empty and expired
     assert(!account_state.locked_amount)
     assert(!account_state.lock_end_time)
 
@@ -522,6 +560,7 @@ end
 
 @public()
 func get_cumulative_power_of_at(user_address: bytes[32], timestamp: int, account_power_index: int) bytes:
+    # Calculates the cumulative power of a user at a specific timestamp in the past
     bytes cumulative_power
     assert(timestamp <= Global.LatestTimestamp)
 
@@ -562,6 +601,7 @@ end
 
 @public()
 func get_total_cumulative_power_at(timestamp: int, total_power_index: int) bytes:
+    # Calculates the cumulative total power at a specific timestamp in the past
     bytes total_cumulative_power
     assert(total_power_index < app_global_get(TOTAL_POWER_COUNT_KEY))
     assert(timestamp <= Global.LatestTimestamp)
@@ -675,10 +715,14 @@ func get_cumulative_power_2(old_bias: int, slope: bytes) bytes:
 end
 
 func get_bias(slope: bytes, time: int) int:
+    # 87bits * 32bits / 64bit = 55bits
+    # (11bytes * 4bytes) / 8bytes = 7bytes
     return btoi((slope b* itob(time)) b/ TWO_TO_THE_64)
 end
 
 func get_slope(locked_amount: int) bytes:
+    # max locked_amount = total supply = 1e15 = 50bits = 7bytes
+    # (50bits * 64bits) / 27bits = 87 bits = 11bytes
     return (itob(locked_amount) b* TWO_TO_THE_64) b/ itob(MAX_LOCK_TIME)
 end
 
