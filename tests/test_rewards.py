@@ -735,7 +735,9 @@ class RewardsTestCase(VaultAppMixin, RewardsAppMixin, BaseTestCase):
         txn_group.sign_with_private_key(self.user_1_address, self.user_1_sk)
         block = self.ledger.eval_transactions(txn_group.signed_transactions)
 
-        _sheet = RewardClaimSheet(value=block[b"txns"][0][b"dt"][b"lg"][-1])
+        return_value = block[b"txns"][0][b"dt"][b"lg"][-1][4:]
+        box_data = return_value[2:]
+        _sheet = RewardClaimSheet(value=box_data)
         sheet = RewardClaimSheet(value=self.ledger.boxes[REWARDS_APP_ID][get_account_reward_claim_sheet_box_name(self.user_1_address, 0)])
         self.assertEqual(_sheet, sheet)
 

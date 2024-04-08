@@ -4168,12 +4168,10 @@ class UtilityMethodsTestCase(VaultBaseTestCase):
         )
         txn_group.sign_with_private_key(self.user_address, self.user_sk)
         block = self.ledger.eval_transactions(txn_group.signed_transactions, block_timestamp=block_timestamp)
-        return_value = block[b'txns'][0][b'dt'][b'lg'][-1]
-
-        exists = bytes_to_int(return_value[4:12])
-        self.assertTrue(exists)
-        size = return_value[12:14]
-        box_data = return_value[14:]
+        return_value = block[b'txns'][0][b'dt'][b'lg'][-1][4:]
+        size = int.from_bytes(return_value[0:2], "big")
+        self.assertGreater(size, 0)
+        box_data = return_value[2:]
         
         expected = get_account_state(self.ledger, self.user_address)
         retrieved = parse_box_account_state(box_data)

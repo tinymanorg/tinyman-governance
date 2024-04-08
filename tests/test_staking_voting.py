@@ -900,10 +900,8 @@ class StakingVotingTestCase(VaultAppMixin, StakingVotingAppMixin, BaseTestCase):
         logs = app_call_txn[b'dt'][b'lg']
         self.assertEqual(len(logs), 1)
         return_data = logs[0][4:]
-        is_box_exists = bytes_to_int(return_data[:8])
-        box_size = bytes_to_int(return_data[8:10])
-        box_data = return_data[10:]
-        self.assertEqual(is_box_exists, 0)
+        box_size = bytes_to_int(return_data[4:6])
+        box_data = return_data[6:]
         self.assertEqual(box_size, 0)
         self.assertEqual(len(box_data), 0)
 
@@ -929,10 +927,8 @@ class StakingVotingTestCase(VaultAppMixin, StakingVotingAppMixin, BaseTestCase):
         logs = app_call_txn[b'dt'][b'lg']
         self.assertEqual(len(logs), 1)
         return_data = logs[0][4:]
-        is_box_exists = bytes_to_int(return_data[:8])
-        box_size = bytes_to_int(return_data[8:10])
-        box_data = return_data[10:]
-        self.assertEqual(is_box_exists, 1)
+        box_size = bytes_to_int(return_data[:2])
+        box_data = return_data[2:]
         self.assertEqual(box_size, 49)
         self.assertEqual(len(box_data), 49)
 

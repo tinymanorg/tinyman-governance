@@ -442,12 +442,12 @@ func get_total_cumulative_power_delta(timestamp_1: int, timestamp_2: int, total_
 end
 
 @public()
-func get_box(box_name: bytes) int, bytes, bytes:
-    int exists
+func get_box(box_name: bytes) bytes, bytes:
     bytes data
-    exists, data = box_get(box_name)
-
-    return exists, extract(6, 2, itob(len(data))), data
+    _, data = box_get(box_name)
+    # Return length as 2 bytes instead of using 8 bytes for uint64
+    bytes length = extract(6, 2, itob(len(data)))
+    return length, data
 end
 
 @public()

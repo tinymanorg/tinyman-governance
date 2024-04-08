@@ -423,12 +423,12 @@ func has_voted(proposal_id: bytes[59], address: bytes[32]) bytes:
 end
 
 @public()
-func get_box(box_name: bytes) int, bytes, bytes:
-    int exists
+func get_box(box_name: bytes) bytes, bytes:
     bytes data
-    exists, data = box_get(box_name)
-
-    return exists, extract(6, 2, itob(len(data))), data
+    _, data = box_get(box_name)
+    # Return length as 2 bytes instead of using 8 bytes for uint64
+    bytes length = extract(6, 2, itob(len(data)))
+    return length, data
 end
 
 func check_and_set_user_as_voted(address: bytes[32], proposal_index: int):
