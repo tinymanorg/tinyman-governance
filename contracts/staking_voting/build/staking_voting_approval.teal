@@ -112,10 +112,9 @@ route_set_voting_duration:
 // tl:55: func create_application(vault_app_id: int):
 __func__create_application:
     store 1                                                 // vault_app_id [int]
-    // tl:56: app_global_put(VAULT_APP_ID_KEY, btoi(Txn.ApplicationArgs[0]))
+    // tl:56: app_global_put(VAULT_APP_ID_KEY, vault_app_id)
     pushbytes VAULT_APP_ID_KEY                              // "vault_app_id"
-    txna ApplicationArgs 0
-    btoi
+    load 1                                                  // vault_app_id
     app_global_put
     // tl:57: app_global_put(PROPOSAL_INDEX_COUNTER_KEY, 0)
     pushbytes PROPOSAL_INDEX_COUNTER_KEY                    // "proposal_index_counter"
