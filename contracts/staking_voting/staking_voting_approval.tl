@@ -53,7 +53,7 @@ end
 
 @public(OnCompletion=CreateApplication)
 func create_application(vault_app_id: int):
-    app_global_put(VAULT_APP_ID_KEY, btoi(Txn.ApplicationArgs[0]))
+    app_global_put(VAULT_APP_ID_KEY, vault_app_id)
     app_global_put(PROPOSAL_INDEX_COUNTER_KEY, 0)
 
     app_global_put(VOTING_DELAY_KEY, 2)
