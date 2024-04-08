@@ -1,2 +1,0 @@
-class InsufficientTinyPower(Exception):
-    pass

@@ -105,7 +105,7 @@ class StakingVotingTestCase(VaultAppMixin, StakingVotingAppMixin, BaseTestCase):
             events[0],
             {
                 'event_name': 'proposal',
-                'proposal_id': list(proposal_id.encode()),
+                'proposal_id': bytes(proposal_id, "utf-8"),
                 **proposal_box_data
             }
         )
@@ -114,7 +114,7 @@ class StakingVotingTestCase(VaultAppMixin, StakingVotingAppMixin, BaseTestCase):
             {
                 'event_name': 'create_proposal',
                 'user_address': self.proposal_manager_address,
-                'proposal_id': list(proposal_id.encode())
+                'proposal_id': bytes(proposal_id, "utf-8")
             }
         )
         
@@ -159,7 +159,7 @@ class StakingVotingTestCase(VaultAppMixin, StakingVotingAppMixin, BaseTestCase):
             events[0],
             {
                 'event_name': 'proposal',
-                'proposal_id': list(proposal_id.encode()),
+                'proposal_id': bytes(proposal_id, "utf-8"),
                 **proposal_box_data
             }
         )
@@ -168,7 +168,7 @@ class StakingVotingTestCase(VaultAppMixin, StakingVotingAppMixin, BaseTestCase):
             {
                 'event_name': 'create_proposal',
                 'user_address': self.proposal_manager_address,
-                'proposal_id': list(proposal_id.encode())
+                'proposal_id': bytes(proposal_id, "utf-8")
             }
         )
 
@@ -315,12 +315,12 @@ class StakingVotingTestCase(VaultAppMixin, StakingVotingAppMixin, BaseTestCase):
             vote_box_name = get_staking_vote_box_name(proposal.index, asset_ids[i])
             vote_box_amount = bytes_to_int(self.ledger.boxes[STAKING_VOTING_APP_ID][vote_box_name])
             self.assertEqual(vote_box_amount, asset_voting_power)
-        
+
         self.assertEqual(
             proposal_event,
             {
                 'event_name': 'proposal',
-                'proposal_id': list(proposal_id.encode()),
+                'proposal_id': bytes(proposal_id, "utf-8"),
                 'index': 0,
                 'creation_timestamp': 1647356820,
                 'voting_start_timestamp': 1647475200,
@@ -335,7 +335,7 @@ class StakingVotingTestCase(VaultAppMixin, StakingVotingAppMixin, BaseTestCase):
             {
                 'event_name': 'cast_vote',
                 'user_address': user_address,
-                'proposal_id': list(proposal_id.encode()),
+                'proposal_id': bytes(proposal_id, "utf-8"),
                 'voting_power': user_voting_power
             }
         )
@@ -386,7 +386,7 @@ class StakingVotingTestCase(VaultAppMixin, StakingVotingAppMixin, BaseTestCase):
             proposal_event,
             {
                 'event_name': 'proposal',
-                'proposal_id': list(proposal_id.encode()),
+                'proposal_id': bytes(proposal_id, "utf-8"),
                 'index': 0,
                 'creation_timestamp': 1647356820,
                 'voting_start_timestamp': 1647475200,
@@ -401,7 +401,7 @@ class StakingVotingTestCase(VaultAppMixin, StakingVotingAppMixin, BaseTestCase):
             {
                 'event_name': 'cast_vote',
                 'user_address': user_2_address,
-                'proposal_id': list(proposal_id.encode()),
+                'proposal_id': bytes(proposal_id, "utf-8"),
                 'voting_power': user_2_voting_power
             }
         )
@@ -527,7 +527,7 @@ class StakingVotingTestCase(VaultAppMixin, StakingVotingAppMixin, BaseTestCase):
             {
                 'event_name': 'cast_vote',
                 'user_address': user_address,
-                'proposal_id': list(proposal_id.encode()),
+                'proposal_id': bytes(proposal_id, "utf-8"),
                 'voting_power': user_voting_power
             }
         )
@@ -611,7 +611,7 @@ class StakingVotingTestCase(VaultAppMixin, StakingVotingAppMixin, BaseTestCase):
             {
                 'event_name': 'cancel_proposal',
                 'user_address': self.proposal_manager_address,
-                'proposal_id': list(proposal_id.encode()),
+                'proposal_id': bytes(proposal_id, "utf-8"),
             }
         )
 
