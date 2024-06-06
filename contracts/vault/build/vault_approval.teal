@@ -2406,7 +2406,7 @@ __func__algo_transfer:
     store 199                                               // sender [bytes]
     store 200                                               // amount [int]
     // tl:797: inner_txn:
-    callsub _itxn_begin
+    itxn_begin
         // tl:798: TypeEnum: Pay
         pushint 1                                           // Pay
         itxn_field TypeEnum
@@ -2422,7 +2422,7 @@ __func__algo_transfer:
         // tl:802: Fee: 0
         pushint 0
         itxn_field Fee
-    callsub _itxn_submit
+    itxn_submit
     // end inner_txn
     // tl:804: return
     retsub
@@ -2433,7 +2433,7 @@ __func__tiny_transfer:
     store 202                                               // sender [bytes]
     store 203                                               // amount [int]
     // tl:808: inner_txn:
-    callsub _itxn_begin
+    itxn_begin
         // tl:809: TypeEnum: Axfer
         pushint 4                                           // Axfer
         itxn_field TypeEnum
@@ -2453,31 +2453,8 @@ __func__tiny_transfer:
         // tl:814: Fee: 0
         pushint 0
         itxn_field Fee
-    callsub _itxn_submit
+    itxn_submit
     // end inner_txn
     // tl:816: return
     retsub
-
-
-_itxn_group_begin:
-  load 204; !; assert                                       // ensure no group active
-  int 1; store 204; retsub                                  // set group flag
-
-_itxn_begin:
-  load 204
-  switch _itxn_begin__0 _itxn_begin__1 _itxn_begin__2
-  err
-  _itxn_begin__0: itxn_begin; retsub                        // no group
-  _itxn_begin__1: itxn_begin; int 2; store 204; retsub      // start first txn of group
-  _itxn_begin__2: itxn_next; retsub                         // start next txn of group
-
-_itxn_submit:
-  load 204
-  bz _itxn_submit__0
-  retsub                                                    // in a group, don't submit
-  _itxn_submit__0: itxn_submit; retsub                      // no group, submit
-
-_itxn_group_submit:
-  itxn_submit
-  int 0; store 204; retsub                                  // set group flag to 0
 

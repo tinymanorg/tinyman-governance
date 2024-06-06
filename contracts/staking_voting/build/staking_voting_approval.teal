@@ -432,12 +432,12 @@ __func__cast_vote:
         assert
         
         // update vote amounts
-        // tl:162: option_vote_amount = tmp_vote_percentage * (account_voting_power / 100)
+        // tl:162: option_vote_amount = (tmp_vote_percentage * account_voting_power) / 100
         load 29                                             // tmp_vote_percentage
         load 24                                             // account_voting_power
+        *
         pushint 100
         /
-        *
         store 25                                            // option_vote_amount
         // tl:163: asset_id = extract_uint64(asset_ids, tmp_index)
         load 16                                             // asset_ids
@@ -512,7 +512,7 @@ __func__increase_budget:
         ==
         bnz l1_end
         // tl:181: inner_txn:
-        callsub _itxn_begin
+        itxn_begin
             // tl:182: TypeEnum: Appl
             pushint 6                                       // Appl
             itxn_field TypeEnum
@@ -526,7 +526,7 @@ __func__increase_budget:
             // tl:185: Fee: 0
             pushint 0
             itxn_field Fee
-        callsub _itxn_submit
+        itxn_submit
         // end inner_txn
         pushint 1
         +
@@ -786,7 +786,7 @@ __func__get_account_voting_power_at:
     store 57                                                // snapshot_timestamp [int]
     store 58                                                // address [bytes[32]]
     // tl:274: inner_txn:
-    callsub _itxn_begin
+    itxn_begin
         // tl:275: TypeEnum: Appl
         pushint 6                                           // Appl
         itxn_field TypeEnum
@@ -810,7 +810,7 @@ __func__get_account_voting_power_at:
         // tl:281: Fee: 0
         pushint 0
         itxn_field Fee
-    callsub _itxn_submit
+    itxn_submit
     // end inner_txn
     // tl:283: int voting_power = extract_uint64(Itxn.LastLog, 4) [slot 59]
     itxn LastLog
@@ -820,27 +820,4 @@ __func__get_account_voting_power_at:
     // tl:284: return voting_power
     load 59                                                 // voting_power
     retsub
-
-
-_itxn_group_begin:
-  load 60; !; assert                                        // ensure no group active
-  int 1; store 60; retsub                                   // set group flag
-
-_itxn_begin:
-  load 60
-  switch _itxn_begin__0 _itxn_begin__1 _itxn_begin__2
-  err
-  _itxn_begin__0: itxn_begin; retsub                        // no group
-  _itxn_begin__1: itxn_begin; int 2; store 60; retsub       // start first txn of group
-  _itxn_begin__2: itxn_next; retsub                         // start next txn of group
-
-_itxn_submit:
-  load 60
-  bz _itxn_submit__0
-  retsub                                                    // in a group, don't submit
-  _itxn_submit__0: itxn_submit; retsub                      // no group, submit
-
-_itxn_group_submit:
-  itxn_submit
-  int 0; store 60; retsub                                   // set group flag to 0
 

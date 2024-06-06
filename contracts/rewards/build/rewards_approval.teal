@@ -169,7 +169,7 @@ __func__increase_budget:
         ==
         bnz l0_end
         // tl:81: inner_txn:
-        callsub _itxn_begin
+        itxn_begin
             // tl:82: TypeEnum: Appl
             pushint 6                                       // Appl
             itxn_field TypeEnum
@@ -183,7 +183,7 @@ __func__increase_budget:
             // tl:85: Fee: 0
             pushint 0
             itxn_field Fee
-        callsub _itxn_submit
+        itxn_submit
         // end inner_txn
         pushint 1
         +
@@ -897,7 +897,7 @@ __func__get_account_cumulative_power_delta:
     store 80                                                // timestamp_1 [int]
     store 81                                                // address [bytes[32]]
     // tl:295: inner_txn:
-    callsub _itxn_begin
+    itxn_begin
         // tl:296: TypeEnum: Appl
         pushint 6                                           // Appl
         itxn_field TypeEnum
@@ -928,7 +928,7 @@ __func__get_account_cumulative_power_delta:
         // tl:304: Fee: 0
         pushint 0
         itxn_field Fee
-    callsub _itxn_submit
+    itxn_submit
     // end inner_txn
     
     // tl:307: bytes cumulative_power_delta = extract(4, 16, Itxn.LastLog) [slot 82]
@@ -946,7 +946,7 @@ __func__get_total_cumulative_power_delta:
     store 85                                                // timestamp_2 [int]
     store 86                                                // timestamp_1 [int]
     // tl:312: inner_txn:
-    callsub _itxn_begin
+    itxn_begin
         // tl:313: TypeEnum: Appl
         pushint 6                                           // Appl
         itxn_field TypeEnum
@@ -974,7 +974,7 @@ __func__get_total_cumulative_power_delta:
         // tl:320: Fee: 0
         pushint 0
         itxn_field Fee
-    callsub _itxn_submit
+    itxn_submit
     // end inner_txn
     
     // tl:323: bytes cumulative_power_delta = extract(4, 16, Itxn.LastLog) [slot 87]
@@ -991,7 +991,7 @@ __func__tiny_transfer:
     store 89                                                // sender [bytes]
     store 90                                                // amount [int]
     // tl:328: inner_txn:
-    callsub _itxn_begin
+    itxn_begin
         // tl:329: TypeEnum: Axfer
         pushint 4                                           // Axfer
         itxn_field TypeEnum
@@ -1011,31 +1011,8 @@ __func__tiny_transfer:
         // tl:334: Fee: 0
         pushint 0
         itxn_field Fee
-    callsub _itxn_submit
+    itxn_submit
     // end inner_txn
     // tl:336: return
     retsub
-
-
-_itxn_group_begin:
-  load 91; !; assert                                        // ensure no group active
-  int 1; store 91; retsub                                   // set group flag
-
-_itxn_begin:
-  load 91
-  switch _itxn_begin__0 _itxn_begin__1 _itxn_begin__2
-  err
-  _itxn_begin__0: itxn_begin; retsub                        // no group
-  _itxn_begin__1: itxn_begin; int 2; store 91; retsub       // start first txn of group
-  _itxn_begin__2: itxn_next; retsub                         // start next txn of group
-
-_itxn_submit:
-  load 91
-  bz _itxn_submit__0
-  retsub                                                    // in a group, don't submit
-  _itxn_submit__0: itxn_submit; retsub                      // no group, submit
-
-_itxn_group_submit:
-  itxn_submit
-  int 0; store 91; retsub                                   // set group flag to 0
 

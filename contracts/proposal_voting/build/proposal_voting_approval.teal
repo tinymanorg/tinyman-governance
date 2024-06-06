@@ -260,7 +260,7 @@ __func__increase_budget:
         ==
         bnz l0_end
         // tl:122: inner_txn:
-        callsub _itxn_begin
+        itxn_begin
             // tl:123: TypeEnum: Appl
             pushint 6                                       // Appl
             itxn_field TypeEnum
@@ -274,7 +274,7 @@ __func__increase_budget:
             // tl:126: Fee: 0
             pushint 0
             itxn_field Fee
-        callsub _itxn_submit
+        itxn_submit
         // end inner_txn
         pushint 1
         +
@@ -1284,7 +1284,7 @@ __func__get_voting_start_timestamp:
 __func__get_account_voting_power:
     store 81                                                // address [bytes[32]]
     // tl:454: inner_txn:
-    callsub _itxn_begin
+    itxn_begin
         // tl:455: TypeEnum: Appl
         pushint 6                                           // Appl
         itxn_field TypeEnum
@@ -1301,7 +1301,7 @@ __func__get_account_voting_power:
         // tl:459: Fee: 0
         pushint 0
         itxn_field Fee
-    callsub _itxn_submit
+    itxn_submit
     // end inner_txn
     // tl:461: int voting_power = extract_uint64(Itxn.LastLog, 4) [slot 82]
     itxn LastLog
@@ -1318,7 +1318,7 @@ __func__get_account_voting_power_at:
     store 84                                                // snapshot_timestamp [int]
     store 85                                                // address [bytes[32]]
     // tl:466: inner_txn:
-    callsub _itxn_begin
+    itxn_begin
         // tl:467: TypeEnum: Appl
         pushint 6                                           // Appl
         itxn_field TypeEnum
@@ -1342,7 +1342,7 @@ __func__get_account_voting_power_at:
         // tl:473: Fee: 0
         pushint 0
         itxn_field Fee
-    callsub _itxn_submit
+    itxn_submit
     // end inner_txn
     // tl:475: int voting_power = extract_uint64(Itxn.LastLog, 4) [slot 86]
     itxn LastLog
@@ -1356,7 +1356,7 @@ __func__get_account_voting_power_at:
 // tl:479: func get_total_voting_power() int:
 __func__get_total_voting_power:
     // tl:480: inner_txn:
-    callsub _itxn_begin
+    itxn_begin
         // tl:481: TypeEnum: Appl
         pushint 6                                           // Appl
         itxn_field TypeEnum
@@ -1370,7 +1370,7 @@ __func__get_total_voting_power:
         // tl:484: Fee: 0
         pushint 0
         itxn_field Fee
-    callsub _itxn_submit
+    itxn_submit
     // end inner_txn
     // tl:486: int voting_power = extract_uint64(Itxn.LastLog, 4) [slot 87]
     itxn LastLog
@@ -1380,27 +1380,4 @@ __func__get_total_voting_power:
     // tl:487: return voting_power
     load 87                                                 // voting_power
     retsub
-
-
-_itxn_group_begin:
-  load 88; !; assert                                        // ensure no group active
-  int 1; store 88; retsub                                   // set group flag
-
-_itxn_begin:
-  load 88
-  switch _itxn_begin__0 _itxn_begin__1 _itxn_begin__2
-  err
-  _itxn_begin__0: itxn_begin; retsub                        // no group
-  _itxn_begin__1: itxn_begin; int 2; store 88; retsub       // start first txn of group
-  _itxn_begin__2: itxn_next; retsub                         // start next txn of group
-
-_itxn_submit:
-  load 88
-  bz _itxn_submit__0
-  retsub                                                    // in a group, don't submit
-  _itxn_submit__0: itxn_submit; retsub                      // no group, submit
-
-_itxn_group_submit:
-  itxn_submit
-  int 0; store 88; retsub                                   // set group flag to 0
 
