@@ -159,7 +159,7 @@ func cast_vote(proposal_id: bytes[59], votes_as_percentage: bytes, asset_ids: by
         assert(total_percentage <= 100)
 
         # update vote amounts
-        option_vote_amount = tmp_vote_percentage * (account_voting_power / 100)
+        option_vote_amount = (tmp_vote_percentage * account_voting_power) / 100
         asset_id = extract_uint64(asset_ids, tmp_index)
         add_vote_amount(proposal_index, asset_id, option_vote_amount)
 

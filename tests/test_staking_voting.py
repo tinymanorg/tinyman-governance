@@ -32,10 +32,10 @@ from tinyman.governance.vault.transactions import (
     prepare_increase_lock_amount_transactions)
 from tinyman.governance.vault.utils import (get_bias, get_slope,
                                             get_start_timestamp_of_week)
-from tinyman.utils import bytes_to_int, int_to_bytes
+from tinyman.utils import bytes_to_int, int_to_bytes, TransactionGroup
 
 from tests.common import BaseTestCase, StakingVotingAppMixin, VaultAppMixin
-from tests.constants import STAKING_VOTING_APP_ID, TINY_ASSET_ID, VAULT_APP_ID
+from tests.constants import STAKING_VOTING_APP_ID, TINY_ASSET_ID, VAULT_APP_ID, staking_voting_approval_program, staking_voting_clear_state_program
 from tests.staking_voting.utils import get_staking_voting_app_global_state
 from tests.utils import (get_account_power_index_at, get_app_box_names,
                          get_first_app_call_txn)
@@ -323,7 +323,7 @@ class StakingVotingTestCase(VaultAppMixin, StakingVotingAppMixin, BaseTestCase):
         cast_vote_event = events[-1]
         asset_voting_powers = defaultdict(int)
         for i, vote_as_percentage in enumerate(votes):
-            asset_voting_power = int(user_voting_power // 100) * vote_as_percentage
+            asset_voting_power = int((user_voting_power * vote_as_percentage) // 100)
             
             self.assertEqual(
                 vote_events[i],
@@ -390,7 +390,7 @@ class StakingVotingTestCase(VaultAppMixin, StakingVotingAppMixin, BaseTestCase):
         proposal_event = events[-2]
         cast_vote_event = events[-1]
         for i, vote_as_percentage in enumerate(votes):
-            asset_voting_power = int(user_2_voting_power // 100) * vote_as_percentage
+            asset_voting_power = int((user_2_voting_power * vote_as_percentage) // 100)
 
             self.assertEqual(
                 vote_events[i],
@@ -530,7 +530,7 @@ class StakingVotingTestCase(VaultAppMixin, StakingVotingAppMixin, BaseTestCase):
         vote_events = events[:-2]
         cast_vote_event = events[-1]
         for i, vote_as_percentage in enumerate(votes):
-            asset_voting_power = int(user_voting_power // 100) * vote_as_percentage
+            asset_voting_power = int((user_voting_power * vote_as_percentage) // 100)
 
             self.assertEqual(
                 vote_events[i],
