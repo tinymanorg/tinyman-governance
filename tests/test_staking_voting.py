@@ -4,6 +4,7 @@ from datetime import datetime
 from zoneinfo import ZoneInfo
 
 from algojig import LogicEvalError
+from algosdk import transaction
 from algosdk.account import generate_account
 from algosdk.encoding import decode_address
 from algosdk.logic import get_application_address
@@ -57,6 +58,25 @@ class StakingVotingTestCase(VaultAppMixin, StakingVotingAppMixin, BaseTestCase):
         self.ledger.set_account_balance(self.proposal_manager_address, 1_000_000)
         self.create_vault_app(self.manager_address)
         self.init_vault_app(self.vault_app_creation_timestamp + 30)
+
+    def test_create_app(self):
+        self.ledger.set_account_balance(self.manager_address, 2_000_000)
+        txn_group = TransactionGroup([
+            transaction.ApplicationCreateTxn(
+                sender=self.manager_address,
+                sp=self.sp,
+                on_complete=transaction.OnComplete.NoOpOC,
+                approval_program=staking_voting_approval_program.bytecode,
+                clear_program=staking_voting_clear_state_program.bytecode,
+                global_schema=transaction.StateSchema(num_uints=16, num_byte_slices=16),
+                local_schema=transaction.StateSchema(num_uints=0, num_byte_slices=0),
+                extra_pages=3,
+                app_args=["create_application", VAULT_APP_ID],
+            )
+        ])
+        txn_group.sign_with_private_key(self.manager_address, self.manager_sk)
+        block = self.ledger.eval_transactions(txn_group.signed_transactions)
+        app_id = block[b"txns"][0][b"apid"]
 
     def test_create_proposal(self):
         user_sk, user_address = generate_account()
