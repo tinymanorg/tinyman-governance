@@ -1,5 +1,5 @@
 #pragma version 9
-#tealish version git+https://github.com/Hipo/tealish.git@c4f8c12b36dbcc8b63844df5f818164925735087
+#tealish version git+https://github.com/Hipo/tealish.git@4937b9d1e0889db18a6e5afe9e8d404b4ab04f4b
 
 # Name: <proposal_id>
 # Size: 116 bytes
@@ -135,7 +135,7 @@ func set_manager(new_manager: bytes[32]):
     assert(user_address == app_global_get(MANAGER_KEY))
 
     app_global_put(MANAGER_KEY, new_manager)
-    log(Concat(method("set_manager(address)"), new_manager))
+    log(ARC28Event("set_manager(address)", new_manager))
     return
 end
 
@@ -145,7 +145,7 @@ func set_proposal_manager(new_proposal_manager: bytes[32]):
     assert(user_address == app_global_get(MANAGER_KEY))
 
     app_global_put(PROPOSAL_MANAGER_KEY, new_proposal_manager)
-    log(Concat(method("set_proposal_manager(address)"), new_proposal_manager))
+    log(ARC28Event("set_proposal_manager(address)", new_proposal_manager))
     return
 end
 
@@ -169,8 +169,8 @@ func approve_proposal(proposal_id: bytes[59]):
 
     bytes proposal_data
     _, proposal_data = box_get(proposal_box_name)
-    log(Concat(method("proposal(byte[59],uint64,uint64,uint64,uint64,uint64,uint64,uint64,uint64,uint64,uint64,bool,bool,bool,bool,address,byte[34],address)"), proposal_id, proposal_data))
-    log(Concat(method("approve_proposal(address,byte[59])"), user_address, proposal_id))
+    log(ARC28Event("proposal(byte[59],uint64,uint64,uint64,uint64,uint64,uint64,uint64,uint64,uint64,uint64,bool,bool,bool,bool,address,byte[34],address)", proposal_id, proposal_data))
+    log(ARC28Event("approve_proposal(address,byte[59])", user_address, proposal_id))
     return
 end
 
@@ -188,8 +188,8 @@ func cancel_proposal(proposal_id: bytes[59]):
 
     bytes proposal_data
     _, proposal_data = box_get(proposal_box_name)
-    log(Concat(method("proposal(byte[59],uint64,uint64,uint64,uint64,uint64,uint64,uint64,uint64,uint64,uint64,bool,bool,bool,bool,address,byte[34],address)"), proposal_id, proposal_data))
-    log(Concat(method("cancel_proposal(address,byte[59])"), user_address, proposal_id))
+    log(ARC28Event("proposal(byte[59],uint64,uint64,uint64,uint64,uint64,uint64,uint64,uint64,uint64,uint64,bool,bool,bool,bool,address,byte[34],address)", proposal_id, proposal_data))
+    log(ARC28Event("cancel_proposal(address,byte[59])", user_address, proposal_id))
     return
 end
 
@@ -209,8 +209,8 @@ func execute_proposal(proposal_id: bytes[59]):
 
     bytes proposal_data
     _, proposal_data = box_get(proposal_box_name)
-    log(Concat(method("proposal(byte[59],uint64,uint64,uint64,uint64,uint64,uint64,uint64,uint64,uint64,uint64,bool,bool,bool,bool,address,byte[34],address)"), proposal_id, proposal_data))
-    log(Concat(method("execute_proposal(address,byte[59])"), user_address, proposal_id))
+    log(ARC28Event("proposal(byte[59],uint64,uint64,uint64,uint64,uint64,uint64,uint64,uint64,uint64,uint64,bool,bool,bool,bool,address,byte[34],address)", proposal_id, proposal_data))
+    log(ARC28Event("execute_proposal(address,byte[59])", user_address, proposal_id))
     return
 end
 
@@ -254,8 +254,8 @@ func create_proposal(proposal_id: bytes[59], execution_hash: bytes[34], executor
 
     bytes proposal_data
     _, proposal_data = box_get(proposal_box_name)
-    log(Concat(method("proposal(byte[59],uint64,uint64,uint64,uint64,uint64,uint64,uint64,uint64,uint64,uint64,bool,bool,bool,bool,address,byte[34],address)"), proposal_id, proposal_data))
-    log(Concat(method("create_proposal(address,byte[59])"), user_address, proposal_id))
+    log(ARC28Event("proposal(byte[59],uint64,uint64,uint64,uint64,uint64,uint64,uint64,uint64,uint64,uint64,bool,bool,bool,bool,address,byte[34],address)", proposal_id, proposal_data))
+    log(ARC28Event("create_proposal(address,byte[59])", user_address, proposal_id))
     return
 end
 
@@ -302,8 +302,8 @@ func cast_vote(proposal_id: bytes[59], vote: int, account_power_index: bytes):
 
     bytes proposal_data
     _, proposal_data = box_get(proposal_box_name)
-    log(Concat(method("proposal(byte[59],uint64,uint64,uint64,uint64,uint64,uint64,uint64,uint64,uint64,uint64,bool,bool,bool,bool,address,byte[34],address)"), proposal_id, proposal_data))
-    log(Concat(method("cast_vote(address,byte[59],uint64,uint64)"), user_address, proposal_id, itob(vote), itob(account_voting_power)))
+    log(ARC28Event("proposal(byte[59],uint64,uint64,uint64,uint64,uint64,uint64,uint64,uint64,uint64,uint64,bool,bool,bool,bool,address,byte[34],address)", proposal_id, proposal_data))
+    log(ARC28Event("cast_vote(address,byte[59],uint64,uint64)", user_address, proposal_id, itob(vote), itob(account_voting_power)))
     return
 end
 
@@ -313,7 +313,7 @@ func set_voting_delay(new_voting_delay: int):
     assert(user_address == app_global_get(PROPOSAL_MANAGER_KEY))
 
     app_global_put(VOTING_DELAY_KEY, new_voting_delay)
-    log(Concat(method("set_voting_delay(uint64)"), itob(new_voting_delay)))
+    log(ARC28Event("set_voting_delay(uint64)", itob(new_voting_delay)))
     return
 end
 
@@ -324,7 +324,7 @@ func set_voting_duration(new_voting_duration: int):
 
     assert(new_voting_duration)
     app_global_put(VOTING_DURATION_KEY, new_voting_duration)
-    log(Concat(method("set_voting_duration(uint64)"), itob(new_voting_duration)))
+    log(ARC28Event("set_voting_duration(uint64)", itob(new_voting_duration)))
     return
 end
 
@@ -334,7 +334,7 @@ func set_proposal_threshold(new_proposal_threshold: int):
     assert(user_address == app_global_get(PROPOSAL_MANAGER_KEY))
 
     app_global_put(PROPOSAL_THRESHOLD_KEY, new_proposal_threshold)
-    log(Concat(method("set_proposal_threshold(uint64)"), itob(new_proposal_threshold)))
+    log(ARC28Event("set_proposal_threshold(uint64)", itob(new_proposal_threshold)))
     return
 end
 
@@ -345,7 +345,7 @@ func set_proposal_threshold_numerator(new_proposal_threshold_numerator: int):
 
     assert(new_proposal_threshold_numerator <= 100)
     app_global_put(PROPOSAL_THRESHOLD_NUMERATOR_KEY, new_proposal_threshold_numerator)
-    log(Concat(method("set_proposal_threshold_numerator(uint64)"), itob(new_proposal_threshold_numerator)))
+    log(ARC28Event("set_proposal_threshold_numerator(uint64)", itob(new_proposal_threshold_numerator)))
     return
 end
 
@@ -355,7 +355,7 @@ func set_quorum_threshold(new_quorum_threshold: int):
     assert(user_address == app_global_get(PROPOSAL_MANAGER_KEY))
 
     app_global_put(QUORUM_THRESHOLD_KEY, new_quorum_threshold)
-    log(Concat(method("set_quorum_threshold(uint64)"), itob(new_quorum_threshold)))
+    log(ARC28Event("set_quorum_threshold(uint64)", itob(new_quorum_threshold)))
     return
 end
 

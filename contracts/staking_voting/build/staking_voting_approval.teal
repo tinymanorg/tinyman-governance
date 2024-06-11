@@ -1,5 +1,5 @@
 #pragma version 9
-//tealish version git+https://github.com/Hipo/tealish.git@c4f8c12b36dbcc8b63844df5f818164925735087
+//tealish version git+https://github.com/Hipo/tealish.git@4937b9d1e0889db18a6e5afe9e8d404b4ab04f4b
 
 // Name: <proposal_id>
 // Size: 49 bytes
@@ -215,15 +215,15 @@ __func__create_proposal:
     box_get
     pop                                                     // discarding value for _
     store 9                                                 // proposal_data
-    // tl:94: log(Concat(method("proposal(byte[59],uint64,uint64,uint64,uint64,uint64,uint64,bool)"), proposal_id, proposal_data))
-    method "proposal(byte[59],uint64,uint64,uint64,uint64,uint64,uint64,bool)"
+    // tl:94: log(ARC28Event("proposal(byte[59],uint64,uint64,uint64,uint64,uint64,uint64,bool)", proposal_id, proposal_data))
+    pushbytes 0xd5c00bd9                                    // SHA512_256("proposal(byte[59],uint64,uint64,uint64,uint64,uint64,uint64,bool)")[:4]
     load 3                                                  // proposal_id
     load 9                                                  // proposal_data
     concat
     concat
     log
-    // tl:95: log(Concat(method("create_proposal(address,byte[59])"), user_address, proposal_id))
-    method "create_proposal(address,byte[59])"
+    // tl:95: log(ARC28Event("create_proposal(address,byte[59])", user_address, proposal_id))
+    pushbytes 0x15c912e1                                    // SHA512_256("create_proposal(address,byte[59])")[:4]
     load 4                                                  // user_address
     load 3                                                  // proposal_id
     concat
@@ -275,15 +275,15 @@ __func__cancel_proposal:
     box_get
     pop                                                     // discarding value for _
     store 14                                                // proposal_data
-    // tl:113: log(Concat(method("proposal(byte[59],uint64,uint64,uint64,uint64,uint64,uint64,bool)"), proposal_id, proposal_data))
-    method "proposal(byte[59],uint64,uint64,uint64,uint64,uint64,uint64,bool)"
+    // tl:113: log(ARC28Event("proposal(byte[59],uint64,uint64,uint64,uint64,uint64,uint64,bool)", proposal_id, proposal_data))
+    pushbytes 0xd5c00bd9                                    // SHA512_256("proposal(byte[59],uint64,uint64,uint64,uint64,uint64,uint64,bool)")[:4]
     load 10                                                 // proposal_id
     load 14                                                 // proposal_data
     concat
     concat
     log
-    // tl:114: log(Concat(method("cancel_proposal(address,byte[59])"), user_address, proposal_id))
-    method "cancel_proposal(address,byte[59])"
+    // tl:114: log(ARC28Event("cancel_proposal(address,byte[59])", user_address, proposal_id))
+    pushbytes 0xd84382ee                                    // SHA512_256("cancel_proposal(address,byte[59])")[:4]
     load 11                                                 // user_address
     load 10                                                 // proposal_id
     concat
@@ -450,8 +450,8 @@ __func__cast_vote:
         load 25                                             // option_vote_amount
         callsub __func__add_vote_amount
         
-        // tl:166: log(Concat(method("vote(uint64,uint64,uint64)"), itob(asset_id), itob(option_vote_amount), itob(tmp_vote_percentage)))
-        method "vote(uint64,uint64,uint64)"
+        // tl:166: log(ARC28Event("vote(uint64,uint64,uint64)", itob(asset_id), itob(option_vote_amount), itob(tmp_vote_percentage)))
+        pushbytes 0xb85c5b89                                // SHA512_256("vote(uint64,uint64,uint64)")[:4]
         load 26                                             // asset_id
         itob
         load 25                                             // option_vote_amount
@@ -480,15 +480,15 @@ __func__cast_vote:
     box_get
     pop                                                     // discarding value for _
     store 31                                                // proposal_data
-    // tl:172: log(Concat(method("proposal(byte[59],uint64,uint64,uint64,uint64,uint64,uint64,bool)"), proposal_id, proposal_data))
-    method "proposal(byte[59],uint64,uint64,uint64,uint64,uint64,uint64,bool)"
+    // tl:172: log(ARC28Event("proposal(byte[59],uint64,uint64,uint64,uint64,uint64,uint64,bool)", proposal_id, proposal_data))
+    pushbytes 0xd5c00bd9                                    // SHA512_256("proposal(byte[59],uint64,uint64,uint64,uint64,uint64,uint64,bool)")[:4]
     load 18                                                 // proposal_id
     load 31                                                 // proposal_data
     concat
     concat
     log
-    // tl:173: log(Concat(method("cast_vote(address,byte[59],uint64)"), user_address, proposal_id, itob(account_voting_power)))
-    method "cast_vote(address,byte[59],uint64)"
+    // tl:173: log(ARC28Event("cast_vote(address,byte[59],uint64)", user_address, proposal_id, itob(account_voting_power)))
+    pushbytes 0xccaa38c0                                    // SHA512_256("cast_vote(address,byte[59],uint64)")[:4]
     load 19                                                 // user_address
     load 18                                                 // proposal_id
     load 24                                                 // account_voting_power
@@ -554,8 +554,8 @@ __func__set_voting_delay:
     pushbytes VOTING_DELAY_KEY                              // "voting_delay"
     load 33                                                 // new_voting_delay
     app_global_put
-    // tl:197: log(Concat(method("set_voting_delay(uint64)"), itob(new_voting_delay)))
-    method "set_voting_delay(uint64)"
+    // tl:197: log(ARC28Event("set_voting_delay(uint64)", itob(new_voting_delay)))
+    pushbytes 0xb7aa1b9e                                    // SHA512_256("set_voting_delay(uint64)")[:4]
     load 33                                                 // new_voting_delay
     itob
     concat
@@ -583,8 +583,8 @@ __func__set_voting_duration:
     pushbytes VOTING_DURATION_KEY                           // "voting_duration"
     load 35                                                 // new_voting_duration
     app_global_put
-    // tl:208: log(Concat(method("set_voting_duration(uint64)"), itob(new_voting_duration)))
-    method "set_voting_duration(uint64)"
+    // tl:208: log(ARC28Event("set_voting_duration(uint64)", itob(new_voting_duration)))
+    pushbytes 0x69897033                                    // SHA512_256("set_voting_duration(uint64)")[:4]
     load 35                                                 // new_voting_duration
     itob
     concat
@@ -609,8 +609,8 @@ __func__set_manager:
     pushbytes MANAGER_KEY                                   // "manager"
     load 37                                                 // new_manager
     app_global_put
-    // tl:218: log(Concat(method("set_manager(address)"), new_manager))
-    method "set_manager(address)"
+    // tl:218: log(ARC28Event("set_manager(address)", new_manager))
+    pushbytes 0xba87e7f4                                    // SHA512_256("set_manager(address)")[:4]
     load 37                                                 // new_manager
     concat
     log
@@ -634,8 +634,8 @@ __func__set_proposal_manager:
     pushbytes PROPOSAL_MANAGER_KEY                          // "proposal_manager"
     load 39                                                 // new_proposal_manager
     app_global_put
-    // tl:228: log(Concat(method("set_proposal_manager(address)"), new_proposal_manager))
-    method "set_proposal_manager(address)"
+    // tl:228: log(ARC28Event("set_proposal_manager(address)", new_proposal_manager))
+    pushbytes 0x2d9960b3                                    // SHA512_256("set_proposal_manager(address)")[:4]
     load 39                                                 // new_proposal_manager
     concat
     log

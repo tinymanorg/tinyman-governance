@@ -1,5 +1,5 @@
 #pragma version 9
-#tealish version git+https://github.com/Hipo/tealish.git@c4f8c12b36dbcc8b63844df5f818164925735087
+#tealish version git+https://github.com/Hipo/tealish.git@4937b9d1e0889db18a6e5afe9e8d404b4ab04f4b
 
 # Name: <proposal_id>
 # Size: 49 bytes
@@ -91,8 +91,8 @@ func create_proposal(proposal_id: bytes[59]):
 
     bytes proposal_data
     _, proposal_data = box_get(proposal_box_name)
-    log(Concat(method("proposal(byte[59],uint64,uint64,uint64,uint64,uint64,uint64,bool)"), proposal_id, proposal_data))
-    log(Concat(method("create_proposal(address,byte[59])"), user_address, proposal_id))
+    log(ARC28Event("proposal(byte[59],uint64,uint64,uint64,uint64,uint64,uint64,bool)", proposal_id, proposal_data))
+    log(ARC28Event("create_proposal(address,byte[59])", user_address, proposal_id))
     return
 end
 
@@ -110,8 +110,8 @@ func cancel_proposal(proposal_id: bytes[59]):
 
     bytes proposal_data
     _, proposal_data = box_get(proposal_box_name)
-    log(Concat(method("proposal(byte[59],uint64,uint64,uint64,uint64,uint64,uint64,bool)"), proposal_id, proposal_data))
-    log(Concat(method("cancel_proposal(address,byte[59])"), user_address, proposal_id))
+    log(ARC28Event("proposal(byte[59],uint64,uint64,uint64,uint64,uint64,uint64,bool)", proposal_id, proposal_data))
+    log(ARC28Event("cancel_proposal(address,byte[59])", user_address, proposal_id))
     return
 end
 
@@ -163,14 +163,14 @@ func cast_vote(proposal_id: bytes[59], votes_as_percentage: bytes, asset_ids: by
         asset_id = extract_uint64(asset_ids, tmp_index)
         add_vote_amount(proposal_index, asset_id, option_vote_amount)
 
-        log(Concat(method("vote(uint64,uint64,uint64)"), itob(asset_id), itob(option_vote_amount), itob(tmp_vote_percentage)))
+        log(ARC28Event("vote(uint64,uint64,uint64)", itob(asset_id), itob(option_vote_amount), itob(tmp_vote_percentage)))
     end
     assert(total_percentage == 100)
 
     bytes proposal_data
     _, proposal_data = box_get(proposal_box_name)
-    log(Concat(method("proposal(byte[59],uint64,uint64,uint64,uint64,uint64,uint64,bool)"), proposal_id, proposal_data))
-    log(Concat(method("cast_vote(address,byte[59],uint64)"), user_address, proposal_id, itob(account_voting_power)))
+    log(ARC28Event("proposal(byte[59],uint64,uint64,uint64,uint64,uint64,uint64,bool)", proposal_id, proposal_data))
+    log(ARC28Event("cast_vote(address,byte[59],uint64)", user_address, proposal_id, itob(account_voting_power)))
     return
 end
 
@@ -194,7 +194,7 @@ func set_voting_delay(new_voting_delay: int):
     assert(user_address == app_global_get(PROPOSAL_MANAGER_KEY))
 
     app_global_put(VOTING_DELAY_KEY, new_voting_delay)
-    log(Concat(method("set_voting_delay(uint64)"), itob(new_voting_delay)))
+    log(ARC28Event("set_voting_delay(uint64)", itob(new_voting_delay)))
     return
 end
 
@@ -205,7 +205,7 @@ func set_voting_duration(new_voting_duration: int):
 
     assert(new_voting_duration)
     app_global_put(VOTING_DURATION_KEY, new_voting_duration)
-    log(Concat(method("set_voting_duration(uint64)"), itob(new_voting_duration)))
+    log(ARC28Event("set_voting_duration(uint64)", itob(new_voting_duration)))
     return
 end
 
@@ -215,7 +215,7 @@ func set_manager(new_manager: bytes[32]):
     assert(user_address == app_global_get(MANAGER_KEY))
 
     app_global_put(MANAGER_KEY, new_manager)
-    log(Concat(method("set_manager(address)"), new_manager))
+    log(ARC28Event("set_manager(address)", new_manager))
     return
 end
 
@@ -225,7 +225,7 @@ func set_proposal_manager(new_proposal_manager: bytes[32]):
     assert(user_address == app_global_get(MANAGER_KEY))
 
     app_global_put(PROPOSAL_MANAGER_KEY, new_proposal_manager)
-    log(Concat(method("set_proposal_manager(address)"), new_proposal_manager))
+    log(ARC28Event("set_proposal_manager(address)", new_proposal_manager))
     return
 end
 

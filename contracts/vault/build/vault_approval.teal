@@ -1,5 +1,5 @@
 #pragma version 9
-//tealish version git+https://github.com/Hipo/tealish.git@c4f8c12b36dbcc8b63844df5f818164925735087
+//tealish version git+https://github.com/Hipo/tealish.git@4937b9d1e0889db18a6e5afe9e8d404b4ab04f4b
 
 // Name: <address>
 // Size: 32 bytes
@@ -427,8 +427,8 @@ __func__create_lock:
     callsub __func__increase_total_locked_amount
     
     // create_lock(address, locked_amount, lock_end_time)
-    // tl:184: log(Concat(method("create_lock(address,uint64,uint64)"), user_address, box_extract(user_address, 0, 16)))
-    method "create_lock(address,uint64,uint64)"
+    // tl:184: log(ARC28Event("create_lock(address,uint64,uint64)", user_address, box_extract(user_address, 0, 16)))
+    pushbytes 0x585ea7f9                                    // SHA512_256("create_lock(address,uint64,uint64)")[:4]
     load 4                                                  // user_address
     load 4                                                  // user_address
     pushint 0
@@ -587,8 +587,8 @@ __func__increase_lock_amount:
     callsub __func__increase_total_locked_amount
     
     // increase_lock_amount(address, locked_amount, lock_end_time, amount_delta)
-    // tl:242: log(Concat(method("increase_lock_amount(address,uint64,uint64,uint64)"), user_address, box_extract(user_address, 0, 16), itob(amount)))
-    method "increase_lock_amount(address,uint64,uint64,uint64)"
+    // tl:242: log(ARC28Event("increase_lock_amount(address,uint64,uint64,uint64)", user_address, box_extract(user_address, 0, 16), itob(amount)))
+    pushbytes 0xf9447453                                    // SHA512_256("increase_lock_amount(address,uint64,uint64,uint64)")[:4]
     load 13                                                 // user_address
     load 13                                                 // user_address
     pushint 0
@@ -748,8 +748,8 @@ __func__extend_lock_end_time:
     callsub __func__update_or_create_slope_change
     
     // extend_lock_end_time(address, locked_amount, lock_end_time, lock_end_time_delta)
-    // tl:295: log(Concat(method("extend_lock_end_time(address,uint64,uint64,uint64)"), user_address, box_extract(user_address, 0, 16), itob(new_lock_end_time - current_lock_end_time)))
-    method "extend_lock_end_time(address,uint64,uint64,uint64)"
+    // tl:295: log(ARC28Event("extend_lock_end_time(address,uint64,uint64,uint64)", user_address, box_extract(user_address, 0, 16), itob(new_lock_end_time - current_lock_end_time)))
+    pushbytes 0x4104f936                                    // SHA512_256("extend_lock_end_time(address,uint64,uint64,uint64)")[:4]
     load 31                                                 // user_address
     load 31                                                 // user_address
     pushint 0
@@ -852,8 +852,8 @@ __func__withdraw:
     itob; load 44; pushint 8; uncover 2; box_replace// boxset account_state.lock_end_time
     
     // withdraw(user_address, amount)
-    // tl:330: log(Concat(method("withdraw(address,uint64)"), user_address, itob(locked_amount)))
-    method "withdraw(address,uint64)"
+    // tl:330: log(ARC28Event("withdraw(address,uint64)", user_address, itob(locked_amount)))
+    pushbytes 0xdaf5aabc                                    // SHA512_256("withdraw(address,uint64)")[:4]
     load 43                                                 // user_address
     load 45                                                 // locked_amount
     itob
@@ -1288,8 +1288,8 @@ __func__delete_account_power_boxes:
     callsub __func__algo_transfer
     
     // address, box_index_start, box_count
-    // tl:476: log(Concat(method("delete_account_power_boxes(address,uint64,uint64)"), user_address, itob(box_index_start), itob(box_count)))
-    method "delete_account_power_boxes(address,uint64,uint64)"
+    // tl:476: log(ARC28Event("delete_account_power_boxes(address,uint64,uint64)", user_address, itob(box_index_start), itob(box_count)))
+    pushbytes 0x9daece7e                                    // SHA512_256("delete_account_power_boxes(address,uint64,uint64)")[:4]
     load 93                                                 // user_address
     load 98                                                 // box_index_start
     itob
@@ -1389,8 +1389,8 @@ __func__delete_account_state:
     callsub __func__algo_transfer
     
     // address, box_index_start, box_count
-    // tl:510: log(Concat(method("delete_account_state(address,uint64,uint64)"), user_address, itob((box_index + 1) - box_count), itob(box_count)))
-    method "delete_account_state(address,uint64,uint64)"
+    // tl:510: log(ARC28Event("delete_account_state(address,uint64,uint64)", user_address, itob((box_index + 1) - box_count), itob(box_count)))
+    pushbytes 0x11ff1e77                                    // SHA512_256("delete_account_state(address,uint64,uint64)")[:4]
     load 102                                                // user_address
     load 106                                                // box_index
     pushint 1
@@ -1466,8 +1466,8 @@ __func__save_account_power:
     load 113                                                // data
     box_replace
     
-    // tl:525: log(Concat(method("account_power(address,uint64,uint64,uint64,uint128,uint128)"), address, itob(index), data))
-    method "account_power(address,uint64,uint64,uint64,uint128,uint128)"
+    // tl:525: log(ARC28Event("account_power(address,uint64,uint64,uint64,uint128,uint128)", address, itob(index), data))
+    pushbytes 0x5ea2e94b                                    // SHA512_256("account_power(address,uint64,uint64,uint64,uint128,uint128)")[:4]
     load 115                                                // address
     load 114                                                // index
     itob
@@ -1570,8 +1570,8 @@ __func__save_total_power:
     load 128                                                // data
     box_replace
     
-    // tl:548: log(Concat(method("total_power(uint64,uint64,uint64,uint128,uint128)"), itob(index), data))
-    method "total_power(uint64,uint64,uint64,uint128,uint128)"
+    // tl:548: log(ARC28Event("total_power(uint64,uint64,uint64,uint128,uint128)", itob(index), data))
+    pushbytes 0xc2590a0a                                    // SHA512_256("total_power(uint64,uint64,uint64,uint128,uint128)")[:4]
     load 129                                                // index
     itob
     load 128                                                // data
@@ -2219,8 +2219,8 @@ __func__revert_slope_change:
     load 181                                                // new_slope
     box_put
     
-    // tl:740: log(Concat(method("slope_change(uint64,uint128)"), itob(timestamp), new_slope))
-    method "slope_change(uint64,uint128)"
+    // tl:740: log(ARC28Event("slope_change(uint64,uint128)", itob(timestamp), new_slope))
+    pushbytes 0x1ea5479c                                    // SHA512_256("slope_change(uint64,uint128)")[:4]
     load 179                                                // timestamp
     itob
     load 181                                                // new_slope
@@ -2259,8 +2259,8 @@ __func__update_or_create_slope_change:
     load 186                                                // new_slope
     box_put
     
-    // tl:751: log(Concat(method("slope_change(uint64,uint128)"), itob(timestamp), new_slope))
-    method "slope_change(uint64,uint128)"
+    // tl:751: log(ARC28Event("slope_change(uint64,uint128)", itob(timestamp), new_slope))
+    pushbytes 0x1ea5479c                                    // SHA512_256("slope_change(uint64,uint128)")[:4]
     load 183                                                // timestamp
     itob
     load 186                                                // new_slope
@@ -2386,8 +2386,8 @@ __func__delete_box:
     -
     store 197                                               // min_balance_delta
     
-    // tl:792: log(Concat(method("box_del(byte[])"), extract(6, 2, itob(len(box_name))), box_name))
-    method "box_del(byte[])"
+    // tl:792: log(ARC28Event("box_del(byte[])", extract(6, 2, itob(len(box_name))), box_name))
+    pushbytes 0xcd841f3d                                    // SHA512_256("box_del(byte[])")[:4]
     load 194                                                // box_name
     len
     itob

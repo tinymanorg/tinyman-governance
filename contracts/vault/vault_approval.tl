@@ -1,5 +1,5 @@
 #pragma version 9
-#tealish version git+https://github.com/Hipo/tealish.git@c4f8c12b36dbcc8b63844df5f818164925735087
+#tealish version git+https://github.com/Hipo/tealish.git@4937b9d1e0889db18a6e5afe9e8d404b4ab04f4b
 
 # Name: <address>
 # Size: 32 bytes
@@ -181,7 +181,7 @@ func create_lock(lock_end_time: int):
     increase_total_locked_amount(amount)
 
     # create_lock(address, locked_amount, lock_end_time)
-    log(Concat(method("create_lock(address,uint64,uint64)"), user_address, box_extract(user_address, 0, 16)))
+    log(ARC28Event("create_lock(address,uint64,uint64)", user_address, box_extract(user_address, 0, 16)))
     return
 end
 
@@ -239,7 +239,7 @@ func increase_lock_amount():
     increase_total_locked_amount(amount)
 
     # increase_lock_amount(address, locked_amount, lock_end_time, amount_delta)
-    log(Concat(method("increase_lock_amount(address,uint64,uint64,uint64)"), user_address, box_extract(user_address, 0, 16), itob(amount)))
+    log(ARC28Event("increase_lock_amount(address,uint64,uint64,uint64)", user_address, box_extract(user_address, 0, 16), itob(amount)))
     return
 end
 
@@ -292,7 +292,7 @@ func extend_lock_end_time(new_lock_end_time: int):
     update_or_create_slope_change(new_lock_end_time, slope)
 
     # extend_lock_end_time(address, locked_amount, lock_end_time, lock_end_time_delta)
-    log(Concat(method("extend_lock_end_time(address,uint64,uint64,uint64)"), user_address, box_extract(user_address, 0, 16), itob(new_lock_end_time - current_lock_end_time)))
+    log(ARC28Event("extend_lock_end_time(address,uint64,uint64,uint64)", user_address, box_extract(user_address, 0, 16), itob(new_lock_end_time - current_lock_end_time)))
     return
 end
 
@@ -327,7 +327,7 @@ func withdraw():
     account_state.lock_end_time = 0
 
     # withdraw(user_address, amount)
-    log(Concat(method("withdraw(address,uint64)"), user_address, itob(locked_amount)))
+    log(ARC28Event("withdraw(address,uint64)", user_address, itob(locked_amount)))
     return
 end
 
@@ -473,7 +473,7 @@ func delete_account_power_boxes(box_count: int):
     algo_transfer(min_balance_delta, Global.CurrentApplicationAddress, user_address)
 
     # address, box_index_start, box_count
-    log(Concat(method("delete_account_power_boxes(address,uint64,uint64)"), user_address, itob(box_index_start), itob(box_count)))
+    log(ARC28Event("delete_account_power_boxes(address,uint64,uint64)", user_address, itob(box_index_start), itob(box_count)))
     return
 end
 
@@ -507,7 +507,7 @@ func delete_account_state():
     algo_transfer(min_balance_delta, Global.CurrentApplicationAddress, user_address)
 
     # address, box_index_start, box_count
-    log(Concat(method("delete_account_state(address,uint64,uint64)"), user_address, itob((box_index + 1) - box_count), itob(box_count)))
+    log(ARC28Event("delete_account_state(address,uint64,uint64)", user_address, itob((box_index + 1) - box_count), itob(box_count)))
     return
 end
 
@@ -522,7 +522,7 @@ func save_account_power(address: bytes[32], index: int, data: AccountPower):
     _ = box_create(box_name, ACCOUNT_POWER_BOX_SIZE)
     box_replace(box_name, (array_index * ACCOUNT_POWER_SIZE), data)
 
-    log(Concat(method("account_power(address,uint64,uint64,uint64,uint128,uint128)"), address, itob(index), data))
+    log(ARC28Event("account_power(address,uint64,uint64,uint64,uint128,uint128)", address, itob(index), data))
     return
 end
 
@@ -545,7 +545,7 @@ func save_total_power(data: TotalPower):
     _ = box_create(box_name, TOTAL_POWER_BOX_SIZE)
     box_replace(box_name, (array_index * TOTAL_POWER_SIZE), data)
 
-    log(Concat(method("total_power(uint64,uint64,uint64,uint128,uint128)"), itob(index), data))
+    log(ARC28Event("total_power(uint64,uint64,uint64,uint128,uint128)", itob(index), data))
     app_global_put(TOTAL_POWER_COUNT_KEY, index + 1)
     app_global_put(LAST_TOTAL_POWER_TIMESTAMP, extract_uint64(data, 8))
     return
@@ -737,7 +737,7 @@ func revert_slope_change(timestamp: int, slope: bytes):
     bytes new_slope = bzero(16) b| (box_extract(box_name, 0, 16) b- slope)
     box_put(box_name, new_slope)
 
-    log(Concat(method("slope_change(uint64,uint128)"), itob(timestamp), new_slope))
+    log(ARC28Event("slope_change(uint64,uint128)", itob(timestamp), new_slope))
     return
 end
 
@@ -748,7 +748,7 @@ func update_or_create_slope_change(timestamp: int, slope: bytes):
     bytes new_slope = bzero(16) b| (slope_delta b+ slope)
     box_put(box_name, new_slope)
 
-    log(Concat(method("slope_change(uint64,uint128)"), itob(timestamp), new_slope))
+    log(ARC28Event("slope_change(uint64,uint128)", itob(timestamp), new_slope))
     return
 end
 
@@ -789,7 +789,7 @@ func delete_box(box_name: bytes) int:
     int final_min_balance = min_balance(Global.CurrentApplicationAddress)
     int min_balance_delta = initial_min_balance - final_min_balance
 
-    log(Concat(method("box_del(byte[])"), extract(6, 2, itob(len(box_name))), box_name))
+    log(ARC28Event("box_del(byte[])", extract(6, 2, itob(len(box_name))), box_name))
     return min_balance_delta
 end
 

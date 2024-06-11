@@ -1,5 +1,5 @@
 #pragma version 9
-//tealish version git+https://github.com/Hipo/tealish.git@c4f8c12b36dbcc8b63844df5f818164925735087
+//tealish version git+https://github.com/Hipo/tealish.git@4937b9d1e0889db18a6e5afe9e8d404b4ab04f4b
 
 // Name: rp<box_index><array_index>
 // Size: 24 bytes
@@ -239,8 +239,8 @@ __func__create_reward_period:
     // tl:102: save_reward_period(reward_period)
     load 13                                                 // reward_period
     callsub __func__save_reward_period
-    // tl:103: log(Concat(method("create_reward_period(uint64,uint64,uint128)"), itob(period_index), itob(total_reward_amount), cumulative_power_delta))
-    method "create_reward_period(uint64,uint64,uint128)"
+    // tl:103: log(ARC28Event("create_reward_period(uint64,uint64,uint128)", itob(period_index), itob(total_reward_amount), cumulative_power_delta))
+    pushbytes 0x81a7c323                                    // SHA512_256("create_reward_period(uint64,uint64,uint128)")[:4]
     load 8                                                  // period_index
     itob
     load 12                                                 // total_reward_amount
@@ -382,8 +382,8 @@ __func__claim_rewards:
     callsub __func__tiny_transfer
     
     // claim_rewards(address, total_reward_amount, period_index_start, period_count, reward_amounts[])
-    // tl:146: log(Concat(method("claim_rewards(address,uint64,uint64,uint64,uint64[])"), user_address, itob(total_reward_amount), itob(period_index_start), itob(period_count), extract(6, 2, itob(period_count)), reward_amounts))
-    method "claim_rewards(address,uint64,uint64,uint64,uint64[])"
+    // tl:146: log(ARC28Event("claim_rewards(address,uint64,uint64,uint64,uint64[])", user_address, itob(total_reward_amount), itob(period_index_start), itob(period_count), extract(6, 2, itob(period_count)), reward_amounts))
+    pushbytes 0x4fe91013                                    // SHA512_256("claim_rewards(address,uint64,uint64,uint64,uint64[])")[:4]
     load 17                                                 // user_address
     load 19                                                 // total_reward_amount
     itob
@@ -452,8 +452,8 @@ __func__init:
     global CurrentApplicationAddress
     global CurrentApplicationAddress
     callsub __func__tiny_transfer
-    // tl:164: log(Concat(method("init(uint64,uint64)"), itob(first_period_timestamp), itob(reward_amount)))
-    method "init(uint64,uint64)"
+    // tl:164: log(ARC28Event("init(uint64,uint64)", itob(first_period_timestamp), itob(reward_amount)))
+    pushbytes 0xd0265394                                    // SHA512_256("init(uint64,uint64)")[:4]
     load 32                                                 // first_period_timestamp
     itob
     load 30                                                 // reward_amount
@@ -491,8 +491,8 @@ __func__set_reward_amount:
     // tl:177: save_reward_history(reward_history)
     load 36                                                 // reward_history
     callsub __func__save_reward_history
-    // tl:178: log(Concat(method("set_reward_amount(uint64,uint64)"), itob(Global.LatestTimestamp), itob(reward_amount)))
-    method "set_reward_amount(uint64,uint64)"
+    // tl:178: log(ARC28Event("set_reward_amount(uint64,uint64)", itob(Global.LatestTimestamp), itob(reward_amount)))
+    pushbytes 0x8650117a                                    // SHA512_256("set_reward_amount(uint64,uint64)")[:4]
     global LatestTimestamp
     itob
     load 34                                                 // reward_amount
@@ -520,8 +520,8 @@ __func__set_manager:
     pushbytes MANAGER_KEY                                   // "manager"
     load 37                                                 // new_manager
     app_global_put
-    // tl:188: log(Concat(method("set_manager(address)"), new_manager))
-    method "set_manager(address)"
+    // tl:188: log(ARC28Event("set_manager(address)", new_manager))
+    pushbytes 0xba87e7f4                                    // SHA512_256("set_manager(address)")[:4]
     load 37                                                 // new_manager
     concat
     log
@@ -545,8 +545,8 @@ __func__set_rewards_manager:
     pushbytes REWARDS_MANAGER_KEY                           // "rewards_manager"
     load 39                                                 // new_rewards_manager
     app_global_put
-    // tl:198: log(Concat(method("set_rewards_manager(address)"), new_rewards_manager))
-    method "set_rewards_manager(address)"
+    // tl:198: log(ARC28Event("set_rewards_manager(address)", new_rewards_manager))
+    pushbytes 0x7dca08e7                                    // SHA512_256("set_rewards_manager(address)")[:4]
     load 39                                                 // new_rewards_manager
     concat
     log
@@ -626,8 +626,8 @@ __func__save_reward_period:
     box_replace
     
     // reward_period(index, total_reward_amount, total_cumulative_power_delta)
-    // tl:224: log(Concat(method("reward_period(uint64,uint64,uint128)"), itob(index), data))
-    method "reward_period(uint64,uint64,uint128)"
+    // tl:224: log(ARC28Event("reward_period(uint64,uint64,uint128)", itob(index), data))
+    pushbytes 0x87570c4c                                    // SHA512_256("reward_period(uint64,uint64,uint128)")[:4]
     load 47                                                 // index
     itob
     load 46                                                 // data
@@ -722,8 +722,8 @@ __func__save_reward_history:
     box_replace
     
     // reward_history(index, timestamp, reward_amount)
-    // tl:249: log(Concat(method("reward_history(uint64,uint64,uint64)"), itob(index), data))
-    method "reward_history(uint64,uint64,uint64)"
+    // tl:249: log(ARC28Event("reward_history(uint64,uint64,uint64)", itob(index), data))
+    pushbytes 0xa1f897be                                    // SHA512_256("reward_history(uint64,uint64,uint64)")[:4]
     load 58                                                 // index
     itob
     load 57                                                 // data

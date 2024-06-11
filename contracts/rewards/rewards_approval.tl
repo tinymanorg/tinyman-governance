@@ -1,5 +1,5 @@
 #pragma version 9
-#tealish version git+https://github.com/Hipo/tealish.git@c4f8c12b36dbcc8b63844df5f818164925735087
+#tealish version git+https://github.com/Hipo/tealish.git@4937b9d1e0889db18a6e5afe9e8d404b4ab04f4b
 
 # Name: rp<box_index><array_index>
 # Size: 24 bytes
@@ -100,7 +100,7 @@ func create_reward_period(total_power_index_1: bytes, total_power_index_2: bytes
 
     RewardPeriod reward_period = construct_reward_period(total_reward_amount, cumulative_power_delta)
     save_reward_period(reward_period)
-    log(Concat(method("create_reward_period(uint64,uint64,uint128)"), itob(period_index), itob(total_reward_amount), cumulative_power_delta))
+    log(ARC28Event("create_reward_period(uint64,uint64,uint128)", itob(period_index), itob(total_reward_amount), cumulative_power_delta))
     return
 end
 
@@ -143,7 +143,7 @@ func claim_rewards(period_index_start: int, period_count: int, account_power_ind
     tiny_transfer(total_reward_amount, Global.CurrentApplicationAddress, user_address)
 
     # claim_rewards(address, total_reward_amount, period_index_start, period_count, reward_amounts[])
-    log(Concat(method("claim_rewards(address,uint64,uint64,uint64,uint64[])"), user_address, itob(total_reward_amount), itob(period_index_start), itob(period_count), extract(6, 2, itob(period_count)), reward_amounts))
+    log(ARC28Event("claim_rewards(address,uint64,uint64,uint64,uint64[])", user_address, itob(total_reward_amount), itob(period_index_start), itob(period_count), extract(6, 2, itob(period_count)), reward_amounts))
     return
 end
 
@@ -161,7 +161,7 @@ func init(reward_amount: int):
 
     # opt-in to TINY
     tiny_transfer(0, Global.CurrentApplicationAddress, Global.CurrentApplicationAddress)
-    log(Concat(method("init(uint64,uint64)"), itob(first_period_timestamp), itob(reward_amount)))
+    log(ARC28Event("init(uint64,uint64)", itob(first_period_timestamp), itob(reward_amount)))
     return
 end
 
@@ -175,7 +175,7 @@ func set_reward_amount(reward_amount: int):
 
     RewardHistory reward_history = construct_reward_history(Global.LatestTimestamp, reward_amount)
     save_reward_history(reward_history)
-    log(Concat(method("set_reward_amount(uint64,uint64)"), itob(Global.LatestTimestamp), itob(reward_amount)))
+    log(ARC28Event("set_reward_amount(uint64,uint64)", itob(Global.LatestTimestamp), itob(reward_amount)))
     return
 end
 
@@ -185,7 +185,7 @@ func set_manager(new_manager: bytes[32]):
     assert(user_address == app_global_get(MANAGER_KEY))
 
     app_global_put(MANAGER_KEY, new_manager)
-    log(Concat(method("set_manager(address)"), new_manager))
+    log(ARC28Event("set_manager(address)", new_manager))
     return
 end
 
@@ -195,7 +195,7 @@ func set_rewards_manager(new_rewards_manager: bytes[32]):
     assert(user_address == app_global_get(MANAGER_KEY))
 
     app_global_put(REWARDS_MANAGER_KEY, new_rewards_manager)
-    log(Concat(method("set_rewards_manager(address)"), new_rewards_manager))
+    log(ARC28Event("set_rewards_manager(address)", new_rewards_manager))
     return
 end
 
@@ -221,7 +221,7 @@ func save_reward_period(data: RewardPeriod):
     box_replace(box_name, (array_index * REWARD_PERIOD_SIZE), data)
 
     # reward_period(index, total_reward_amount, total_cumulative_power_delta)
-    log(Concat(method("reward_period(uint64,uint64,uint128)"), itob(index), data))
+    log(ARC28Event("reward_period(uint64,uint64,uint128)", itob(index), data))
     app_global_put(REWARD_PERIOD_COUNT_KEY, index + 1)
     return
 end
@@ -246,7 +246,7 @@ func save_reward_history(data: RewardHistory):
     box_replace(box_name, (array_index * REWARD_HISTORY_SIZE), data)
 
     # reward_history(index, timestamp, reward_amount)
-    log(Concat(method("reward_history(uint64,uint64,uint64)"), itob(index), data))
+    log(ARC28Event("reward_history(uint64,uint64,uint64)", itob(index), data))
     app_global_put(REWARD_HISTORY_COUNT_KEY, index + 1)
     return
 end
