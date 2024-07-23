@@ -1,5 +1,30 @@
-# tinyman-governance
+# Tinyman Governance
 
+This repo contains the contracts that form the Tinyman Governance system.
+
+### Docs
+
+The governance system is described in detail in the following document:
+[Tinyman Governance Specification](docs/tinyman_governance_protocol_specification.pdf)
+
+User docs for Tinyman Governance can be found at [docs.tinyman.org](https://docs.tinyman.org).
+
+
+### Contracts
+The contracts are written in [Tealish](https://github.com/tinymanorg/tealish).
+The specific version of Tealish is https://github.com/tinymanorg/tealish/tree/df4b0130e0c23a3498dda2b2f1a21b3249530813.
+
+The annotated TEAL outputs and compiled bytecode are available in the build subfolders.
+
+
+### Audits
+
+Audit reports from independent reviewers can be found in the [audits](audits/) directory.
+
+
+### Security
+#### Reporting a Vulnerability
+Reports of potential flaws must be responsibly disclosed to security@tinyman.org. Do not share details with anyone else until notified to do so by the team.
 
 
 ### Installing Dependencies
@@ -37,3 +62,7 @@ Note: The tests read the `.tl` Tealish source files from the contracts directori
 (gov) % tealish compile contracts/staking_voting
 (gov) % tealish compile contracts/rewards
 ```
+
+### Licensing
+
+The contents of this repository are licensed under the Business Source License 1.1 (BUSL-1.1), see [LICENSE](LICENSE).
