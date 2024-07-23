@@ -1,4 +1,4 @@
 #pragma version 9
-#tealish version git+https://github.com/Hipo/tealish.git@4937b9d1e0889db18a6e5afe9e8d404b4ab04f4b
+#tealish version git+https://github.com/Hipo/tealish.git@df4b0130e0c23a3498dda2b2f1a21b3249530813
 
 exit(1)

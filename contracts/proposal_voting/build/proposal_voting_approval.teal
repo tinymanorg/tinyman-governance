@@ -1,5 +1,9 @@
 #pragma version 9
-//tealish version git+https://github.com/Hipo/tealish.git@4937b9d1e0889db18a6e5afe9e8d404b4ab04f4b
+//tealish version git+https://github.com/Hipo/tealish.git@df4b0130e0c23a3498dda2b2f1a21b3249530813
+
+// Tinyman Governance - Proposal Voting Application
+// License: https://github.com/tinymanorg/tinyman-governance/blob/main/LICENSE
+// Documentation: https://docs.tinyman.org
 
 // Name: <proposal_id>
 // Size: 116 bytes
@@ -39,7 +43,7 @@
 #define ACCOUNT_ATTENDANCE_SHEET_BOX_SIZE 24
 
 
-// tl:61: router:
+// tl:65: router:
 pushbytes "create_application"
 pushbytes "update_application"
 pushbytes "cast_vote"
@@ -176,102 +180,102 @@ route_disable_approval_requirement:
     pushint 1; return
 
 
-// tl:85: func create_application(vault_app_id: int):
+// tl:89: func create_application(vault_app_id: int):
 __func__create_application:
     store 1                                                 // vault_app_id [int]
-    // tl:86: app_global_put(VAULT_APP_ID_KEY, vault_app_id)
+    // tl:90: app_global_put(VAULT_APP_ID_KEY, vault_app_id)
     pushbytes VAULT_APP_ID_KEY                              // "vault_app_id"
     load 1                                                  // vault_app_id
     app_global_put
-    // tl:87: app_global_put(PROPOSAL_INDEX_COUNTER_KEY, 0)
+    // tl:91: app_global_put(PROPOSAL_INDEX_COUNTER_KEY, 0)
     pushbytes PROPOSAL_INDEX_COUNTER_KEY                    // "proposal_index_counter"
     pushint 0
     app_global_put
     
     // voting starts at the N'th midnight after creation time
-    // tl:90: app_global_put(VOTING_DELAY_KEY, 2)
+    // tl:94: app_global_put(VOTING_DELAY_KEY, 2)
     pushbytes VOTING_DELAY_KEY                              // "voting_delay"
     pushint 2
     app_global_put
     
     // voting ends at the N'th midnight after voting start time
-    // tl:93: app_global_put(VOTING_DURATION_KEY, 7)
+    // tl:97: app_global_put(VOTING_DURATION_KEY, 7)
     pushbytes VOTING_DURATION_KEY                           // "voting_duration"
     pushint 7
     app_global_put
     
     // proposer must have X amount total voting power, default 450K
-    // tl:96: app_global_put(PROPOSAL_THRESHOLD_KEY, 450000000000)
+    // tl:100: app_global_put(PROPOSAL_THRESHOLD_KEY, 450000000000)
     pushbytes PROPOSAL_THRESHOLD_KEY                        // "proposal_threshold"
     pushint 450000000000
     app_global_put
     
     // proposer must have %N of the total voting power, default %0
-    // tl:99: app_global_put(PROPOSAL_THRESHOLD_NUMERATOR_KEY, 0)
+    // tl:103: app_global_put(PROPOSAL_THRESHOLD_NUMERATOR_KEY, 0)
     pushbytes PROPOSAL_THRESHOLD_NUMERATOR_KEY              // "proposal_threshold_numerator"
     pushint 0
     app_global_put
     
     // required voting power (for or abstain) to reach quorum, default 2,25M (2_250_000_000_000)
-    // tl:102: app_global_put(QUORUM_THRESHOLD_KEY, 2250000000000)
+    // tl:106: app_global_put(QUORUM_THRESHOLD_KEY, 2250000000000)
     pushbytes QUORUM_THRESHOLD_KEY                          // "quorum_threshold"
     pushint 2250000000000
     app_global_put
     
-    // tl:104: app_global_put(APPROVAL_REQUIREMENT_KEY, 1)
+    // tl:108: app_global_put(APPROVAL_REQUIREMENT_KEY, 1)
     pushbytes APPROVAL_REQUIREMENT_KEY                      // "approval_requirement"
     pushint 1
     app_global_put
     
-    // tl:106: app_global_put(MANAGER_KEY, Txn.Sender)
+    // tl:110: app_global_put(MANAGER_KEY, Txn.Sender)
     pushbytes MANAGER_KEY                                   // "manager"
     txn Sender
     app_global_put
-    // tl:107: app_global_put(PROPOSAL_MANAGER_KEY, Txn.Sender)
+    // tl:111: app_global_put(PROPOSAL_MANAGER_KEY, Txn.Sender)
     pushbytes PROPOSAL_MANAGER_KEY                          // "proposal_manager"
     txn Sender
     app_global_put
-    // tl:108: return
+    // tl:112: return
     retsub
 
-// tl:112: func update_application():
+// tl:116: func update_application():
 __func__update_application:
-    // tl:113: bytes[32] user_address = Txn.Sender [slot 2]
+    // tl:117: bytes[32] user_address = Txn.Sender [slot 2]
     txn Sender
     store 2                                                 // user_address
-    // tl:114: assert(user_address == app_global_get(MANAGER_KEY))
+    // tl:118: assert(user_address == app_global_get(MANAGER_KEY))
     load 2                                                  // user_address
     pushbytes MANAGER_KEY                                   // "manager"
     app_global_get
     ==
     assert
-    // tl:115: return
+    // tl:119: return
     retsub
 
-// tl:119: func increase_budget(inner_app_call_count: int):
+// tl:123: func increase_budget(inner_app_call_count: int):
 __func__increase_budget:
     store 3                                                 // inner_app_call_count [int]
     // Box read budget and opcode budget will be incread using this method.
-    // tl:121: for _ in 0:inner_app_call_count:
+    // tl:125: for _ in 0:inner_app_call_count:
         pushint 0
         dup
         l0_for:
         load 3                                              // inner_app_call_count
         ==
         bnz l0_end
-        // tl:122: inner_txn:
+        // tl:126: inner_txn:
         itxn_begin
-            // tl:123: TypeEnum: Appl
+            // tl:127: TypeEnum: Appl
             pushint 6                                       // Appl
             itxn_field TypeEnum
-            // tl:124: ApplicationID: app_global_get(VAULT_APP_ID_KEY)
+            // tl:128: ApplicationID: app_global_get(VAULT_APP_ID_KEY)
             pushbytes VAULT_APP_ID_KEY                      // "vault_app_id"
             app_global_get
             itxn_field ApplicationID
-            // tl:125: ApplicationArgs[0]: "increase_budget"
+            // tl:129: ApplicationArgs[0]: "increase_budget"
             pushbytes "increase_budget"
             itxn_field ApplicationArgs
-            // tl:126: Fee: 0
+            // tl:130: Fee: 0
             pushint 0
             itxn_field Fee
         itxn_submit
@@ -282,100 +286,100 @@ __func__increase_budget:
         b l0_for
         pop
         l0_end:
-    // tl:129: return
+    // tl:133: return
     retsub
 
-// tl:133: func set_manager(new_manager: bytes[32]):
+// tl:137: func set_manager(new_manager: bytes[32]):
 __func__set_manager:
     store 4                                                 // new_manager [bytes[32]]
-    // tl:134: bytes[32] user_address = Txn.Sender [slot 5]
+    // tl:138: bytes[32] user_address = Txn.Sender [slot 5]
     txn Sender
     store 5                                                 // user_address
-    // tl:135: assert(user_address == app_global_get(MANAGER_KEY))
+    // tl:139: assert(user_address == app_global_get(MANAGER_KEY))
     load 5                                                  // user_address
     pushbytes MANAGER_KEY                                   // "manager"
     app_global_get
     ==
     assert
     
-    // tl:137: app_global_put(MANAGER_KEY, new_manager)
+    // tl:141: app_global_put(MANAGER_KEY, new_manager)
     pushbytes MANAGER_KEY                                   // "manager"
     load 4                                                  // new_manager
     app_global_put
-    // tl:138: log(ARC28Event("set_manager(address)", new_manager))
+    // tl:142: log(ARC28Event("set_manager(address)", new_manager))
     pushbytes 0xba87e7f4                                    // SHA512_256("set_manager(address)")[:4]
     load 4                                                  // new_manager
     concat
     log
-    // tl:139: return
+    // tl:143: return
     retsub
 
-// tl:143: func set_proposal_manager(new_proposal_manager: bytes[32]):
+// tl:147: func set_proposal_manager(new_proposal_manager: bytes[32]):
 __func__set_proposal_manager:
     store 6                                                 // new_proposal_manager [bytes[32]]
-    // tl:144: bytes[32] user_address = Txn.Sender [slot 7]
+    // tl:148: bytes[32] user_address = Txn.Sender [slot 7]
     txn Sender
     store 7                                                 // user_address
-    // tl:145: assert(user_address == app_global_get(MANAGER_KEY))
+    // tl:149: assert(user_address == app_global_get(MANAGER_KEY))
     load 7                                                  // user_address
     pushbytes MANAGER_KEY                                   // "manager"
     app_global_get
     ==
     assert
     
-    // tl:147: app_global_put(PROPOSAL_MANAGER_KEY, new_proposal_manager)
+    // tl:151: app_global_put(PROPOSAL_MANAGER_KEY, new_proposal_manager)
     pushbytes PROPOSAL_MANAGER_KEY                          // "proposal_manager"
     load 6                                                  // new_proposal_manager
     app_global_put
-    // tl:148: log(ARC28Event("set_proposal_manager(address)", new_proposal_manager))
+    // tl:152: log(ARC28Event("set_proposal_manager(address)", new_proposal_manager))
     pushbytes 0x2d9960b3                                    // SHA512_256("set_proposal_manager(address)")[:4]
     load 6                                                  // new_proposal_manager
     concat
     log
-    // tl:149: return
+    // tl:153: return
     retsub
 
-// tl:153: func approve_proposal(proposal_id: bytes[59]):
+// tl:157: func approve_proposal(proposal_id: bytes[59]):
 __func__approve_proposal:
     store 8                                                 // proposal_id [bytes[59]]
-    // tl:154: bytes[32] user_address = Txn.Sender [slot 9]
+    // tl:158: bytes[32] user_address = Txn.Sender [slot 9]
     txn Sender
     store 9                                                 // user_address
-    // tl:155: assert(user_address == app_global_get(PROPOSAL_MANAGER_KEY))
+    // tl:159: assert(user_address == app_global_get(PROPOSAL_MANAGER_KEY))
     load 9                                                  // user_address
     pushbytes PROPOSAL_MANAGER_KEY                          // "proposal_manager"
     app_global_get
     ==
     assert
     
-    // tl:157: bytes proposal_box_name = Concat(PROPOSAL_BOX_PREFIX, proposal_id) [slot 10]
+    // tl:161: bytes proposal_box_name = Concat(PROPOSAL_BOX_PREFIX, proposal_id) [slot 10]
     pushbytes PROPOSAL_BOX_PREFIX                           // "p"
     load 8                                                  // proposal_id
     concat
     store 10                                                // proposal_box_name
-    // tl:158: box<Proposal> proposal = OpenBox(proposal_box_name) [slot 11]
+    // tl:162: box<Proposal> proposal = OpenBox(proposal_box_name) [slot 11]
     load 10                                                 // proposal_box_name
     dup; box_len; assert; pushint 182; ==; assert           // len(box) == Proposal.size
     store 11                                                // box:proposal
-    // tl:159: assert(proposal.is_approved == BYTES_FALSE)
+    // tl:163: assert(proposal.is_approved == BYTES_FALSE)
     load 11; pushint 80; pushint 1; box_extract// proposal.is_approved
     pushbytes BYTES_FALSE                                   // "\x00"
     ==
     assert
-    // tl:160: assert(!proposal.voting_start_timestamp)
+    // tl:164: assert(!proposal.voting_start_timestamp)
     load 11; pushint 16; pushint 8; box_extract; btoi// proposal.voting_start_timestamp
     !
     assert
-    // tl:161: assert(proposal.is_cancelled == BYTES_FALSE)
+    // tl:165: assert(proposal.is_cancelled == BYTES_FALSE)
     load 11; pushint 81; pushint 1; box_extract// proposal.is_cancelled
     pushbytes BYTES_FALSE                                   // "\x00"
     ==
     assert
     
-    // tl:163: int voting_start_timestamp = get_voting_start_timestamp() [slot 12]
+    // tl:167: int voting_start_timestamp = get_voting_start_timestamp() [slot 12]
     callsub __func__get_voting_start_timestamp
     store 12                                                // voting_start_timestamp
-    // tl:164: int voting_end_timestamp = voting_start_timestamp + (app_global_get(VOTING_DURATION_KEY) * DAY) [slot 13]
+    // tl:168: int voting_end_timestamp = voting_start_timestamp + (app_global_get(VOTING_DURATION_KEY) * DAY) [slot 13]
     load 12                                                 // voting_start_timestamp
     pushbytes VOTING_DURATION_KEY                           // "voting_duration"
     app_global_get
@@ -384,72 +388,72 @@ __func__approve_proposal:
     +
     store 13                                                // voting_end_timestamp
     
-    // tl:166: proposal.is_approved = BYTES_TRUE
+    // tl:170: proposal.is_approved = BYTES_TRUE
     pushbytes BYTES_TRUE                                    // "\x80"
     load 11; pushint 80; uncover 2; box_replace// boxset proposal.is_approved
-    // tl:167: proposal.voting_start_timestamp = voting_start_timestamp
+    // tl:171: proposal.voting_start_timestamp = voting_start_timestamp
     load 12                                                 // voting_start_timestamp
     itob; load 11; pushint 16; uncover 2; box_replace// boxset proposal.voting_start_timestamp
-    // tl:168: proposal.voting_end_timestamp = voting_end_timestamp
+    // tl:172: proposal.voting_end_timestamp = voting_end_timestamp
     load 13                                                 // voting_end_timestamp
     itob; load 11; pushint 24; uncover 2; box_replace// boxset proposal.voting_end_timestamp
     
-    // tl:170: bytes proposal_data [slot 14]
-    // tl:171: _, proposal_data = box_get(proposal_box_name)
+    // tl:174: bytes proposal_data [slot 14]
+    // tl:175: _, proposal_data = box_get(proposal_box_name)
     load 10                                                 // proposal_box_name
     box_get
     pop                                                     // discarding value for _
     store 14                                                // proposal_data
-    // tl:172: log(ARC28Event("proposal(byte[59],uint64,uint64,uint64,uint64,uint64,uint64,uint64,uint64,uint64,uint64,bool,bool,bool,bool,address,byte[34],address)", proposal_id, proposal_data))
+    // tl:176: log(ARC28Event("proposal(byte[59],uint64,uint64,uint64,uint64,uint64,uint64,uint64,uint64,uint64,uint64,bool,bool,bool,bool,address,byte[34],address)", proposal_id, proposal_data))
     pushbytes 0xb937892b                                    // SHA512_256("proposal(byte[59],uint64,uint64,uint64,uint64,uint64,uint64,uint64,uint64,uint64,uint64,bool,bool,bool,bool,address,byte[34],address)")[:4]
     load 8                                                  // proposal_id
     load 14                                                 // proposal_data
     concat
     concat
     log
-    // tl:173: log(ARC28Event("approve_proposal(address,byte[59])", user_address, proposal_id))
+    // tl:177: log(ARC28Event("approve_proposal(address,byte[59])", user_address, proposal_id))
     pushbytes 0x9fdea5e7                                    // SHA512_256("approve_proposal(address,byte[59])")[:4]
     load 9                                                  // user_address
     load 8                                                  // proposal_id
     concat
     concat
     log
-    // tl:174: return
+    // tl:178: return
     retsub
 
-// tl:178: func cancel_proposal(proposal_id: bytes[59]):
+// tl:182: func cancel_proposal(proposal_id: bytes[59]):
 __func__cancel_proposal:
     store 15                                                // proposal_id [bytes[59]]
-    // tl:179: bytes[32] user_address = Txn.Sender [slot 16]
+    // tl:183: bytes[32] user_address = Txn.Sender [slot 16]
     txn Sender
     store 16                                                // user_address
-    // tl:180: assert(user_address == app_global_get(PROPOSAL_MANAGER_KEY))
+    // tl:184: assert(user_address == app_global_get(PROPOSAL_MANAGER_KEY))
     load 16                                                 // user_address
     pushbytes PROPOSAL_MANAGER_KEY                          // "proposal_manager"
     app_global_get
     ==
     assert
     
-    // tl:182: bytes proposal_box_name = Concat(PROPOSAL_BOX_PREFIX, proposal_id) [slot 17]
+    // tl:186: bytes proposal_box_name = Concat(PROPOSAL_BOX_PREFIX, proposal_id) [slot 17]
     pushbytes PROPOSAL_BOX_PREFIX                           // "p"
     load 15                                                 // proposal_id
     concat
     store 17                                                // proposal_box_name
-    // tl:183: box<Proposal> proposal = OpenBox(proposal_box_name) [slot 18]
+    // tl:187: box<Proposal> proposal = OpenBox(proposal_box_name) [slot 18]
     load 17                                                 // proposal_box_name
     dup; box_len; assert; pushint 182; ==; assert           // len(box) == Proposal.size
     store 18                                                // box:proposal
-    // tl:184: assert(proposal.is_cancelled == BYTES_FALSE)
+    // tl:188: assert(proposal.is_cancelled == BYTES_FALSE)
     load 18; pushint 81; pushint 1; box_extract// proposal.is_cancelled
     pushbytes BYTES_FALSE                                   // "\x00"
     ==
     assert
-    // tl:185: assert(proposal.is_executed == BYTES_FALSE)
+    // tl:189: assert(proposal.is_executed == BYTES_FALSE)
     load 18; pushint 82; pushint 1; box_extract// proposal.is_executed
     pushbytes BYTES_FALSE                                   // "\x00"
     ==
     assert
-    // tl:186: assert((Global.LatestTimestamp < proposal.voting_end_timestamp) || !proposal.voting_end_timestamp)
+    // tl:190: assert((Global.LatestTimestamp < proposal.voting_end_timestamp) || !proposal.voting_end_timestamp)
     global LatestTimestamp
     load 18; pushint 24; pushint 8; box_extract; btoi// proposal.voting_end_timestamp
     <
@@ -457,135 +461,135 @@ __func__cancel_proposal:
     !
     ||
     assert
-    // tl:187: proposal.is_cancelled = BYTES_TRUE
+    // tl:191: proposal.is_cancelled = BYTES_TRUE
     pushbytes BYTES_TRUE                                    // "\x80"
     load 18; pushint 81; uncover 2; box_replace// boxset proposal.is_cancelled
     
-    // tl:189: bytes proposal_data [slot 19]
-    // tl:190: _, proposal_data = box_get(proposal_box_name)
+    // tl:193: bytes proposal_data [slot 19]
+    // tl:194: _, proposal_data = box_get(proposal_box_name)
     load 17                                                 // proposal_box_name
     box_get
     pop                                                     // discarding value for _
     store 19                                                // proposal_data
-    // tl:191: log(ARC28Event("proposal(byte[59],uint64,uint64,uint64,uint64,uint64,uint64,uint64,uint64,uint64,uint64,bool,bool,bool,bool,address,byte[34],address)", proposal_id, proposal_data))
+    // tl:195: log(ARC28Event("proposal(byte[59],uint64,uint64,uint64,uint64,uint64,uint64,uint64,uint64,uint64,uint64,bool,bool,bool,bool,address,byte[34],address)", proposal_id, proposal_data))
     pushbytes 0xb937892b                                    // SHA512_256("proposal(byte[59],uint64,uint64,uint64,uint64,uint64,uint64,uint64,uint64,uint64,uint64,bool,bool,bool,bool,address,byte[34],address)")[:4]
     load 15                                                 // proposal_id
     load 19                                                 // proposal_data
     concat
     concat
     log
-    // tl:192: log(ARC28Event("cancel_proposal(address,byte[59])", user_address, proposal_id))
+    // tl:196: log(ARC28Event("cancel_proposal(address,byte[59])", user_address, proposal_id))
     pushbytes 0xd84382ee                                    // SHA512_256("cancel_proposal(address,byte[59])")[:4]
     load 16                                                 // user_address
     load 15                                                 // proposal_id
     concat
     concat
     log
-    // tl:193: return
+    // tl:197: return
     retsub
 
-// tl:197: func execute_proposal(proposal_id: bytes[59]):
+// tl:201: func execute_proposal(proposal_id: bytes[59]):
 __func__execute_proposal:
     store 20                                                // proposal_id [bytes[59]]
-    // tl:198: bytes[32] user_address = Txn.Sender [slot 21]
+    // tl:202: bytes[32] user_address = Txn.Sender [slot 21]
     txn Sender
     store 21                                                // user_address
-    // tl:199: bytes proposal_box_name = Concat(PROPOSAL_BOX_PREFIX, proposal_id) [slot 22]
+    // tl:203: bytes proposal_box_name = Concat(PROPOSAL_BOX_PREFIX, proposal_id) [slot 22]
     pushbytes PROPOSAL_BOX_PREFIX                           // "p"
     load 20                                                 // proposal_id
     concat
     store 22                                                // proposal_box_name
-    // tl:200: box<Proposal> proposal = OpenBox(proposal_box_name) [slot 23]
+    // tl:204: box<Proposal> proposal = OpenBox(proposal_box_name) [slot 23]
     load 22                                                 // proposal_box_name
     dup; box_len; assert; pushint 182; ==; assert           // len(box) == Proposal.size
     store 23                                                // box:proposal
-    // tl:201: assert(proposal.voting_end_timestamp)
+    // tl:205: assert(proposal.voting_end_timestamp)
     load 23; pushint 24; pushint 8; box_extract; btoi// proposal.voting_end_timestamp
     assert
-    // tl:202: assert(proposal.voting_end_timestamp < Global.LatestTimestamp)
+    // tl:206: assert(proposal.voting_end_timestamp < Global.LatestTimestamp)
     load 23; pushint 24; pushint 8; box_extract; btoi// proposal.voting_end_timestamp
     global LatestTimestamp
     <
     assert
-    // tl:203: assert(proposal.is_cancelled == BYTES_FALSE)
+    // tl:207: assert(proposal.is_cancelled == BYTES_FALSE)
     load 23; pushint 81; pushint 1; box_extract// proposal.is_cancelled
     pushbytes BYTES_FALSE                                   // "\x00"
     ==
     assert
-    // tl:204: assert(proposal.is_executed == BYTES_FALSE)
+    // tl:208: assert(proposal.is_executed == BYTES_FALSE)
     load 23; pushint 82; pushint 1; box_extract// proposal.is_executed
     pushbytes BYTES_FALSE                                   // "\x00"
     ==
     assert
-    // tl:205: assert(proposal.is_quorum_reached == BYTES_TRUE)
+    // tl:209: assert(proposal.is_quorum_reached == BYTES_TRUE)
     load 23; pushint 83; pushint 1; box_extract// proposal.is_quorum_reached
     pushbytes BYTES_TRUE                                    // "\x80"
     ==
     assert
-    // tl:206: assert(proposal.for_voting_power > proposal.against_voting_power)
+    // tl:210: assert(proposal.for_voting_power > proposal.against_voting_power)
     load 23; pushint 64; pushint 8; box_extract; btoi// proposal.for_voting_power
     load 23; pushint 56; pushint 8; box_extract; btoi// proposal.against_voting_power
     >
     assert
-    // tl:207: assert(proposal.executor == user_address)
+    // tl:211: assert(proposal.executor == user_address)
     load 23; pushint 150; pushint 32; box_extract// proposal.executor
     load 21                                                 // user_address
     ==
     assert
-    // tl:208: proposal.is_executed = BYTES_TRUE
+    // tl:212: proposal.is_executed = BYTES_TRUE
     pushbytes BYTES_TRUE                                    // "\x80"
     load 23; pushint 82; uncover 2; box_replace// boxset proposal.is_executed
     
-    // tl:210: bytes proposal_data [slot 24]
-    // tl:211: _, proposal_data = box_get(proposal_box_name)
+    // tl:214: bytes proposal_data [slot 24]
+    // tl:215: _, proposal_data = box_get(proposal_box_name)
     load 22                                                 // proposal_box_name
     box_get
     pop                                                     // discarding value for _
     store 24                                                // proposal_data
-    // tl:212: log(ARC28Event("proposal(byte[59],uint64,uint64,uint64,uint64,uint64,uint64,uint64,uint64,uint64,uint64,bool,bool,bool,bool,address,byte[34],address)", proposal_id, proposal_data))
+    // tl:216: log(ARC28Event("proposal(byte[59],uint64,uint64,uint64,uint64,uint64,uint64,uint64,uint64,uint64,uint64,bool,bool,bool,bool,address,byte[34],address)", proposal_id, proposal_data))
     pushbytes 0xb937892b                                    // SHA512_256("proposal(byte[59],uint64,uint64,uint64,uint64,uint64,uint64,uint64,uint64,uint64,uint64,bool,bool,bool,bool,address,byte[34],address)")[:4]
     load 20                                                 // proposal_id
     load 24                                                 // proposal_data
     concat
     concat
     log
-    // tl:213: log(ARC28Event("execute_proposal(address,byte[59])", user_address, proposal_id))
+    // tl:217: log(ARC28Event("execute_proposal(address,byte[59])", user_address, proposal_id))
     pushbytes 0x5c8f51f0                                    // SHA512_256("execute_proposal(address,byte[59])")[:4]
     load 21                                                 // user_address
     load 20                                                 // proposal_id
     concat
     concat
     log
-    // tl:214: return
+    // tl:218: return
     retsub
 
-// tl:218: func create_proposal(proposal_id: bytes[59], execution_hash: bytes[34], executor: bytes[32]):
+// tl:222: func create_proposal(proposal_id: bytes[59], execution_hash: bytes[34], executor: bytes[32]):
 __func__create_proposal:
     store 25                                                // executor [bytes[32]]
     store 26                                                // execution_hash [bytes[34]]
     store 27                                                // proposal_id [bytes[59]]
-    // tl:219: bytes[32] user_address = Txn.Sender [slot 28]
+    // tl:223: bytes[32] user_address = Txn.Sender [slot 28]
     txn Sender
     store 28                                                // user_address
     
     // 1. Check voting power threshold
-    // tl:222: int account_voting_power = get_account_voting_power(user_address) [slot 29]
+    // tl:226: int account_voting_power = get_account_voting_power(user_address) [slot 29]
     load 28                                                 // user_address
     callsub __func__get_account_voting_power
     store 29                                                // account_voting_power
-    // tl:223: int total_voting_power = get_total_voting_power() [slot 30]
+    // tl:227: int total_voting_power = get_total_voting_power() [slot 30]
     callsub __func__get_total_voting_power
     store 30                                                // total_voting_power
     
     // Tiny power amount threshold
-    // tl:226: assert(account_voting_power >= app_global_get(PROPOSAL_THRESHOLD_KEY))
+    // tl:230: assert(account_voting_power >= app_global_get(PROPOSAL_THRESHOLD_KEY))
     load 29                                                 // account_voting_power
     pushbytes PROPOSAL_THRESHOLD_KEY                        // "proposal_threshold"
     app_global_get
     >=
     assert
     // Tiny power percentage threshold
-    // tl:228: assert((itob(account_voting_power) b* itob(100)) b>= (itob(total_voting_power) b* itob(app_global_get(PROPOSAL_THRESHOLD_NUMERATOR_KEY))))
+    // tl:232: assert((itob(account_voting_power) b* itob(100)) b>= (itob(total_voting_power) b* itob(app_global_get(PROPOSAL_THRESHOLD_NUMERATOR_KEY))))
     load 29                                                 // account_voting_power
     itob
     pushint 100
@@ -603,52 +607,52 @@ __func__create_proposal:
     // 2. Check proposal id
     // proposal id will be calculated off-chain. it is base32 string representation of CID (base32 - cidv1 - raw - (sha2-256 : 256 : <metadata>))
     // We already know it is bytes[59]
-    // tl:233: bytes proposal_box_name = Concat(PROPOSAL_BOX_PREFIX, proposal_id) [slot 31]
+    // tl:237: bytes proposal_box_name = Concat(PROPOSAL_BOX_PREFIX, proposal_id) [slot 31]
     pushbytes PROPOSAL_BOX_PREFIX                           // "p"
     load 27                                                 // proposal_id
     concat
     store 31                                                // proposal_box_name
     
     // 3. Create Box
-    // tl:236: box<Proposal> proposal = CreateBox(proposal_box_name) [slot 32]
+    // tl:240: box<Proposal> proposal = CreateBox(proposal_box_name) [slot 32]
     load 31                                                 // proposal_box_name
     dup; pushint 182; box_create; assert                    // create & assert created
     store 32                                                // box:proposal
-    // tl:237: proposal.index = app_global_get(PROPOSAL_INDEX_COUNTER_KEY)
+    // tl:241: proposal.index = app_global_get(PROPOSAL_INDEX_COUNTER_KEY)
     pushbytes PROPOSAL_INDEX_COUNTER_KEY                    // "proposal_index_counter"
     app_global_get
     itob; load 32; pushint 0; uncover 2; box_replace// boxset proposal.index
-    // tl:238: proposal.creation_timestamp = Global.LatestTimestamp
+    // tl:242: proposal.creation_timestamp = Global.LatestTimestamp
     global LatestTimestamp
     itob; load 32; pushint 8; uncover 2; box_replace// boxset proposal.creation_timestamp
-    // tl:239: proposal.snapshot_total_voting_power = total_voting_power
+    // tl:243: proposal.snapshot_total_voting_power = total_voting_power
     load 30                                                 // total_voting_power
     itob; load 32; pushint 32; uncover 2; box_replace// boxset proposal.snapshot_total_voting_power
-    // tl:240: proposal.proposer = user_address
+    // tl:244: proposal.proposer = user_address
     load 28                                                 // user_address
     load 32; pushint 84; uncover 2; box_replace// boxset proposal.proposer
-    // tl:241: proposal.quorum_threshold = app_global_get(QUORUM_THRESHOLD_KEY)
+    // tl:245: proposal.quorum_threshold = app_global_get(QUORUM_THRESHOLD_KEY)
     pushbytes QUORUM_THRESHOLD_KEY                          // "quorum_threshold"
     app_global_get
     itob; load 32; pushint 48; uncover 2; box_replace// boxset proposal.quorum_threshold
-    // tl:242: proposal.execution_hash = execution_hash
+    // tl:246: proposal.execution_hash = execution_hash
     load 26                                                 // execution_hash
     load 32; pushint 116; uncover 2; box_replace// boxset proposal.execution_hash
-    // tl:243: proposal.executor = executor
+    // tl:247: proposal.executor = executor
     load 25                                                 // executor
     load 32; pushint 150; uncover 2; box_replace// boxset proposal.executor
     
     // 4. Start & End time
-    // tl:246: if !app_global_get(APPROVAL_REQUIREMENT_KEY):
+    // tl:250: if !app_global_get(APPROVAL_REQUIREMENT_KEY):
     pushbytes APPROVAL_REQUIREMENT_KEY                      // "approval_requirement"
     app_global_get
     !
     bz l1_end
     // then:
-        // tl:247: int voting_start_timestamp = get_voting_start_timestamp() [slot 33]
+        // tl:251: int voting_start_timestamp = get_voting_start_timestamp() [slot 33]
         callsub __func__get_voting_start_timestamp
         store 33                                            // voting_start_timestamp
-        // tl:248: int voting_end_timestamp = voting_start_timestamp + (app_global_get(VOTING_DURATION_KEY) * DAY) [slot 34]
+        // tl:252: int voting_end_timestamp = voting_start_timestamp + (app_global_get(VOTING_DURATION_KEY) * DAY) [slot 34]
         load 33                                             // voting_start_timestamp
         pushbytes VOTING_DURATION_KEY                       // "voting_duration"
         app_global_get
@@ -656,15 +660,15 @@ __func__create_proposal:
         *
         +
         store 34                                            // voting_end_timestamp
-        // tl:249: proposal.voting_start_timestamp = voting_start_timestamp
+        // tl:253: proposal.voting_start_timestamp = voting_start_timestamp
         load 33                                             // voting_start_timestamp
         itob; load 32; pushint 16; uncover 2; box_replace// boxset proposal.voting_start_timestamp
-        // tl:250: proposal.voting_end_timestamp = voting_end_timestamp
+        // tl:254: proposal.voting_end_timestamp = voting_end_timestamp
         load 34                                             // voting_end_timestamp
         itob; load 32; pushint 24; uncover 2; box_replace// boxset proposal.voting_end_timestamp
     l1_end:
     
-    // tl:253: app_global_put(PROPOSAL_INDEX_COUNTER_KEY, app_global_get(PROPOSAL_INDEX_COUNTER_KEY) + 1)
+    // tl:257: app_global_put(PROPOSAL_INDEX_COUNTER_KEY, app_global_get(PROPOSAL_INDEX_COUNTER_KEY) + 1)
     pushbytes PROPOSAL_INDEX_COUNTER_KEY                    // "proposal_index_counter"
     pushbytes PROPOSAL_INDEX_COUNTER_KEY                    // "proposal_index_counter"
     app_global_get
@@ -672,132 +676,132 @@ __func__create_proposal:
     +
     app_global_put
     
-    // tl:255: bytes proposal_data [slot 35]
-    // tl:256: _, proposal_data = box_get(proposal_box_name)
+    // tl:259: bytes proposal_data [slot 35]
+    // tl:260: _, proposal_data = box_get(proposal_box_name)
     load 31                                                 // proposal_box_name
     box_get
     pop                                                     // discarding value for _
     store 35                                                // proposal_data
-    // tl:257: log(ARC28Event("proposal(byte[59],uint64,uint64,uint64,uint64,uint64,uint64,uint64,uint64,uint64,uint64,bool,bool,bool,bool,address,byte[34],address)", proposal_id, proposal_data))
+    // tl:261: log(ARC28Event("proposal(byte[59],uint64,uint64,uint64,uint64,uint64,uint64,uint64,uint64,uint64,uint64,bool,bool,bool,bool,address,byte[34],address)", proposal_id, proposal_data))
     pushbytes 0xb937892b                                    // SHA512_256("proposal(byte[59],uint64,uint64,uint64,uint64,uint64,uint64,uint64,uint64,uint64,uint64,bool,bool,bool,bool,address,byte[34],address)")[:4]
     load 27                                                 // proposal_id
     load 35                                                 // proposal_data
     concat
     concat
     log
-    // tl:258: log(ARC28Event("create_proposal(address,byte[59])", user_address, proposal_id))
+    // tl:262: log(ARC28Event("create_proposal(address,byte[59])", user_address, proposal_id))
     pushbytes 0x15c912e1                                    // SHA512_256("create_proposal(address,byte[59])")[:4]
     load 28                                                 // user_address
     load 27                                                 // proposal_id
     concat
     concat
     log
-    // tl:259: return
+    // tl:263: return
     retsub
 
-// tl:263: func cast_vote(proposal_id: bytes[59], vote: int, account_power_index: bytes):
+// tl:267: func cast_vote(proposal_id: bytes[59], vote: int, account_power_index: bytes):
 __func__cast_vote:
     store 36                                                // account_power_index [bytes]
     store 37                                                // vote [int]
     store 38                                                // proposal_id [bytes[59]]
-    // tl:264: bytes[32] user_address = Txn.Sender [slot 39]
+    // tl:268: bytes[32] user_address = Txn.Sender [slot 39]
     txn Sender
     store 39                                                // user_address
     
     // Get proposal
-    // tl:267: bytes proposal_box_name = Concat(PROPOSAL_BOX_PREFIX, proposal_id) [slot 40]
+    // tl:271: bytes proposal_box_name = Concat(PROPOSAL_BOX_PREFIX, proposal_id) [slot 40]
     pushbytes PROPOSAL_BOX_PREFIX                           // "p"
     load 38                                                 // proposal_id
     concat
     store 40                                                // proposal_box_name
-    // tl:268: box<Proposal> proposal = OpenBox(proposal_box_name) [slot 41]
+    // tl:272: box<Proposal> proposal = OpenBox(proposal_box_name) [slot 41]
     load 40                                                 // proposal_box_name
     dup; box_len; assert; pushint 182; ==; assert           // len(box) == Proposal.size
     store 41                                                // box:proposal
     
     // Proposal Active
-    // tl:271: assert(proposal.is_cancelled == BYTES_FALSE)
+    // tl:275: assert(proposal.is_cancelled == BYTES_FALSE)
     load 41; pushint 81; pushint 1; box_extract// proposal.is_cancelled
     pushbytes BYTES_FALSE                                   // "\x00"
     ==
     assert
     
     // proposal.voting_start_timestamp <= Global.LatestTimestamp < proposal.voting_end_timestamp
-    // tl:274: assert(proposal.voting_start_timestamp)
+    // tl:278: assert(proposal.voting_start_timestamp)
     load 41; pushint 16; pushint 8; box_extract; btoi// proposal.voting_start_timestamp
     assert
-    // tl:275: assert(proposal.voting_start_timestamp <= Global.LatestTimestamp)
+    // tl:279: assert(proposal.voting_start_timestamp <= Global.LatestTimestamp)
     load 41; pushint 16; pushint 8; box_extract; btoi// proposal.voting_start_timestamp
     global LatestTimestamp
     <=
     assert
-    // tl:276: assert(Global.LatestTimestamp < proposal.voting_end_timestamp)
+    // tl:280: assert(Global.LatestTimestamp < proposal.voting_end_timestamp)
     global LatestTimestamp
     load 41; pushint 24; pushint 8; box_extract; btoi// proposal.voting_end_timestamp
     <
     assert
     
     // Check attendance
-    // tl:279: check_and_set_user_as_voted(user_address, proposal.index)
+    // tl:283: check_and_set_user_as_voted(user_address, proposal.index)
     load 39                                                 // user_address
     load 41; pushint 0; pushint 8; box_extract; btoi// proposal.index
     callsub __func__check_and_set_user_as_voted
     
     // Get voting power
-    // tl:282: int account_voting_power = get_account_voting_power_at(user_address, proposal.creation_timestamp, account_power_index) [slot 42]
+    // tl:286: int account_voting_power = get_account_voting_power_at(user_address, proposal.creation_timestamp, account_power_index) [slot 42]
     load 39                                                 // user_address
     load 41; pushint 8; pushint 8; box_extract; btoi// proposal.creation_timestamp
     load 36                                                 // account_power_index
     callsub __func__get_account_voting_power_at
     store 42                                                // account_voting_power
-    // tl:283: assert(account_voting_power)
+    // tl:287: assert(account_voting_power)
     load 42                                                 // account_voting_power
     assert
     
     // Count Vote
-    // tl:286: if vote == VOTE_AGAINST:
+    // tl:290: if vote == VOTE_AGAINST:
     load 37                                                 // vote
     pushint VOTE_AGAINST                                    // 0
     ==
     bz l2_elif_0
     // then:
-        // tl:287: proposal.against_voting_power = proposal.against_voting_power + account_voting_power
+        // tl:291: proposal.against_voting_power = proposal.against_voting_power + account_voting_power
         load 41; pushint 56; pushint 8; box_extract; btoi// proposal.against_voting_power
         load 42                                             // account_voting_power
         +
         itob; load 41; pushint 56; uncover 2; box_replace// boxset proposal.against_voting_power
         b l2_end
     l2_elif_0:
-    // tl:288: elif vote == VOTE_FOR:
+    // tl:292: elif vote == VOTE_FOR:
         load 37                                             // vote
         pushint VOTE_FOR                                    // 1
         ==
         bz l2_elif_1
-            // tl:289: proposal.for_voting_power = proposal.for_voting_power + account_voting_power
+            // tl:293: proposal.for_voting_power = proposal.for_voting_power + account_voting_power
             load 41; pushint 64; pushint 8; box_extract; btoi// proposal.for_voting_power
             load 42                                         // account_voting_power
             +
             itob; load 41; pushint 64; uncover 2; box_replace// boxset proposal.for_voting_power
             b l2_end
     l2_elif_1:
-    // tl:290: elif vote == VOTE_ABSTAIN:
+    // tl:294: elif vote == VOTE_ABSTAIN:
         load 37                                             // vote
         pushint VOTE_ABSTAIN                                // 2
         ==
         bz l2_else
-            // tl:291: proposal.abstain_voting_power = proposal.abstain_voting_power + account_voting_power
+            // tl:295: proposal.abstain_voting_power = proposal.abstain_voting_power + account_voting_power
             load 41; pushint 72; pushint 8; box_extract; btoi// proposal.abstain_voting_power
             load 42                                         // account_voting_power
             +
             itob; load 41; pushint 72; uncover 2; box_replace// boxset proposal.abstain_voting_power
             b l2_end
     l2_else:
-    // tl:292: else:
-        // tl:293: Error()
+    // tl:296: else:
+        // tl:297: Error()
         err
     l2_end:
     
-    // tl:296: if proposal.quorum_threshold <= (proposal.for_voting_power + proposal.abstain_voting_power):
+    // tl:300: if proposal.quorum_threshold <= (proposal.for_voting_power + proposal.abstain_voting_power):
     load 41; pushint 48; pushint 8; box_extract; btoi// proposal.quorum_threshold
     load 41; pushint 64; pushint 8; box_extract; btoi// proposal.for_voting_power
     load 41; pushint 72; pushint 8; box_extract; btoi// proposal.abstain_voting_power
@@ -805,32 +809,32 @@ __func__cast_vote:
     <=
     bz l3_end
     // then:
-        // tl:297: proposal.is_quorum_reached = BYTES_TRUE
+        // tl:301: proposal.is_quorum_reached = BYTES_TRUE
         pushbytes BYTES_TRUE                                // "\x80"
         load 41; pushint 83; uncover 2; box_replace// boxset proposal.is_quorum_reached
     l3_end:
     
     // Update proposal
-    // tl:301: proposal.vote_count = proposal.vote_count + 1
+    // tl:305: proposal.vote_count = proposal.vote_count + 1
     load 41; pushint 40; pushint 8; box_extract; btoi// proposal.vote_count
     pushint 1
     +
     itob; load 41; pushint 40; uncover 2; box_replace// boxset proposal.vote_count
     
-    // tl:303: bytes proposal_data [slot 43]
-    // tl:304: _, proposal_data = box_get(proposal_box_name)
+    // tl:307: bytes proposal_data [slot 43]
+    // tl:308: _, proposal_data = box_get(proposal_box_name)
     load 40                                                 // proposal_box_name
     box_get
     pop                                                     // discarding value for _
     store 43                                                // proposal_data
-    // tl:305: log(ARC28Event("proposal(byte[59],uint64,uint64,uint64,uint64,uint64,uint64,uint64,uint64,uint64,uint64,bool,bool,bool,bool,address,byte[34],address)", proposal_id, proposal_data))
+    // tl:309: log(ARC28Event("proposal(byte[59],uint64,uint64,uint64,uint64,uint64,uint64,uint64,uint64,uint64,uint64,bool,bool,bool,bool,address,byte[34],address)", proposal_id, proposal_data))
     pushbytes 0xb937892b                                    // SHA512_256("proposal(byte[59],uint64,uint64,uint64,uint64,uint64,uint64,uint64,uint64,uint64,uint64,bool,bool,bool,bool,address,byte[34],address)")[:4]
     load 38                                                 // proposal_id
     load 43                                                 // proposal_data
     concat
     concat
     log
-    // tl:306: log(ARC28Event("cast_vote(address,byte[59],uint64,uint64)", user_address, proposal_id, itob(vote), itob(account_voting_power)))
+    // tl:310: log(ARC28Event("cast_vote(address,byte[59],uint64,uint64)", user_address, proposal_id, itob(vote), itob(account_voting_power)))
     pushbytes 0x22696940                                    // SHA512_256("cast_vote(address,byte[59],uint64,uint64)")[:4]
     load 39                                                 // user_address
     load 38                                                 // proposal_id
@@ -843,249 +847,249 @@ __func__cast_vote:
     concat
     concat
     log
-    // tl:307: return
+    // tl:311: return
     retsub
 
-// tl:311: func set_voting_delay(new_voting_delay: int):
+// tl:315: func set_voting_delay(new_voting_delay: int):
 __func__set_voting_delay:
     store 44                                                // new_voting_delay [int]
-    // tl:312: bytes[32] user_address = Txn.Sender [slot 45]
+    // tl:316: bytes[32] user_address = Txn.Sender [slot 45]
     txn Sender
     store 45                                                // user_address
-    // tl:313: assert(user_address == app_global_get(PROPOSAL_MANAGER_KEY))
+    // tl:317: assert(user_address == app_global_get(PROPOSAL_MANAGER_KEY))
     load 45                                                 // user_address
     pushbytes PROPOSAL_MANAGER_KEY                          // "proposal_manager"
     app_global_get
     ==
     assert
     
-    // tl:315: app_global_put(VOTING_DELAY_KEY, new_voting_delay)
+    // tl:319: app_global_put(VOTING_DELAY_KEY, new_voting_delay)
     pushbytes VOTING_DELAY_KEY                              // "voting_delay"
     load 44                                                 // new_voting_delay
     app_global_put
-    // tl:316: log(ARC28Event("set_voting_delay(uint64)", itob(new_voting_delay)))
+    // tl:320: log(ARC28Event("set_voting_delay(uint64)", itob(new_voting_delay)))
     pushbytes 0xb7aa1b9e                                    // SHA512_256("set_voting_delay(uint64)")[:4]
     load 44                                                 // new_voting_delay
     itob
     concat
     log
-    // tl:317: return
+    // tl:321: return
     retsub
 
-// tl:321: func set_voting_duration(new_voting_duration: int):
+// tl:325: func set_voting_duration(new_voting_duration: int):
 __func__set_voting_duration:
     store 46                                                // new_voting_duration [int]
-    // tl:322: bytes[32] user_address = Txn.Sender [slot 47]
+    // tl:326: bytes[32] user_address = Txn.Sender [slot 47]
     txn Sender
     store 47                                                // user_address
-    // tl:323: assert(user_address == app_global_get(PROPOSAL_MANAGER_KEY))
+    // tl:327: assert(user_address == app_global_get(PROPOSAL_MANAGER_KEY))
     load 47                                                 // user_address
     pushbytes PROPOSAL_MANAGER_KEY                          // "proposal_manager"
     app_global_get
     ==
     assert
     
-    // tl:325: assert(new_voting_duration)
+    // tl:329: assert(new_voting_duration)
     load 46                                                 // new_voting_duration
     assert
-    // tl:326: app_global_put(VOTING_DURATION_KEY, new_voting_duration)
+    // tl:330: app_global_put(VOTING_DURATION_KEY, new_voting_duration)
     pushbytes VOTING_DURATION_KEY                           // "voting_duration"
     load 46                                                 // new_voting_duration
     app_global_put
-    // tl:327: log(ARC28Event("set_voting_duration(uint64)", itob(new_voting_duration)))
+    // tl:331: log(ARC28Event("set_voting_duration(uint64)", itob(new_voting_duration)))
     pushbytes 0x69897033                                    // SHA512_256("set_voting_duration(uint64)")[:4]
     load 46                                                 // new_voting_duration
     itob
     concat
     log
-    // tl:328: return
+    // tl:332: return
     retsub
 
-// tl:332: func set_proposal_threshold(new_proposal_threshold: int):
+// tl:336: func set_proposal_threshold(new_proposal_threshold: int):
 __func__set_proposal_threshold:
     store 48                                                // new_proposal_threshold [int]
-    // tl:333: bytes[32] user_address = Txn.Sender [slot 49]
+    // tl:337: bytes[32] user_address = Txn.Sender [slot 49]
     txn Sender
     store 49                                                // user_address
-    // tl:334: assert(user_address == app_global_get(PROPOSAL_MANAGER_KEY))
+    // tl:338: assert(user_address == app_global_get(PROPOSAL_MANAGER_KEY))
     load 49                                                 // user_address
     pushbytes PROPOSAL_MANAGER_KEY                          // "proposal_manager"
     app_global_get
     ==
     assert
     
-    // tl:336: app_global_put(PROPOSAL_THRESHOLD_KEY, new_proposal_threshold)
+    // tl:340: app_global_put(PROPOSAL_THRESHOLD_KEY, new_proposal_threshold)
     pushbytes PROPOSAL_THRESHOLD_KEY                        // "proposal_threshold"
     load 48                                                 // new_proposal_threshold
     app_global_put
-    // tl:337: log(ARC28Event("set_proposal_threshold(uint64)", itob(new_proposal_threshold)))
+    // tl:341: log(ARC28Event("set_proposal_threshold(uint64)", itob(new_proposal_threshold)))
     pushbytes 0x93d29193                                    // SHA512_256("set_proposal_threshold(uint64)")[:4]
     load 48                                                 // new_proposal_threshold
     itob
     concat
     log
-    // tl:338: return
+    // tl:342: return
     retsub
 
-// tl:342: func set_proposal_threshold_numerator(new_proposal_threshold_numerator: int):
+// tl:346: func set_proposal_threshold_numerator(new_proposal_threshold_numerator: int):
 __func__set_proposal_threshold_numerator:
     store 50                                                // new_proposal_threshold_numerator [int]
-    // tl:343: bytes[32] user_address = Txn.Sender [slot 51]
+    // tl:347: bytes[32] user_address = Txn.Sender [slot 51]
     txn Sender
     store 51                                                // user_address
-    // tl:344: assert(user_address == app_global_get(PROPOSAL_MANAGER_KEY))
+    // tl:348: assert(user_address == app_global_get(PROPOSAL_MANAGER_KEY))
     load 51                                                 // user_address
     pushbytes PROPOSAL_MANAGER_KEY                          // "proposal_manager"
     app_global_get
     ==
     assert
     
-    // tl:346: assert(new_proposal_threshold_numerator <= 100)
+    // tl:350: assert(new_proposal_threshold_numerator <= 100)
     load 50                                                 // new_proposal_threshold_numerator
     pushint 100
     <=
     assert
-    // tl:347: app_global_put(PROPOSAL_THRESHOLD_NUMERATOR_KEY, new_proposal_threshold_numerator)
+    // tl:351: app_global_put(PROPOSAL_THRESHOLD_NUMERATOR_KEY, new_proposal_threshold_numerator)
     pushbytes PROPOSAL_THRESHOLD_NUMERATOR_KEY              // "proposal_threshold_numerator"
     load 50                                                 // new_proposal_threshold_numerator
     app_global_put
-    // tl:348: log(ARC28Event("set_proposal_threshold_numerator(uint64)", itob(new_proposal_threshold_numerator)))
+    // tl:352: log(ARC28Event("set_proposal_threshold_numerator(uint64)", itob(new_proposal_threshold_numerator)))
     pushbytes 0x1510c336                                    // SHA512_256("set_proposal_threshold_numerator(uint64)")[:4]
     load 50                                                 // new_proposal_threshold_numerator
     itob
     concat
     log
-    // tl:349: return
+    // tl:353: return
     retsub
 
-// tl:353: func set_quorum_threshold(new_quorum_threshold: int):
+// tl:357: func set_quorum_threshold(new_quorum_threshold: int):
 __func__set_quorum_threshold:
     store 52                                                // new_quorum_threshold [int]
-    // tl:354: bytes[32] user_address = Txn.Sender [slot 53]
+    // tl:358: bytes[32] user_address = Txn.Sender [slot 53]
     txn Sender
     store 53                                                // user_address
-    // tl:355: assert(user_address == app_global_get(PROPOSAL_MANAGER_KEY))
+    // tl:359: assert(user_address == app_global_get(PROPOSAL_MANAGER_KEY))
     load 53                                                 // user_address
     pushbytes PROPOSAL_MANAGER_KEY                          // "proposal_manager"
     app_global_get
     ==
     assert
     
-    // tl:357: app_global_put(QUORUM_THRESHOLD_KEY, new_quorum_threshold)
+    // tl:361: app_global_put(QUORUM_THRESHOLD_KEY, new_quorum_threshold)
     pushbytes QUORUM_THRESHOLD_KEY                          // "quorum_threshold"
     load 52                                                 // new_quorum_threshold
     app_global_put
-    // tl:358: log(ARC28Event("set_quorum_threshold(uint64)", itob(new_quorum_threshold)))
+    // tl:362: log(ARC28Event("set_quorum_threshold(uint64)", itob(new_quorum_threshold)))
     pushbytes 0x2f2cbf2d                                    // SHA512_256("set_quorum_threshold(uint64)")[:4]
     load 52                                                 // new_quorum_threshold
     itob
     concat
     log
-    // tl:359: return
+    // tl:363: return
     retsub
 
-// tl:363: func disable_approval_requirement():
+// tl:367: func disable_approval_requirement():
 __func__disable_approval_requirement:
-    // tl:364: bytes[32] user_address = Txn.Sender [slot 54]
+    // tl:368: bytes[32] user_address = Txn.Sender [slot 54]
     txn Sender
     store 54                                                // user_address
-    // tl:365: assert(user_address == app_global_get(PROPOSAL_MANAGER_KEY))
+    // tl:369: assert(user_address == app_global_get(PROPOSAL_MANAGER_KEY))
     load 54                                                 // user_address
     pushbytes PROPOSAL_MANAGER_KEY                          // "proposal_manager"
     app_global_get
     ==
     assert
     
-    // tl:367: assert(app_global_get(APPROVAL_REQUIREMENT_KEY))
+    // tl:371: assert(app_global_get(APPROVAL_REQUIREMENT_KEY))
     pushbytes APPROVAL_REQUIREMENT_KEY                      // "approval_requirement"
     app_global_get
     assert
-    // tl:368: app_global_put(APPROVAL_REQUIREMENT_KEY, 0)
+    // tl:372: app_global_put(APPROVAL_REQUIREMENT_KEY, 0)
     pushbytes APPROVAL_REQUIREMENT_KEY                      // "approval_requirement"
     pushint 0
     app_global_put
-    // tl:369: log(method("disable_approval_requirement()"))
+    // tl:373: log(method("disable_approval_requirement()"))
     method "disable_approval_requirement()"
     log
-    // tl:370: return
+    // tl:374: return
     retsub
 
-// tl:374: func get_proposal(proposal_id: bytes[59]) bytes, int:
+// tl:378: func get_proposal(proposal_id: bytes[59]) bytes, int:
 __func__get_proposal:
     store 55                                                // proposal_id [bytes[59]]
-    // tl:375: bytes proposal_box_name = Concat(PROPOSAL_BOX_PREFIX, proposal_id) [slot 56]
+    // tl:379: bytes proposal_box_name = Concat(PROPOSAL_BOX_PREFIX, proposal_id) [slot 56]
     pushbytes PROPOSAL_BOX_PREFIX                           // "p"
     load 55                                                 // proposal_id
     concat
     store 56                                                // proposal_box_name
-    // tl:376: int exists [slot 57]
-    // tl:377: bytes proposal_data [slot 58]
-    // tl:378: exists, proposal_data = box_get(proposal_box_name)
+    // tl:380: int exists [slot 57]
+    // tl:381: bytes proposal_data [slot 58]
+    // tl:382: exists, proposal_data = box_get(proposal_box_name)
     load 56                                                 // proposal_box_name
     box_get
     store 57                                                // exists
     store 58                                                // proposal_data
-    // tl:379: assert(exists)
+    // tl:383: assert(exists)
     load 57                                                 // exists
     assert
     
-    // tl:381: Proposal proposal = Cast(proposal_data, Proposal) [slot 59]
+    // tl:385: Proposal proposal = Cast(proposal_data, Proposal) [slot 59]
     load 58                                                 // proposal_data
     dup; len; pushint 182; ==; assert// Bytes Size Assertion: 182 bytes
     store 59                                                // proposal
     
-    // tl:383: int state [slot 60]
-    // tl:384: if proposal.is_cancelled == BYTES_TRUE:
+    // tl:387: int state [slot 60]
+    // tl:388: if proposal.is_cancelled == BYTES_TRUE:
     load 59; extract 81 1// proposal.is_cancelled
     pushbytes BYTES_TRUE                                    // "\x80"
     ==
     bz l4_elif_0
     // then:
-        // tl:385: state = PROPOSAL_STATE_CANCELLED
+        // tl:389: state = PROPOSAL_STATE_CANCELLED
         pushint PROPOSAL_STATE_CANCELLED                    // 1
         store 60                                            // state
         b l4_end
     l4_elif_0:
-    // tl:386: elif proposal.is_executed == BYTES_TRUE:
+    // tl:390: elif proposal.is_executed == BYTES_TRUE:
         load 59; extract 82 1// proposal.is_executed
         pushbytes BYTES_TRUE                                // "\x80"
         ==
         bz l4_elif_1
-            // tl:387: state = PROPOSAL_STATE_EXECUTED
+            // tl:391: state = PROPOSAL_STATE_EXECUTED
             pushint PROPOSAL_STATE_EXECUTED                 // 6
             store 60                                        // state
             b l4_end
     l4_elif_1:
-    // tl:388: elif !proposal.voting_start_timestamp:
+    // tl:392: elif !proposal.voting_start_timestamp:
         load 59; extract 16 8; btoi// proposal.voting_start_timestamp
         !
         bz l4_elif_2
-            // tl:389: state = PROPOSAL_STATE_WAITING_FOR_APPROVAL
+            // tl:393: state = PROPOSAL_STATE_WAITING_FOR_APPROVAL
             pushint PROPOSAL_STATE_WAITING_FOR_APPROVAL     // 0
             store 60                                        // state
             b l4_end
     l4_elif_2:
-    // tl:390: elif Global.LatestTimestamp < proposal.voting_start_timestamp:
+    // tl:394: elif Global.LatestTimestamp < proposal.voting_start_timestamp:
         global LatestTimestamp
         load 59; extract 16 8; btoi// proposal.voting_start_timestamp
         <
         bz l4_elif_3
-            // tl:391: state = PROPOSAL_STATE_PENDING
+            // tl:395: state = PROPOSAL_STATE_PENDING
             pushint PROPOSAL_STATE_PENDING                  // 2
             store 60                                        // state
             b l4_end
     l4_elif_3:
-    // tl:392: elif Global.LatestTimestamp < proposal.voting_end_timestamp:
+    // tl:396: elif Global.LatestTimestamp < proposal.voting_end_timestamp:
         global LatestTimestamp
         load 59; extract 24 8; btoi// proposal.voting_end_timestamp
         <
         bz l4_elif_4
-            // tl:393: state = PROPOSAL_STATE_ACTIVE
+            // tl:397: state = PROPOSAL_STATE_ACTIVE
             pushint PROPOSAL_STATE_ACTIVE                   // 3
             store 60                                        // state
             b l4_end
     l4_elif_4:
-    // tl:394: elif (proposal.is_quorum_reached == BYTES_FALSE) || (proposal.for_voting_power <= proposal.against_voting_power):
+    // tl:398: elif (proposal.is_quorum_reached == BYTES_FALSE) || (proposal.for_voting_power <= proposal.against_voting_power):
         load 59; extract 83 1// proposal.is_quorum_reached
         pushbytes BYTES_FALSE                               // "\x00"
         ==
@@ -1094,54 +1098,54 @@ __func__get_proposal:
         <=
         ||
         bz l4_else
-            // tl:395: state = PROPOSAL_STATE_DEFEATED
+            // tl:399: state = PROPOSAL_STATE_DEFEATED
             pushint PROPOSAL_STATE_DEFEATED                 // 4
             store 60                                        // state
             b l4_end
     l4_else:
-    // tl:396: else:
-        // tl:397: state = PROPOSAL_STATE_SUCCEEDED
+    // tl:400: else:
+        // tl:401: state = PROPOSAL_STATE_SUCCEEDED
         pushint PROPOSAL_STATE_SUCCEEDED                    // 5
         store 60                                            // state
     l4_end:
     
-    // tl:400: return proposal_data, state
+    // tl:404: return proposal_data, state
     load 60                                                 // state
     load 58                                                 // proposal_data
     retsub
 
-// tl:404: func has_voted(proposal_id: bytes[59], address: bytes[32]) bytes:
+// tl:408: func has_voted(proposal_id: bytes[59], address: bytes[32]) bytes:
 __func__has_voted:
     store 61                                                // address [bytes[32]]
     store 62                                                // proposal_id [bytes[59]]
-    // tl:405: bytes proposal_box_name = Concat(PROPOSAL_BOX_PREFIX, proposal_id) [slot 63]
+    // tl:409: bytes proposal_box_name = Concat(PROPOSAL_BOX_PREFIX, proposal_id) [slot 63]
     pushbytes PROPOSAL_BOX_PREFIX                           // "p"
     load 62                                                 // proposal_id
     concat
     store 63                                                // proposal_box_name
-    // tl:406: box<Proposal> proposal = OpenBox(proposal_box_name) [slot 64]
+    // tl:410: box<Proposal> proposal = OpenBox(proposal_box_name) [slot 64]
     load 63                                                 // proposal_box_name
     dup; box_len; assert; pushint 182; ==; assert           // len(box) == Proposal.size
     store 64                                                // box:proposal
     
-    // tl:408: int proposal_index = proposal.index [slot 65]
+    // tl:412: int proposal_index = proposal.index [slot 65]
     load 64; pushint 0; pushint 8; box_extract; btoi// proposal.index
     store 65                                                // proposal_index
-    // tl:409: int box_index = proposal_index / (ACCOUNT_ATTENDANCE_SHEET_BOX_SIZE * 8) [slot 66]
+    // tl:413: int box_index = proposal_index / (ACCOUNT_ATTENDANCE_SHEET_BOX_SIZE * 8) [slot 66]
     load 65                                                 // proposal_index
     pushint ACCOUNT_ATTENDANCE_SHEET_BOX_SIZE               // 24
     pushint 8
     *
     /
     store 66                                                // box_index
-    // tl:410: int array_index = proposal_index % (ACCOUNT_ATTENDANCE_SHEET_BOX_SIZE * 8) [slot 67]
+    // tl:414: int array_index = proposal_index % (ACCOUNT_ATTENDANCE_SHEET_BOX_SIZE * 8) [slot 67]
     load 65                                                 // proposal_index
     pushint ACCOUNT_ATTENDANCE_SHEET_BOX_SIZE               // 24
     pushint 8
     *
     %
     store 67                                                // array_index
-    // tl:411: bytes box_name = Concat(ATTENDANCE_BOX_PREFIX, address, itob(box_index)) [slot 68]
+    // tl:415: bytes box_name = Concat(ATTENDANCE_BOX_PREFIX, address, itob(box_index)) [slot 68]
     pushbytes ATTENDANCE_BOX_PREFIX                         // "a"
     load 61                                                 // address
     load 66                                                 // box_index
@@ -1150,20 +1154,20 @@ __func__has_voted:
     concat
     store 68                                                // box_name
     
-    // tl:413: int exists [slot 69]
-    // tl:414: exists, _ = box_len(box_name)
+    // tl:417: int exists [slot 69]
+    // tl:418: exists, _ = box_len(box_name)
     load 68                                                 // box_name
     box_len
     store 69                                                // exists
     pop                                                     // discarding value for _
-    // tl:415: bytes result = BYTES_FALSE [slot 70]
+    // tl:419: bytes result = BYTES_FALSE [slot 70]
     pushbytes BYTES_FALSE                                   // "\x00"
     store 70                                                // result
-    // tl:416: if exists:
+    // tl:420: if exists:
     load 69                                                 // exists
     bz l5_end
     // then:
-        // tl:417: if getbit(box_extract(box_name, 0, ACCOUNT_ATTENDANCE_SHEET_BOX_SIZE), array_index):
+        // tl:421: if getbit(box_extract(box_name, 0, ACCOUNT_ATTENDANCE_SHEET_BOX_SIZE), array_index):
         load 68                                             // box_name
         pushint 0
         pushint ACCOUNT_ATTENDANCE_SHEET_BOX_SIZE           // 24
@@ -1172,56 +1176,56 @@ __func__has_voted:
         getbit
         bz l6_end
         // then:
-            // tl:418: result = BYTES_TRUE
+            // tl:422: result = BYTES_TRUE
             pushbytes BYTES_TRUE                            // "\x80"
             store 70                                        // result
         l6_end:
     l5_end:
     
-    // tl:422: return result
+    // tl:426: return result
     load 70                                                 // result
     retsub
 
-// tl:426: func get_box(box_name: bytes) bytes, bytes:
+// tl:430: func get_box(box_name: bytes) bytes, bytes:
 __func__get_box:
     store 71                                                // box_name [bytes]
-    // tl:427: bytes data [slot 72]
-    // tl:428: _, data = box_get(box_name)
+    // tl:431: bytes data [slot 72]
+    // tl:432: _, data = box_get(box_name)
     load 71                                                 // box_name
     box_get
     pop                                                     // discarding value for _
     store 72                                                // data
     // Return length as 2 bytes instead of using 8 bytes for uint64
-    // tl:430: bytes length = extract(6, 2, itob(len(data))) [slot 73]
+    // tl:434: bytes length = extract(6, 2, itob(len(data))) [slot 73]
     load 72                                                 // data
     len
     itob
     extract 6 2
     store 73                                                // length
-    // tl:431: return length, data
+    // tl:435: return length, data
     load 72                                                 // data
     load 73                                                 // length
     retsub
 
-// tl:434: func check_and_set_user_as_voted(address: bytes[32], proposal_index: int):
+// tl:438: func check_and_set_user_as_voted(address: bytes[32], proposal_index: int):
 __func__check_and_set_user_as_voted:
     store 74                                                // proposal_index [int]
     store 75                                                // address [bytes[32]]
-    // tl:435: int box_index = proposal_index / (ACCOUNT_ATTENDANCE_SHEET_BOX_SIZE * 8) [slot 76]
+    // tl:439: int box_index = proposal_index / (ACCOUNT_ATTENDANCE_SHEET_BOX_SIZE * 8) [slot 76]
     load 74                                                 // proposal_index
     pushint ACCOUNT_ATTENDANCE_SHEET_BOX_SIZE               // 24
     pushint 8
     *
     /
     store 76                                                // box_index
-    // tl:436: int array_index = proposal_index % (ACCOUNT_ATTENDANCE_SHEET_BOX_SIZE * 8) [slot 77]
+    // tl:440: int array_index = proposal_index % (ACCOUNT_ATTENDANCE_SHEET_BOX_SIZE * 8) [slot 77]
     load 74                                                 // proposal_index
     pushint ACCOUNT_ATTENDANCE_SHEET_BOX_SIZE               // 24
     pushint 8
     *
     %
     store 77                                                // array_index
-    // tl:437: bytes box_name = Concat(ATTENDANCE_BOX_PREFIX, address, itob(box_index)) [slot 78]
+    // tl:441: bytes box_name = Concat(ATTENDANCE_BOX_PREFIX, address, itob(box_index)) [slot 78]
     pushbytes ATTENDANCE_BOX_PREFIX                         // "a"
     load 75                                                 // address
     load 76                                                 // box_index
@@ -1230,39 +1234,39 @@ __func__check_and_set_user_as_voted:
     concat
     store 78                                                // box_name
     
-    // tl:439: bytes sheet [slot 79]
-    // tl:440: _ = box_create(box_name, ACCOUNT_ATTENDANCE_SHEET_BOX_SIZE)
+    // tl:443: bytes sheet [slot 79]
+    // tl:444: _ = box_create(box_name, ACCOUNT_ATTENDANCE_SHEET_BOX_SIZE)
     load 78                                                 // box_name
     pushint ACCOUNT_ATTENDANCE_SHEET_BOX_SIZE               // 24
     box_create
     pop                                                     // discarding value for _
-    // tl:441: _, sheet = box_get(box_name)
+    // tl:445: _, sheet = box_get(box_name)
     load 78                                                 // box_name
     box_get
     pop                                                     // discarding value for _
     store 79                                                // sheet
-    // tl:442: assert(!getbit(sheet, array_index))
+    // tl:446: assert(!getbit(sheet, array_index))
     load 79                                                 // sheet
     load 77                                                 // array_index
     getbit
     !
     assert
-    // tl:443: sheet = setbit(sheet, array_index, 1)
+    // tl:447: sheet = setbit(sheet, array_index, 1)
     load 79                                                 // sheet
     load 77                                                 // array_index
     pushint 1
     setbit
     store 79                                                // sheet
-    // tl:444: box_put(box_name, sheet)
+    // tl:448: box_put(box_name, sheet)
     load 78                                                 // box_name
     load 79                                                 // sheet
     box_put
-    // tl:445: return
+    // tl:449: return
     retsub
 
-// tl:448: func get_voting_start_timestamp() int:
+// tl:452: func get_voting_start_timestamp() int:
 __func__get_voting_start_timestamp:
-    // tl:449: int end_timestamp_of_day = ((Global.LatestTimestamp / DAY) * DAY) + DAY [slot 80]
+    // tl:453: int end_timestamp_of_day = ((Global.LatestTimestamp / DAY) * DAY) + DAY [slot 80]
     global LatestTimestamp
     pushint DAY                                             // 86400
     /
@@ -1271,7 +1275,7 @@ __func__get_voting_start_timestamp:
     pushint DAY                                             // 86400
     +
     store 80                                                // end_timestamp_of_day
-    // tl:450: return end_timestamp_of_day + (app_global_get(VOTING_DELAY_KEY) * DAY)
+    // tl:454: return end_timestamp_of_day + (app_global_get(VOTING_DELAY_KEY) * DAY)
     load 80                                                 // end_timestamp_of_day
     pushbytes VOTING_DELAY_KEY                              // "voting_delay"
     app_global_get
@@ -1280,104 +1284,104 @@ __func__get_voting_start_timestamp:
     +
     retsub
 
-// tl:453: func get_account_voting_power(address: bytes[32]) int:
+// tl:457: func get_account_voting_power(address: bytes[32]) int:
 __func__get_account_voting_power:
     store 81                                                // address [bytes[32]]
-    // tl:454: inner_txn:
+    // tl:458: inner_txn:
     itxn_begin
-        // tl:455: TypeEnum: Appl
+        // tl:459: TypeEnum: Appl
         pushint 6                                           // Appl
         itxn_field TypeEnum
-        // tl:456: ApplicationID: app_global_get(VAULT_APP_ID_KEY)
+        // tl:460: ApplicationID: app_global_get(VAULT_APP_ID_KEY)
         pushbytes VAULT_APP_ID_KEY                          // "vault_app_id"
         app_global_get
         itxn_field ApplicationID
-        // tl:457: ApplicationArgs[0]: "get_tiny_power_of"
+        // tl:461: ApplicationArgs[0]: "get_tiny_power_of"
         pushbytes "get_tiny_power_of"
         itxn_field ApplicationArgs
-        // tl:458: ApplicationArgs[1]: address
+        // tl:462: ApplicationArgs[1]: address
         load 81                                             // address
         itxn_field ApplicationArgs
-        // tl:459: Fee: 0
+        // tl:463: Fee: 0
         pushint 0
         itxn_field Fee
     itxn_submit
     // end inner_txn
-    // tl:461: int voting_power = extract_uint64(Itxn.LastLog, 4) [slot 82]
+    // tl:465: int voting_power = extract_uint64(Itxn.LastLog, 4) [slot 82]
     itxn LastLog
     pushint 4
     extract_uint64
     store 82                                                // voting_power
-    // tl:462: return voting_power
+    // tl:466: return voting_power
     load 82                                                 // voting_power
     retsub
 
-// tl:465: func get_account_voting_power_at(address: bytes[32], snapshot_timestamp: int, account_power_index: bytes) int:
+// tl:469: func get_account_voting_power_at(address: bytes[32], snapshot_timestamp: int, account_power_index: bytes) int:
 __func__get_account_voting_power_at:
     store 83                                                // account_power_index [bytes]
     store 84                                                // snapshot_timestamp [int]
     store 85                                                // address [bytes[32]]
-    // tl:466: inner_txn:
+    // tl:470: inner_txn:
     itxn_begin
-        // tl:467: TypeEnum: Appl
+        // tl:471: TypeEnum: Appl
         pushint 6                                           // Appl
         itxn_field TypeEnum
-        // tl:468: ApplicationID: app_global_get(VAULT_APP_ID_KEY)
+        // tl:472: ApplicationID: app_global_get(VAULT_APP_ID_KEY)
         pushbytes VAULT_APP_ID_KEY                          // "vault_app_id"
         app_global_get
         itxn_field ApplicationID
-        // tl:469: ApplicationArgs[0]: "get_tiny_power_of_at"
+        // tl:473: ApplicationArgs[0]: "get_tiny_power_of_at"
         pushbytes "get_tiny_power_of_at"
         itxn_field ApplicationArgs
-        // tl:470: ApplicationArgs[1]: address
+        // tl:474: ApplicationArgs[1]: address
         load 85                                             // address
         itxn_field ApplicationArgs
-        // tl:471: ApplicationArgs[2]: itob(snapshot_timestamp)
+        // tl:475: ApplicationArgs[2]: itob(snapshot_timestamp)
         load 84                                             // snapshot_timestamp
         itob
         itxn_field ApplicationArgs
-        // tl:472: ApplicationArgs[3]: account_power_index
+        // tl:476: ApplicationArgs[3]: account_power_index
         load 83                                             // account_power_index
         itxn_field ApplicationArgs
-        // tl:473: Fee: 0
+        // tl:477: Fee: 0
         pushint 0
         itxn_field Fee
     itxn_submit
     // end inner_txn
-    // tl:475: int voting_power = extract_uint64(Itxn.LastLog, 4) [slot 86]
+    // tl:479: int voting_power = extract_uint64(Itxn.LastLog, 4) [slot 86]
     itxn LastLog
     pushint 4
     extract_uint64
     store 86                                                // voting_power
-    // tl:476: return voting_power
+    // tl:480: return voting_power
     load 86                                                 // voting_power
     retsub
 
-// tl:479: func get_total_voting_power() int:
+// tl:483: func get_total_voting_power() int:
 __func__get_total_voting_power:
-    // tl:480: inner_txn:
+    // tl:484: inner_txn:
     itxn_begin
-        // tl:481: TypeEnum: Appl
+        // tl:485: TypeEnum: Appl
         pushint 6                                           // Appl
         itxn_field TypeEnum
-        // tl:482: ApplicationID: app_global_get(VAULT_APP_ID_KEY)
+        // tl:486: ApplicationID: app_global_get(VAULT_APP_ID_KEY)
         pushbytes VAULT_APP_ID_KEY                          // "vault_app_id"
         app_global_get
         itxn_field ApplicationID
-        // tl:483: ApplicationArgs[0]: "get_total_tiny_power"
+        // tl:487: ApplicationArgs[0]: "get_total_tiny_power"
         pushbytes "get_total_tiny_power"
         itxn_field ApplicationArgs
-        // tl:484: Fee: 0
+        // tl:488: Fee: 0
         pushint 0
         itxn_field Fee
     itxn_submit
     // end inner_txn
-    // tl:486: int voting_power = extract_uint64(Itxn.LastLog, 4) [slot 87]
+    // tl:490: int voting_power = extract_uint64(Itxn.LastLog, 4) [slot 87]
     itxn LastLog
     pushint 4
     extract_uint64
     store 87                                                // voting_power
-    // tl:487: return voting_power
+    // tl:491: return voting_power
     load 87                                                 // voting_power
     retsub
 
